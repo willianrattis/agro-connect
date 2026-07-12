@@ -1720,7 +1720,7 @@
          try {
            if (lotId === "__new__") {
              const lotRef = await addDoc(collection(db, "lots"), {
-               ownerUid: currentUid,
+               ownerId: currentUid,
                name: newLotName,
                category: LOT_CATEGORY_BY_ANIMAL_CATEGORY[category] || "outro",
                areaHa: null,
@@ -1731,7 +1731,7 @@
            }
 
            const animalRef = await addDoc(collection(db, "animals"), {
-             ownerUid: currentUid,
+             ownerId: currentUid,
              earTag,
              sex,
              breed: null,
@@ -1759,7 +1759,7 @@
 
            if (origin === "purchased") {
              await addDoc(collection(db, "events"), {
-               ownerUid: currentUid,
+               ownerId: currentUid,
                type: "purchase",
                animalId: animalRef.id,
                lotId: lotId || null,
@@ -1815,7 +1815,7 @@
 
       const animalsQuery = query(
         collection(db, "animals"),
-        where("ownerUid", "==", uid),
+        where("ownerId", "==", uid),
         orderBy("createdAt", "desc")
       );
       unsubAnimals = onSnapshot(
@@ -1833,7 +1833,7 @@
 
       const lotsQuery = query(
         collection(db, "lots"),
-        where("ownerUid", "==", uid),
+        where("ownerId", "==", uid),
         orderBy("createdAt", "desc")
       );
       unsubLots = onSnapshot(

@@ -1,11 +1,62 @@
 rules_version = '2';
 
-// Phase 1 (bootstrap): deny all reads and writes by default.
-// Hardened to owner-based rules in Phase 7 (see docs/SPEC.md section 9).
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    function signedIn() { return request.auth != null; }
+    function owns(rsc)  { return signedIn() && rsc.data.ownerId == request.auth.uid; }
+    function ownsNew()  { return signedIn() && request.resource.data.ownerId == request.auth.uid; }
+    function ownerImmutable() { return request.resource.data.ownerId == resource.data.ownerId; }
+
+    // Profile & per-user settings: keyed by uid
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+    match /settings/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Animals
+    match /animals/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.earTag is string
+                    && request.resource.data.earTag.size() > 0
+                    && request.resource.data.category is string;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
+
+    // Lots
+    match /lots/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
+
+    // Lifecycle events
+    match /events/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.type is string
+                    && request.resource.data.date is timestamp;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
+
+    // Financial transactions
+    match /transactions/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.kind in ["receita", "despesa"]
+                    && request.resource.data.category is string
+                    && request.resource.data.amountBRL is number
+                    && request.resource.data.date is timestamp;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
     }
   }
 }

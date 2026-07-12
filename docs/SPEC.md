@@ -181,11 +181,11 @@ approach and placeholder tokens for reference.
 
 Firestore, modular SDK v12. Six top-level collections: **`users`,
 `animals`, `lots`, `events`, `transactions`, `settings`**. Collections are
-flat (each document carries `ownerUid`) to keep security rules simple in
-Phase 7 (rules are deny-all until then, per section 7). Field names below
-are the working contract; exact final shapes are locked in Phase 5
-(section 9) when the CRUD forms are built, but no field required by
-section 6.7's indicator matrix may be dropped.
+flat (each document carries `ownerId`) to keep security rules simple —
+see `firestore.rules` for the owner-based access rules (section 7). Field
+names below are the working contract; exact final shapes are locked in
+Phase 5 (section 9) when the CRUD forms are built, but no field required
+by section 6.7's indicator matrix may be dropped.
 
 ### 6.1 `users`
 Document ID: Firebase Auth `uid`.
@@ -200,13 +200,13 @@ Document ID: Firebase Auth `uid`.
 | `lastLoginAt`| timestamp | Server timestamp, updated on login      |
 
 ### 6.2 `settings`
-Document ID: `ownerUid` (1:1 with `users`). Operation-wide values needed
+Document ID: `ownerId` (1:1 with `users`). Operation-wide values needed
 for area- and price-based indicators that no single animal/lot record can
 supply.
 
 | Field                     | Type      | Notes                                                        |
 |---------------------------|-----------|----------------------------------------------------------------|
-| `ownerUid`                | string    | References `users` document / Auth UID                        |
+| `ownerId`                 | string    | References `users` document / Auth UID                        |
 | `totalAreaHa`             | number    | Total property area, hectares                                 |
 | `grazingAreaHa`           | number    | Usable pasture area; default fallback for lots without their own `areaHa` — feeds ganho/ha, lotação, lucro/ha |
 | `referenceArrobaPriceBRL` | number    | Manually-updated current @ market price (R$) — used for herd inventory valuation and as a custo-de-reposição proxy. True replacement cost would need external market data this app doesn't source; this is an approximation, not a market feed. |
@@ -217,7 +217,7 @@ Document ID: auto-generated.
 
 | Field       | Type      | Notes                                                    |
 |-------------|-----------|-------------------------------------------------------------|
-| `ownerUid`  | string    | References `users` document / Auth UID                      |
+| `ownerId`   | string    | References `users` document / Auth UID                      |
 | `name`      | string    | e.g., "Lote 3 — Engorda"                                     |
 | `category`  | string    | `recria` \| `engorda` \| `matrizes` \| `bezerros` \| `outro` |
 | `areaHa`    | number \| null | Optional override; falls back to `settings.grazingAreaHa` when unset |
@@ -228,7 +228,7 @@ Document ID: auto-generated.
 
 | Field                    | Type      | Notes                                                      |
 |---------------------------|-----------|-------------------------------------------------------------|
-| `ownerUid`                | string    | References `users` document / Auth UID                      |
+| `ownerId`                 | string    | References `users` document / Auth UID                      |
 | `earTag`                  | string    | Brinco; unique per owner                                    |
 | `sex`                     | string    | `M` \| `F`                                                   |
 | `breed`                   | string \| null | Optional                                                 |
@@ -266,7 +266,7 @@ prenhez/desmame/natalidade/IEP.
 
 | Field        | Type      | Notes                                                         |
 |--------------|-----------|------------------------------------------------------------------|
-| `ownerUid`   | string    | References `users` document / Auth UID                           |
+| `ownerId`    | string    | References `users` document / Auth UID                           |
 | `type`       | string    | `purchase` \| `sale` \| `weaning` \| `death` \| `weighing` \| `breeding` \| `pregnancy_check` \| `birth` |
 | `animalId`   | string \| null | FK → `animals`; null for a lot-level bulk event              |
 | `lotId`      | string \| null | FK → `lots`; set for bulk purchase/sale of a whole lot        |
@@ -292,10 +292,10 @@ Document ID: auto-generated.
 
 | Field              | Type      | Notes                                                              |
 |---------------------|-----------|------------------------------------------------------------------------|
-| `ownerUid`          | string    | References `users` document / Auth UID                                 |
-| `type`              | string    | `receita` \| `despesa`                                                  |
+| `ownerId`           | string    | References `users` document / Auth UID                                 |
+| `kind`              | string    | `receita` \| `despesa`                                                  |
 | `category`          | string    | e.g., `venda-animal`, `compra-animal`, `alimentação`, `sanidade`, `mão-de-obra`, `arrendamento`, `depreciação`, `outros` |
-| `costNature`        | string \| null | `efetivo` \| `não-efetivo`; required when `type = despesa` (feeds COE vs COT, see 6.7) |
+| `costNature`        | string \| null | `efetivo` \| `não-efetivo`; required when `kind = despesa` (feeds COE vs COT, see 6.7) |
 | `amountBRL`         | number    | Required                                                                 |
 | `date`              | timestamp | Required                                                                 |
 | `linkedScope`       | string    | `animal` \| `lot` \| `operation`                                        |
@@ -371,10 +371,10 @@ events:
     payload: { arrobas: 21, pricePerArrobaBRL: 350, revenueBRL: 7350 } }
 
 transactions:
-  { type: "despesa", category: "compra-animal", costNature: "efetivo",
+  { kind: "despesa", category: "compra-animal", costNature: "efetivo",
     amountBRL: 3000, date: 2026-01-10,
     linkedScope: "animal", linkedAnimalId: "a1" }
-  { type: "receita", category: "venda-animal",
+  { kind: "receita", category: "venda-animal",
     amountBRL: 7350, date: 2026-07-05,
     linkedScope: "animal", linkedAnimalId: "a1" }
 ```
@@ -401,9 +401,10 @@ days-held).
   vanilla HTML/CSS/JS only.
 - **Mobile-first** layout and **WCAG AA** contrast/accessibility baseline
   (section 4).
-- **Firestore security**: `firestore.rules` denies all access by default
-  until the rules-hardening phase (Phase 7, section 9), when rules are
-  scoped to authenticated, owner-based access per the data model above.
+- **Firestore security**: `firestore.rules` scopes each collection to
+  authenticated, owner-based access (`ownerId == request.auth.uid`) per
+  the data model above; `users/{uid}` and `settings/{uid}` are keyed by
+  the uid itself. Any path not covered stays denied by default.
 
 ## 8. Out of Scope (for now)
 

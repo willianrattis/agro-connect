@@ -39,3 +39,18 @@ npx serve .
 
 Not yet configured — Firebase project wiring and config will be added in
 a later phase alongside Auth/Firestore integration.
+
+## Deploy Firestore rules
+
+`firestore.rules` holds the owner-based security rules (each domain
+document carries `ownerId`; `users/{uid}` and `settings/{uid}` are keyed
+by the uid itself). Publish a change with either:
+
+- **Firebase Console**: Firestore Database → Rules → paste the contents
+  of `firestore.rules` → Publish.
+- **CLI**: `firebase deploy --only firestore:rules` (requires
+  [firebase-tools](https://firebase.google.com/docs/cli) installed and
+  `firebase login` run once).
+
+Note: `earTag` uniqueness per owner is enforced in app code, not in the
+rules.
