@@ -634,6 +634,48 @@
 
   <script type="module">
     // =====================================================
+    // 0. Firebase (modular SDK v12 via CDN)
+    // =====================================================
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+    import { getFirestore } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB_rY85_SSBNjQtbHFHY7Ms8EI9RYsHfsA",
+      authDomain: "agro-connect-78e69.firebaseapp.com",
+      projectId: "agro-connect-78e69",
+      storageBucket: "agro-connect-78e69.firebasestorage.app",
+      messagingSenderId: "217525649901",
+      appId: "1:217525649901:web:a4bdf756fab68b1d1f27e4",
+      measurementId: "G-7JNSSZ4R1G",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+
+    // Analytics is optional and only works over http(s); guard so a file://
+    // open or a blocked import can't break initialization.
+    try {
+      const { getAnalytics, isSupported } = await import(
+        "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"
+      );
+      if (await isSupported()) getAnalytics(app);
+    } catch (err) {
+      console.warn("[Agro Connect] Analytics indisponível:", err?.message ?? err);
+    }
+
+    // TODO(temporary): remove once auth/db are consumed by real features.
+    console.log("[Agro Connect] Firebase inicializado:", {
+      projectId: firebaseConfig.projectId,
+      auth: !!auth,
+      db: !!db,
+    });
+
+    // =====================================================
     // 1. Mock data (replaced by Firestore in a later phase)
     // =====================================================
     const CARCASS_YIELD = 0.5;   // live → carcass approximation for the mock @ estimate
