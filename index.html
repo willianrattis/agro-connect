@@ -264,6 +264,45 @@
     color: var(--text-muted);
   }
 
+  /* Financeiro: month chips + 3-up summary + amount coloring */
+  .month-selector {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    padding-bottom: var(--space-1);
+    margin-bottom: var(--space-4);
+    scrollbar-width: none;
+  }
+  .month-selector::-webkit-scrollbar { display: none; }
+
+  .month-chip {
+    flex: none;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .month-chip.is-active {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: var(--on-brand);
+  }
+
+  .summary-strip.fin-summary {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  @media (max-width: 420px) {
+    .summary-strip.fin-summary { grid-template-columns: 1fr; }
+  }
+
+  .stat-value.fin-positive, .tx-amount.fin-positive { color: var(--success); }
+  .stat-value.fin-negative, .tx-amount.fin-negative { color: var(--danger); }
+
   /* =====================================================
      6. Cattle cards
      ===================================================== */
@@ -271,6 +310,78 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+
+  /* Financeiro: transaction list, grouped by day */
+  .tx-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .tx-day-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+  }
+
+  .tx-day-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .tx-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tx-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .tx-tags {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .tx-category-chip { background: var(--accent-tint); color: var(--brand); }
+  .tx-link-chip {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .tx-desc {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tx-amount {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-base);
+    flex: none;
+    white-space: nowrap;
   }
 
   .card {
@@ -1088,16 +1199,35 @@
         </ul>
       </section>
 
-      <!-- Financeiro (placeholder) -->
+      <!-- Financeiro -->
       <section class="view" id="view-financeiro" aria-labelledby="tab-financeiro" hidden>
-        <div class="view-header"><h2 class="view-title">Financeiro</h2></div>
-        <div class="empty-state">
-          <span class="icon" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
-          </span>
-          <h3>Receitas e despesas</h3>
-          <p>Lançamentos financeiros chegam na fase de CRUD com Firestore.</p>
+        <div class="month-selector" id="month-selector" role="tablist" aria-label="Selecionar mês">
+          <!-- Month chips, rendered by JS -->
         </div>
+
+        <div class="summary-strip fin-summary">
+          <div class="stat-tile">
+            <p class="stat-value" id="fin-receitas">—</p>
+            <p class="stat-label">Receitas</p>
+          </div>
+          <div class="stat-tile">
+            <p class="stat-value" id="fin-despesas">—</p>
+            <p class="stat-label">Despesas</p>
+          </div>
+          <div class="stat-tile">
+            <p class="stat-value" id="fin-saldo">—</p>
+            <p class="stat-label">Saldo</p>
+          </div>
+        </div>
+
+        <div class="view-header">
+          <h2 class="view-title">Lançamentos</h2>
+          <span class="count" id="fin-count"></span>
+        </div>
+
+        <ul class="tx-list" id="tx-list" aria-live="polite">
+          <!-- Grouped by day, rendered by JS -->
+        </ul>
       </section>
 
       <!-- Indicadores (placeholder) -->
@@ -1112,15 +1242,27 @@
         </div>
       </section>
 
-      <!-- Perfil (placeholder) -->
+      <!-- Perfil -->
       <section class="view" id="view-perfil" aria-labelledby="tab-perfil" hidden>
         <div class="view-header"><h2 class="view-title">Perfil</h2></div>
-        <div class="empty-state">
-          <span class="icon" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
-          </span>
-          <h3>Sua conta</h3>
-          <p>Login com Google (Firebase Auth) será conectado na próxima fase.</p>
+
+        <div class="card">
+          <div class="card-top">
+            <span class="ear-tag" style="font-size: var(--fs-base);">Configurações da propriedade</span>
+            <button type="button" class="card-menu-btn pressable" id="settings-edit-btn" aria-label="Editar configurações">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+          </div>
+          <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-area-value">—</p>
+              <p class="mini-label">Área (ha)</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-price-value">—</p>
+              <p class="mini-label">Preço padrão da @</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1256,6 +1398,29 @@
       dead: "Morto",
     };
 
+    // Predefined transaction categories per kind (SPEC 6.6), plus a free "outra".
+    const TX_CATEGORIES = {
+      receita: [
+        { value: "venda-animal", label: "Venda de animal" },
+        { value: "outra", label: "Outra" },
+      ],
+      despesa: [
+        { value: "compra-animal", label: "Compra de animal" },
+        { value: "alimentação", label: "Alimentação" },
+        { value: "sanidade", label: "Sanidade" },
+        { value: "mão-de-obra", label: "Mão de obra" },
+        { value: "arrendamento", label: "Arrendamento" },
+        { value: "depreciação", label: "Depreciação" },
+        { value: "outra", label: "Outra" },
+      ],
+    };
+    const TX_CATEGORY_LABEL = Object.fromEntries(
+      [...TX_CATEGORIES.receita, ...TX_CATEGORIES.despesa].map((c) => [c.value, c.label])
+    );
+
+    const MONTH_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    const WEEKDAY_ABBR = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
     // Inline icons shared by the card kebab menu and its action sheet.
     const ICONS = {
       menu: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>`,
@@ -1277,6 +1442,17 @@
     const fabBtn = document.getElementById("fab-add");
     const tabs = Array.from(document.querySelectorAll(".tab"));
     const views = Array.from(document.querySelectorAll(".view"));
+
+    const monthSelectorEl = document.getElementById("month-selector");
+    const finReceitasEl = document.getElementById("fin-receitas");
+    const finDespesasEl = document.getElementById("fin-despesas");
+    const finSaldoEl = document.getElementById("fin-saldo");
+    const finCountEl = document.getElementById("fin-count");
+    const txListEl = document.getElementById("tx-list");
+
+    const settingsAreaValueEl = document.getElementById("settings-area-value");
+    const settingsPriceValueEl = document.getElementById("settings-price-value");
+    const settingsEditBtn = document.getElementById("settings-edit-btn");
 
     // =====================================================
     // 3. Helpers
@@ -1348,6 +1524,33 @@
       const profit = animal.saleRevenueBRL - (animal.purchaseCostBRL || 0) - linkedDespesas;
       const dailyProfit = days > 0 ? profit / days : profit;
       return { days, profit, dailyProfit };
+    }
+
+    function monthKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function monthChipLabel(key) {
+      const [y, m] = key.split("-").map(Number);
+      return `${MONTH_ABBR[m - 1]}/${String(y).slice(2)}`;
+    }
+
+    // Trailing N months ending at the current month, oldest first.
+    function buildRecentMonthKeys(count) {
+      const now = new Date();
+      const keys = [];
+      for (let i = count - 1; i >= 0; i--) {
+        keys.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+      }
+      return keys;
+    }
+
+    function formatDayLabel(date) {
+      return `${WEEKDAY_ABBR[date.getDay()]}, ${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function categoryDisplayLabel(category) {
+      return TX_CATEGORY_LABEL[category] || category;
     }
 
     // =====================================================
@@ -1461,6 +1664,139 @@
       statArrobasEl.textContent = "—";
       herdCountEl.textContent = "";
     }
+
+    // =====================================================
+    // 4b. Render: Financeiro (month-filtered ledger)
+    // =====================================================
+    let selectedMonthKey = monthKey(new Date());
+
+    function renderMonthChips() {
+      monthSelectorEl.innerHTML = buildRecentMonthKeys(12)
+        .map((key) => `<button type="button" class="month-chip pressable" data-month="${key}">${monthChipLabel(key)}</button>`)
+        .join("");
+      syncMonthChipActive();
+    }
+
+    function syncMonthChipActive() {
+      monthSelectorEl.querySelectorAll(".month-chip").forEach((btn) => {
+        const active = btn.dataset.month === selectedMonthKey;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", String(active));
+        if (active) btn.scrollIntoView({ inline: "center", block: "nearest" });
+      });
+    }
+
+    monthSelectorEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".month-chip");
+      if (!btn) return;
+      selectedMonthKey = btn.dataset.month;
+      syncMonthChipActive();
+      renderFinanceiro();
+    });
+
+    function linkTagHTML(t) {
+      if (t.linkedScope === "animal" && t.linkedAnimalId) {
+        const animal = animalsCache.find((a) => a.id === t.linkedAnimalId);
+        if (animal) return `<span class="chip tx-link-chip">#${escapeHtml(animal.earTag)}</span>`;
+      } else if (t.linkedScope === "lot" && t.linkedLotId) {
+        const lot = lotsCache.find((l) => l.id === t.linkedLotId);
+        if (lot) return `<span class="chip tx-link-chip">${escapeHtml(lot.name)}</span>`;
+      }
+      return "";
+    }
+
+    function renderTxRow(t) {
+      const isReceita = t.kind === "receita";
+      const amountClass = isReceita ? "fin-positive" : "fin-negative";
+      const sign = isReceita ? "+" : "−";
+      return `
+        <li class="tx-row">
+          <div class="tx-row-main">
+            <div class="tx-tags">
+              <span class="chip tx-category-chip">${escapeHtml(categoryDisplayLabel(t.category))}</span>
+              ${linkTagHTML(t)}
+            </div>
+            ${t.description ? `<p class="tx-desc">${escapeHtml(t.description)}</p>` : ""}
+          </div>
+          <p class="tx-amount ${amountClass}">${sign} ${formatBRL(Math.abs(t.amountBRL || 0))}</p>
+        </li>
+      `;
+    }
+
+    function renderFinEmpty() {
+      txListEl.innerHTML = `
+        <li>
+          <div class="empty-state">
+            <span class="icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+            </span>
+            <h3>Nenhum lançamento neste mês</h3>
+            <p>Toque em + para registrar uma receita ou despesa.</p>
+          </div>
+        </li>
+      `;
+    }
+
+    // Reads transactionsCache directly (kept fresh by the transactions
+    // onSnapshot listener) and filters by selectedMonthKey client-side —
+    // the Firestore query itself only filters by ownerId + orders by date.
+    function renderFinanceiro() {
+      const monthTx = transactionsCache.filter((t) => {
+        const d = toDateSafe(t.date);
+        return d && monthKey(d) === selectedMonthKey;
+      });
+
+      const totals = monthTx.reduce(
+        (acc, t) => {
+          if (t.kind === "receita") acc.receitas += t.amountBRL || 0;
+          else if (t.kind === "despesa") acc.despesas += t.amountBRL || 0;
+          return acc;
+        },
+        { receitas: 0, despesas: 0 }
+      );
+      const saldo = totals.receitas - totals.despesas;
+
+      finReceitasEl.textContent = formatBRL(totals.receitas);
+      finDespesasEl.textContent = formatBRL(totals.despesas);
+      finSaldoEl.textContent = formatBRL(saldo);
+      finSaldoEl.classList.toggle("fin-positive", saldo > 0);
+      finSaldoEl.classList.toggle("fin-negative", saldo < 0);
+      finCountEl.textContent = `${monthTx.length} lançamento${monthTx.length === 1 ? "" : "s"}`;
+
+      if (monthTx.length === 0) {
+        renderFinEmpty();
+        return;
+      }
+
+      // monthTx preserves the query's date-desc order, so a day boundary is
+      // just a change in toDateSafe(date).toDateString() between neighbors.
+      const groups = [];
+      let lastDayKey = null;
+      for (const t of monthTx) {
+        const d = toDateSafe(t.date);
+        const dayKey = d ? d.toDateString() : "—";
+        if (dayKey !== lastDayKey) {
+          groups.push({ date: d, items: [] });
+          lastDayKey = dayKey;
+        }
+        groups[groups.length - 1].items.push(t);
+      }
+
+      txListEl.innerHTML = groups
+        .map(
+          (g) => `
+            <li class="tx-day-group">
+              <p class="tx-day-label">${g.date ? formatDayLabel(g.date) : "Sem data"}</p>
+              <ul class="tx-day-items">
+                ${g.items.map(renderTxRow).join("")}
+              </ul>
+            </li>
+          `
+        )
+        .join("");
+    }
+
+    renderMonthChips();
 
     // =====================================================
     // 5. Tab navigation (simple view switcher)
@@ -1930,6 +2266,8 @@
        const activeView = views.find((v) => !v.hidden);
        if (activeView?.id === "view-rebanho") {
          openNewAnimalSheet();
+       } else if (activeView?.id === "view-financeiro") {
+         openNewTransactionSheet();
        } else {
          showToast("Em breve nesta aba.");
        }
@@ -2127,7 +2465,7 @@
      function openSaleSheet(animal) {
        Sheet.open({
          title: `Vender · #${escapeHtml(animal.earTag)}`,
-         content: buildSaleFormHTML(settingsCache.referenceArrobaPriceBRL),
+         content: buildSaleFormHTML(settingsCache.defaultArrobaPriceBRL),
        });
        wireSaleForm(animal);
      }
@@ -2401,6 +2739,292 @@
        wireDeathForm(animal);
      }
 
+     // =====================================================
+     // 7c. Financeiro — "Nova transação" sheet
+     // =====================================================
+     function categoryOptionsHTML(kind) {
+       return TX_CATEGORIES[kind]
+         .map((c) => `<option value="${c.value}">${escapeHtml(c.label)}</option>`)
+         .join("");
+     }
+
+     function buildTransactionFormHTML(animals, lots) {
+       const animalOptions = animals
+         .filter((a) => (a.status || "active") === "active")
+         .map((a) => `<option value="${escapeHtml(a.id)}">#${escapeHtml(a.earTag)}</option>`)
+         .join("");
+       const lotOptions = lots
+         .map((l) => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)}</option>`)
+         .join("");
+
+       return `
+         <form id="tx-form" class="form-grid" novalidate>
+           <div class="field">
+             <span class="field-label">Tipo *</span>
+             <div class="segmented" role="radiogroup" aria-label="Tipo de lançamento">
+               <input type="radio" id="tx-kind-receita" name="tx-kind" value="receita" checked />
+               <label for="tx-kind-receita">Receita</label>
+               <input type="radio" id="tx-kind-despesa" name="tx-kind" value="despesa" />
+               <label for="tx-kind-despesa">Despesa</label>
+             </div>
+           </div>
+
+           <div class="field">
+             <label class="field-label" for="tx-category">Categoria *</label>
+             <select class="select" id="tx-category">
+               <option value="" selected>Selecione</option>
+               ${categoryOptionsHTML("receita")}
+             </select>
+             <p class="field-error" id="tx-category-error"></p>
+           </div>
+
+           <div class="field">
+             <label class="field-label" for="tx-amount">Valor (R$) *</label>
+             <input class="input" id="tx-amount" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
+             <p class="field-error" id="tx-amount-error"></p>
+           </div>
+
+           <div class="field">
+             <label class="field-label" for="tx-date">Data *</label>
+             <input class="input" id="tx-date" type="date" />
+             <p class="field-error" id="tx-date-error"></p>
+           </div>
+
+           <div class="field">
+             <span class="field-label">Vínculo</span>
+             <div class="segmented" role="radiogroup" aria-label="Vínculo do lançamento">
+               <input type="radio" id="tx-scope-operation" name="tx-scope" value="operation" checked />
+               <label for="tx-scope-operation">Geral</label>
+               <input type="radio" id="tx-scope-animal" name="tx-scope" value="animal" />
+               <label for="tx-scope-animal">Animal</label>
+               <input type="radio" id="tx-scope-lot" name="tx-scope" value="lot" />
+               <label for="tx-scope-lot">Lote</label>
+             </div>
+           </div>
+
+           <div class="field" id="tx-animal-field" hidden>
+             <label class="field-label" for="tx-animal">Animal</label>
+             <select class="select" id="tx-animal">
+               <option value="">Selecione</option>
+               ${animalOptions}
+             </select>
+             <p class="field-error" id="tx-animal-error"></p>
+           </div>
+
+           <div class="field" id="tx-lot-field" hidden>
+             <label class="field-label" for="tx-lot">Lote</label>
+             <select class="select" id="tx-lot">
+               <option value="">Selecione</option>
+               ${lotOptions}
+             </select>
+             <p class="field-error" id="tx-lot-error"></p>
+           </div>
+
+           <div class="field">
+             <label class="field-label" for="tx-description">Descrição</label>
+             <textarea class="textarea" id="tx-description" placeholder="Opcional"></textarea>
+           </div>
+
+           <p class="field-error" id="tx-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="tx-submit">Salvar lançamento</button>
+         </form>
+       `;
+     }
+
+     function wireTransactionForm() {
+       const form = document.getElementById("tx-form");
+       const categorySelect = document.getElementById("tx-category");
+       const amountInput = document.getElementById("tx-amount");
+       const scopeAnimalField = document.getElementById("tx-animal-field");
+       const scopeLotField = document.getElementById("tx-lot-field");
+       const submitBtn = document.getElementById("tx-submit");
+       const formError = document.getElementById("tx-form-error");
+       const allFieldIds = ["tx-category", "tx-amount", "tx-date", "tx-animal", "tx-lot"];
+
+       function kindValue() {
+         return form.querySelector('input[name="tx-kind"]:checked').value;
+       }
+       function scopeValue() {
+         return form.querySelector('input[name="tx-scope"]:checked').value;
+       }
+
+       function syncCategoryOptions() {
+         categorySelect.innerHTML = `<option value="" selected>Selecione</option>${categoryOptionsHTML(kindValue())}`;
+       }
+       form.querySelectorAll('input[name="tx-kind"]').forEach((r) => r.addEventListener("change", syncCategoryOptions));
+       syncCategoryOptions();
+
+       function syncScope() {
+         const scope = scopeValue();
+         scopeAnimalField.hidden = scope !== "animal";
+         scopeLotField.hidden = scope !== "lot";
+       }
+       form.querySelectorAll('input[name="tx-scope"]').forEach((r) => r.addEventListener("change", syncScope));
+       syncScope();
+
+       amountInput.addEventListener("input", () => formatCurrencyInput(amountInput));
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         allFieldIds.forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const kind = kindValue();
+
+         const category = categorySelect.value;
+         if (!category) fail("tx-category", "Selecione a categoria.");
+
+         const amount = parseBRLToNumber(amountInput.value);
+         if (!Number.isFinite(amount) || amount <= 0) fail("tx-amount", "Informe o valor.");
+
+         const dateStr = document.getElementById("tx-date").value;
+         if (!dateStr) fail("tx-date", "Informe a data.");
+
+         const scope = scopeValue();
+         const animalId = document.getElementById("tx-animal").value || null;
+         const lotId = document.getElementById("tx-lot").value || null;
+         if (scope === "animal" && !animalId) fail("tx-animal", "Selecione um animal.");
+         if (scope === "lot" && !lotId) fail("tx-lot", "Selecione um lote.");
+
+         const description = document.getElementById("tx-description").value.trim() || null;
+
+         if (!valid) return;
+
+         const date = new Date(`${dateStr}T00:00:00`);
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await addDoc(collection(db, "transactions"), {
+             ownerId: currentUid,
+             kind,
+             category,
+             costNature: null,
+             amountBRL: amount,
+             date,
+             linkedScope: scope,
+             linkedAnimalId: scope === "animal" ? animalId : null,
+             linkedLotId: scope === "lot" ? lotId : null,
+             description,
+             createdAt: serverTimestamp(),
+           });
+           showToast("Lançamento salvo.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao salvar lançamento:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Salvar lançamento";
+         }
+       });
+     }
+
+     function openNewTransactionSheet() {
+       Sheet.open({
+         title: "Nova transação",
+         content: buildTransactionFormHTML(animalsCache, lotsCache),
+       });
+       wireTransactionForm();
+     }
+
+     // =====================================================
+     // 7d. Perfil — settings sheet (propertyAreaHa, defaultArrobaPriceBRL)
+     // =====================================================
+     function renderSettingsCard() {
+       const area = settingsCache.propertyAreaHa;
+       const price = settingsCache.defaultArrobaPriceBRL;
+       settingsAreaValueEl.textContent = area != null ? `${area} ha` : "—";
+       settingsPriceValueEl.textContent = price != null ? formatBRL(price) : "—";
+     }
+
+     function buildSettingsFormHTML() {
+       return `
+         <form id="settings-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="settings-area">Área da propriedade (ha)</label>
+             <input class="input" id="settings-area" type="number" min="0" step="0.01" placeholder="Ex: 120" value="${settingsCache.propertyAreaHa ?? ""}" />
+             <p class="field-error" id="settings-area-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="settings-price">Preço padrão da @ (R$)</label>
+             <input class="input" id="settings-price" type="number" min="0" step="0.01" placeholder="Ex: 350" value="${settingsCache.defaultArrobaPriceBRL ?? ""}" />
+             <p class="field-error" id="settings-price-error"></p>
+           </div>
+           <p class="field-error" id="settings-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="settings-submit">Salvar configurações</button>
+         </form>
+       `;
+     }
+
+     function wireSettingsForm() {
+       const form = document.getElementById("settings-form");
+       const submitBtn = document.getElementById("settings-submit");
+       const formError = document.getElementById("settings-form-error");
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         ["settings-area", "settings-price"].forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const areaRaw = document.getElementById("settings-area").value;
+         const area = areaRaw ? parseFloat(areaRaw) : null;
+         if (areaRaw && (!Number.isFinite(area) || area < 0)) fail("settings-area", "Informe uma área válida.");
+
+         const priceRaw = document.getElementById("settings-price").value;
+         const price = priceRaw ? parseFloat(priceRaw) : null;
+         if (priceRaw && (!Number.isFinite(price) || price < 0)) fail("settings-price", "Informe um preço válido.");
+
+         if (!valid) return;
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await setDoc(
+             doc(db, "settings", currentUid),
+             {
+               ownerId: currentUid,
+               propertyAreaHa: area,
+               defaultArrobaPriceBRL: price,
+               updatedAt: serverTimestamp(),
+             },
+             { merge: true }
+           );
+           showToast("Configurações salvas.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao salvar configurações:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Salvar configurações";
+         }
+       });
+     }
+
+     function openSettingsSheet() {
+       Sheet.open({ title: "Configurações da propriedade", content: buildSettingsFormHTML() });
+       wireSettingsForm();
+     }
+
+     settingsEditBtn.addEventListener("click", openSettingsSheet);
+
     // =====================================================
     // 8. Firestore listeners (animals + lots + transactions + settings)
     //    — lifecycle tied to auth
@@ -2445,7 +3069,10 @@
       );
       unsubLots = onSnapshot(
         lotsQuery,
-        (snap) => { lotsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() })); },
+        (snap) => {
+          lotsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          renderFinanceiro();
+        },
         (err) => {
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
           lotsCache = [];
@@ -2454,12 +3081,17 @@
 
       // Linked despesas feed the sale-result profit line on each card, so a
       // change here needs to re-render the herd, not just refresh a cache.
-      const transactionsQuery = query(collection(db, "transactions"), where("ownerId", "==", uid));
+      const transactionsQuery = query(
+        collection(db, "transactions"),
+        where("ownerId", "==", uid),
+        orderBy("date", "desc")
+      );
       unsubTransactions = onSnapshot(
         transactionsQuery,
         (snap) => {
           transactionsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           if (animalsCache.length) renderHerd(animalsCache);
+          renderFinanceiro();
         },
         (err) => {
           console.warn("[Agro Connect] transactions onSnapshot error:", err?.code ?? err);
@@ -2469,7 +3101,10 @@
 
       unsubSettings = onSnapshot(
         doc(db, "settings", uid),
-        (snap) => { settingsCache = snap.exists() ? snap.data() : {}; },
+        (snap) => {
+          settingsCache = snap.exists() ? snap.data() : {};
+          renderSettingsCard();
+        },
         (err) => {
           console.warn("[Agro Connect] settings onSnapshot error:", err?.code ?? err);
           settingsCache = {};
@@ -2495,6 +3130,14 @@
       statHeadEl.textContent = "—";
       statArrobasEl.textContent = "—";
       herdCountEl.textContent = "";
+      finReceitasEl.textContent = "—";
+      finDespesasEl.textContent = "—";
+      finSaldoEl.textContent = "—";
+      finSaldoEl.classList.remove("fin-positive", "fin-negative");
+      finCountEl.textContent = "";
+      txListEl.innerHTML = "";
+      settingsAreaValueEl.textContent = "—";
+      settingsPriceValueEl.textContent = "—";
     }
 
     // =====================================================
