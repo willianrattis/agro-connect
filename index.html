@@ -298,6 +298,24 @@
     margin-bottom: var(--space-3);
   }
 
+  .card-top-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .card-menu-btn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    color: var(--text-muted);
+    flex: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .card-menu-btn:hover { background: rgba(30, 70, 32, 0.08); color: var(--text); }
+
   .ear-tag {
     font-family: var(--font-display);
     font-size: var(--fs-lg);
@@ -337,6 +355,18 @@
     color: var(--text-muted);
     margin-top: 2px;
   }
+
+  .sale-result {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  .sale-result strong { color: var(--brand); font-weight: 700; }
 
   /* =====================================================
      7. Skeleton loading (shimmer)
@@ -894,6 +924,60 @@
   .btn-primary:hover { background: var(--brand); }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  .btn-primary.btn-danger { background: var(--danger); }
+  .btn-primary.btn-danger:hover { background: #8f1f19; }
+
+  /* Action sheet (small "..." menu) */
+  .action-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .action-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 52px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-weight: 600;
+    font-size: var(--fs-base);
+    color: var(--text);
+    text-align: left;
+    transition: background-color 0.15s ease;
+  }
+  .action-item:hover { background: var(--accent-tint); }
+  .action-item .action-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--accent-tint);
+    color: var(--brand);
+    flex: none;
+  }
+  .action-item.danger { color: var(--danger); }
+  .action-item.danger .action-icon { background: rgba(179, 38, 30, 0.1); color: var(--danger); }
+  .action-item.danger:hover { background: rgba(179, 38, 30, 0.08); }
+
+  .confirm-field {
+    flex-direction: row !important;
+    align-items: flex-start;
+    gap: var(--space-2) !important;
+  }
+  .confirm-field input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    margin-top: 2px;
+    accent-color: var(--danger);
+  }
+  .confirm-field .field-label { font-weight: 500; }
+
   /* =====================================================
      15. Reduced motion
      ===================================================== */
@@ -1112,7 +1196,7 @@
       onAuthStateChanged, signOut,
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
     import {
-      getFirestore, doc, getDoc, setDoc, serverTimestamp,
+      getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp,
       collection, addDoc, query, where, orderBy, onSnapshot,
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
@@ -1172,6 +1256,17 @@
       dead: "Morto",
     };
 
+    // Inline icons shared by the card kebab menu and its action sheet.
+    const ICONS = {
+      menu: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>`,
+      sell: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+      weigh: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
+      wean: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M5 22c0-5 3-9 7-9s7 4 7 9"/></svg>`,
+      death: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg>`,
+      edit: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+      delete: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`,
+    };
+
     // =====================================================
     // 2. DOM references
     // =====================================================
@@ -1228,6 +1323,33 @@
       return parseInt(digits, 10) / 100;
     }
 
+    function formatBRL(n) {
+      return (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    // Days between purchaseDate|birthDate and saleDate — the sold-animal
+    // counterpart of daysOnFarm(), which measures against "now" instead.
+    function saleDaysHeld(animal) {
+      const startRef = animal.acquisitionType === "purchased" ? animal.purchaseDate : animal.birthDate;
+      const start = toDateSafe(startRef);
+      const end = toDateSafe(animal.saleDate);
+      if (!start || !end) return null;
+      return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+    }
+
+    // profit = saleRevenueBRL − purchaseCostBRL − despesas linked to this animal.
+    function computeSaleResult(animal, transactions) {
+      if (animal.status !== "sold" || animal.saleRevenueBRL == null) return null;
+      const days = saleDaysHeld(animal);
+      if (days == null) return null;
+      const linkedDespesas = transactions
+        .filter((t) => t.linkedAnimalId === animal.id && t.kind === "despesa")
+        .reduce((sum, t) => sum + (t.amountBRL || 0), 0);
+      const profit = animal.saleRevenueBRL - (animal.purchaseCostBRL || 0) - linkedDespesas;
+      const dailyProfit = days > 0 ? profit / days : profit;
+      return { days, profit, dailyProfit };
+    }
+
     // =====================================================
     // 4. Render: skeletons → cattle cards (staggered)
     // =====================================================
@@ -1257,11 +1379,17 @@
           const days = daysOnFarm(a);
           const weight = a.currentWeightKg != null ? `${a.currentWeightKg} kg` : "—";
           const chipClass = categoryLabel[a.category] ? `chip-${a.category}` : "chip-recria";
+          const saleResult = computeSaleResult(a, transactionsCache);
           return `
             <li class="card enter" style="--i: ${i}">
               <div class="card-top">
                 <span class="ear-tag"><span class="hash">#</span>${escapeHtml(a.earTag)}</span>
-                <span class="chip ${chipClass}">${categoryLabel[a.category] || escapeHtml(a.category)}</span>
+                <div class="card-top-right">
+                  <span class="chip ${chipClass}">${categoryLabel[a.category] || escapeHtml(a.category)}</span>
+                  <button type="button" class="card-menu-btn pressable" data-action="animal-menu" data-id="${escapeHtml(a.id)}" aria-label="Ações do animal #${escapeHtml(a.earTag)}">
+                    ${ICONS.menu}
+                  </button>
+                </div>
               </div>
               <div class="card-stats">
                 <div class="mini-stat">
@@ -1277,6 +1405,13 @@
                   <p class="mini-label">Status</p>
                 </div>
               </div>
+              ${saleResult ? `
+                <div class="sale-result">
+                  <span><strong>${saleResult.days}</strong> dias</span>
+                  <span>Lucro <strong>${formatBRL(saleResult.profit)}</strong></span>
+                  <span><strong>${formatBRL(saleResult.dailyProfit)}</strong>/dia</span>
+                </div>
+              ` : ""}
             </li>
           `;
         })
@@ -1800,13 +1935,485 @@
        }
      });
 
+     // =====================================================
+     // 7b. Animal "..." action menu + lifecycle event sheets
+     //     (Vender, Pesar, Desmamar, Registrar morte — Editar/Excluir
+     //     are stubbed here and land in 5.4)
+     // =====================================================
+     function buildActionMenuHTML(animal) {
+       const isActive = (animal.status || "active") === "active";
+       const lifecycleItems = isActive
+         ? `
+           <button type="button" class="action-item pressable" data-menu-action="sell">
+             <span class="action-icon" aria-hidden="true">${ICONS.sell}</span>
+             Vender
+           </button>
+           <button type="button" class="action-item pressable" data-menu-action="weigh">
+             <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
+             Pesar
+           </button>
+           <button type="button" class="action-item pressable" data-menu-action="wean">
+             <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
+             Desmamar
+           </button>
+           <button type="button" class="action-item danger pressable" data-menu-action="death">
+             <span class="action-icon" aria-hidden="true">${ICONS.death}</span>
+             Registrar morte
+           </button>
+         `
+         : "";
+       return `
+         <div class="action-list">
+           ${lifecycleItems}
+           <button type="button" class="action-item pressable" data-menu-action="edit">
+             <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
+             Editar
+           </button>
+           <button type="button" class="action-item danger pressable" data-menu-action="delete">
+             <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
+             Excluir
+           </button>
+         </div>
+       `;
+     }
+
+     function openActionSheet(animal) {
+       Sheet.open({
+         title: `Ações · #${escapeHtml(animal.earTag)}`,
+         content: buildActionMenuHTML(animal),
+       });
+       document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
+         btn.addEventListener("click", () => {
+           switch (btn.dataset.menuAction) {
+             case "sell": openSaleSheet(animal); break;
+             case "weigh": openWeighingSheet(animal); break;
+             case "wean": openWeaningSheet(animal); break;
+             case "death": openDeathSheet(animal); break;
+             default:
+               showToast("Disponível na próxima fase.");
+               Sheet.close();
+           }
+         });
+       });
+     }
+
+     herdListEl.addEventListener("click", (e) => {
+       const btn = e.target.closest('[data-action="animal-menu"]');
+       if (!btn) return;
+       const animal = animalsCache.find((a) => a.id === btn.dataset.id);
+       if (animal) openActionSheet(animal);
+     });
+
+     // --- Vender ---
+     function buildSaleFormHTML(defaultPrice) {
+       return `
+         <form id="sale-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="sale-date">Data da venda *</label>
+             <input class="input" id="sale-date" type="date" />
+             <p class="field-error" id="sale-date-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="sale-arrobas">Peso de carcaça (@) *</label>
+             <input class="input" id="sale-arrobas" type="number" min="0" step="0.01" placeholder="Ex: 21" />
+             <p class="field-error" id="sale-arrobas-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="sale-price">Preço da @ (R$) *</label>
+             <input class="input" id="sale-price" type="number" min="0" step="0.01" value="${defaultPrice != null ? defaultPrice : ""}" />
+             <p class="field-error" id="sale-price-error"></p>
+           </div>
+           <div class="field">
+             <span class="field-label">Valor da venda</span>
+             <p class="stat-value" id="sale-total" style="font-size: var(--fs-lg);">R$ 0,00</p>
+           </div>
+           <p class="field-error" id="sale-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="sale-submit">Confirmar venda</button>
+         </form>
+       `;
+     }
+
+     function wireSaleForm(animal) {
+       const form = document.getElementById("sale-form");
+       const arrobasInput = document.getElementById("sale-arrobas");
+       const priceInput = document.getElementById("sale-price");
+       const totalEl = document.getElementById("sale-total");
+       const submitBtn = document.getElementById("sale-submit");
+       const formError = document.getElementById("sale-form-error");
+
+       function recomputeTotal() {
+         const arrobas = parseFloat(arrobasInput.value);
+         const price = parseFloat(priceInput.value);
+         const total = Number.isFinite(arrobas) && Number.isFinite(price) ? arrobas * price : 0;
+         totalEl.textContent = formatBRL(total);
+         return total;
+       }
+       arrobasInput.addEventListener("input", recomputeTotal);
+       priceInput.addEventListener("input", recomputeTotal);
+       recomputeTotal();
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         ["sale-date", "sale-arrobas", "sale-price"].forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const dateStr = document.getElementById("sale-date").value;
+         if (!dateStr) fail("sale-date", "Informe a data da venda.");
+
+         const arrobas = parseFloat(arrobasInput.value);
+         if (!Number.isFinite(arrobas) || arrobas <= 0) fail("sale-arrobas", "Informe o peso de carcaça em @.");
+
+         const price = parseFloat(priceInput.value);
+         if (!Number.isFinite(price) || price <= 0) fail("sale-price", "Informe o preço da @.");
+
+         if (!valid) return;
+
+         const revenue = arrobas * price;
+         const saleDate = new Date(`${dateStr}T00:00:00`);
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await updateDoc(doc(db, "animals", animal.id), {
+             status: "sold",
+             saleDate,
+             saleArrobas: arrobas,
+             salePricePerArrobaBRL: price,
+             saleRevenueBRL: revenue,
+             updatedAt: serverTimestamp(),
+           });
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "sale",
+             animalId: animal.id,
+             lotId: animal.lotId || null,
+             date: saleDate,
+             payload: { arrobas, pricePerArrobaBRL: price, revenueBRL: revenue },
+             createdAt: serverTimestamp(),
+           });
+           await addDoc(collection(db, "transactions"), {
+             ownerId: currentUid,
+             kind: "receita",
+             category: "venda-animal",
+             costNature: null,
+             amountBRL: revenue,
+             date: saleDate,
+             linkedScope: "animal",
+             linkedAnimalId: animal.id,
+             linkedLotId: null,
+             description: null,
+             createdAt: serverTimestamp(),
+           });
+           showToast("Venda registrada.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao registrar venda:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Confirmar venda";
+         }
+       });
+     }
+
+     function openSaleSheet(animal) {
+       Sheet.open({
+         title: `Vender · #${escapeHtml(animal.earTag)}`,
+         content: buildSaleFormHTML(settingsCache.referenceArrobaPriceBRL),
+       });
+       wireSaleForm(animal);
+     }
+
+     // --- Pesar ---
+     function buildWeighingFormHTML() {
+       return `
+         <form id="weigh-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="weigh-date">Data da pesagem *</label>
+             <input class="input" id="weigh-date" type="date" />
+             <p class="field-error" id="weigh-date-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="weigh-weight">Peso (kg) *</label>
+             <input class="input" id="weigh-weight" type="number" min="0" step="0.1" placeholder="Ex: 340" />
+             <p class="field-error" id="weigh-weight-error"></p>
+           </div>
+           <p class="field-error" id="weigh-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="weigh-submit">Registrar pesagem</button>
+         </form>
+       `;
+     }
+
+     function wireWeighingForm(animal) {
+       const form = document.getElementById("weigh-form");
+       const submitBtn = document.getElementById("weigh-submit");
+       const formError = document.getElementById("weigh-form-error");
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         ["weigh-date", "weigh-weight"].forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const dateStr = document.getElementById("weigh-date").value;
+         if (!dateStr) fail("weigh-date", "Informe a data da pesagem.");
+
+         const weightKg = parseFloat(document.getElementById("weigh-weight").value);
+         if (!Number.isFinite(weightKg) || weightKg <= 0) fail("weigh-weight", "Informe o peso.");
+
+         if (!valid) return;
+
+         const date = new Date(`${dateStr}T00:00:00`);
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "weighing",
+             animalId: animal.id,
+             lotId: animal.lotId || null,
+             date,
+             payload: { weightKg },
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "animals", animal.id), {
+             currentWeightKg: weightKg,
+             updatedAt: serverTimestamp(),
+           });
+           showToast("Pesagem registrada.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao registrar pesagem:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Registrar pesagem";
+         }
+       });
+     }
+
+     function openWeighingSheet(animal) {
+       Sheet.open({
+         title: `Pesar · #${escapeHtml(animal.earTag)}`,
+         content: buildWeighingFormHTML(),
+       });
+       wireWeighingForm(animal);
+     }
+
+     // --- Desmamar ---
+     function buildWeaningFormHTML() {
+       return `
+         <form id="wean-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="wean-date">Data da desmama *</label>
+             <input class="input" id="wean-date" type="date" />
+             <p class="field-error" id="wean-date-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="wean-weight">Peso (kg)</label>
+             <input class="input" id="wean-weight" type="number" min="0" step="0.1" placeholder="Opcional" />
+           </div>
+           <p class="field-error" id="wean-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="wean-submit">Registrar desmama</button>
+         </form>
+       `;
+     }
+
+     function wireWeaningForm(animal) {
+       const form = document.getElementById("wean-form");
+       const submitBtn = document.getElementById("wean-submit");
+       const formError = document.getElementById("wean-form-error");
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         clearFieldError("wean-date");
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const dateStr = document.getElementById("wean-date").value;
+         if (!dateStr) fail("wean-date", "Informe a data da desmama.");
+
+         const weightRaw = document.getElementById("wean-weight").value;
+         const weightKg = weightRaw ? parseFloat(weightRaw) : null;
+
+         if (!valid) return;
+
+         const date = new Date(`${dateStr}T00:00:00`);
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "weaning",
+             animalId: animal.id,
+             lotId: animal.lotId || null,
+             date,
+             payload: { weightKg, damAnimalId: animal.damAnimalId || null },
+             createdAt: serverTimestamp(),
+           });
+           if (animal.category === "bezerro") {
+             await updateDoc(doc(db, "animals", animal.id), {
+               category: "recria",
+               updatedAt: serverTimestamp(),
+             });
+           }
+           showToast("Desmama registrada.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao registrar desmama:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Registrar desmama";
+         }
+       });
+     }
+
+     function openWeaningSheet(animal) {
+       Sheet.open({
+         title: `Desmamar · #${escapeHtml(animal.earTag)}`,
+         content: buildWeaningFormHTML(),
+       });
+       wireWeaningForm(animal);
+     }
+
+     // --- Registrar morte ---
+     function buildDeathFormHTML() {
+       return `
+         <form id="death-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="death-date">Data do óbito *</label>
+             <input class="input" id="death-date" type="date" />
+             <p class="field-error" id="death-date-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="death-cause">Causa *</label>
+             <textarea class="textarea" id="death-cause" placeholder="Ex: complicação clínica, acidente…"></textarea>
+             <p class="field-error" id="death-cause-error"></p>
+           </div>
+           <label class="field confirm-field" for="death-confirm">
+             <input type="checkbox" id="death-confirm" />
+             <span class="field-label">Confirmo o registro de morte deste animal — esta ação não pode ser desfeita.</span>
+           </label>
+           <p class="field-error" id="death-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary btn-danger pressable" id="death-submit" disabled>Registrar morte</button>
+         </form>
+       `;
+     }
+
+     function wireDeathForm(animal) {
+       const form = document.getElementById("death-form");
+       const confirmBox = document.getElementById("death-confirm");
+       const submitBtn = document.getElementById("death-submit");
+       const formError = document.getElementById("death-form-error");
+
+       confirmBox.addEventListener("change", () => {
+         submitBtn.disabled = !confirmBox.checked;
+       });
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         ["death-date", "death-cause"].forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const dateStr = document.getElementById("death-date").value;
+         if (!dateStr) fail("death-date", "Informe a data.");
+
+         const cause = document.getElementById("death-cause").value.trim();
+         if (!cause) fail("death-cause", "Informe a causa.");
+
+         if (!confirmBox.checked) {
+           valid = false;
+           formError.textContent = "Confirme o registro para continuar.";
+         }
+
+         if (!valid) return;
+
+         const deathDate = new Date(`${dateStr}T00:00:00`);
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await updateDoc(doc(db, "animals", animal.id), {
+             status: "dead",
+             deathDate,
+             deathCause: cause,
+             updatedAt: serverTimestamp(),
+           });
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "death",
+             animalId: animal.id,
+             lotId: animal.lotId || null,
+             date: deathDate,
+             payload: { cause },
+             createdAt: serverTimestamp(),
+           });
+           showToast("Óbito registrado.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao registrar morte:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Registrar morte";
+         }
+       });
+     }
+
+     function openDeathSheet(animal) {
+       Sheet.open({
+         title: `Registrar morte · #${escapeHtml(animal.earTag)}`,
+         content: buildDeathFormHTML(),
+       });
+       wireDeathForm(animal);
+     }
+
     // =====================================================
-    // 8. Firestore listeners (animals + lots) — lifecycle tied to auth
+    // 8. Firestore listeners (animals + lots + transactions + settings)
+    //    — lifecycle tied to auth
     // =====================================================
     let currentUid = null;
     let lotsCache = [];
+    let animalsCache = [];
+    let transactionsCache = [];
+    let settingsCache = {};
     let unsubAnimals = null;
     let unsubLots = null;
+    let unsubTransactions = null;
+    let unsubSettings = null;
 
     function startFirestoreListeners(uid) {
       currentUid = uid;
@@ -1821,9 +2428,9 @@
       unsubAnimals = onSnapshot(
         animalsQuery,
         (snap) => {
-          const animals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          if (animals.length === 0) renderHerdEmpty();
-          else renderHerd(animals);
+          animalsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if (animalsCache.length === 0) renderHerdEmpty();
+          else renderHerd(animalsCache);
         },
         (err) => {
           console.warn("[Agro Connect] animals onSnapshot error:", err?.code ?? err);
@@ -1844,15 +2451,46 @@
           lotsCache = [];
         }
       );
+
+      // Linked despesas feed the sale-result profit line on each card, so a
+      // change here needs to re-render the herd, not just refresh a cache.
+      const transactionsQuery = query(collection(db, "transactions"), where("ownerId", "==", uid));
+      unsubTransactions = onSnapshot(
+        transactionsQuery,
+        (snap) => {
+          transactionsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          if (animalsCache.length) renderHerd(animalsCache);
+        },
+        (err) => {
+          console.warn("[Agro Connect] transactions onSnapshot error:", err?.code ?? err);
+          transactionsCache = [];
+        }
+      );
+
+      unsubSettings = onSnapshot(
+        doc(db, "settings", uid),
+        (snap) => { settingsCache = snap.exists() ? snap.data() : {}; },
+        (err) => {
+          console.warn("[Agro Connect] settings onSnapshot error:", err?.code ?? err);
+          settingsCache = {};
+        }
+      );
     }
 
     function stopFirestoreListeners() {
       unsubAnimals?.();
       unsubLots?.();
+      unsubTransactions?.();
+      unsubSettings?.();
       unsubAnimals = null;
       unsubLots = null;
+      unsubTransactions = null;
+      unsubSettings = null;
       currentUid = null;
       lotsCache = [];
+      animalsCache = [];
+      transactionsCache = [];
+      settingsCache = {};
       herdListEl.innerHTML = "";
       statHeadEl.textContent = "—";
       statArrobasEl.textContent = "—";
