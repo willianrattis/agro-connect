@@ -1,9 +1,9 @@
 # Agro Connect — Product & Technical Spec
 
-Status: draft. Domain resolved this round: **beef cattle (gado de corte)
-operational and financial management**, replacing the earlier crop
-placeholder and the "entity defined in Phase 5" open question. Concrete
-hex/token values and CRUD implementation still land in later phases.
+Status: approved. Domain: **beef cattle (gado de corte) operational and
+financial management**. Concrete CRUD implementation and final Firestore
+shapes land in Phase 5 (section 9); security rules are hardened in
+Phase 7.
 
 ## 1. Product Objective
 
@@ -22,17 +22,17 @@ build step, no framework.
 
 - Primary: rural producers and farm staff who need a simple way to record
   and consult cattle-operation data — individual animals, lots/categories,
-  lifecycle events (purchase, sale, weaning, death), and financial
-  transactions — from a mobile device.
+  lifecycle events, weighings, and financial transactions — from a mobile
+  device.
 - Secondary: small farm managers/admins who want a lightweight shared tool
   without standing up a full system, and who need at-a-glance zootechnical
-  and financial indicators (see section 6.6) instead of spreadsheets.
+  and financial indicators (section 6.7) instead of spreadsheets.
 
 Assumptions: users have a Google account, a modern mobile browser, and
 variable-quality internet connectivity. No offline-first requirement in
-this phase. **ASSUMPTION:** single-owner data per operation for now —
-shared/multi-user farm access (e.g., owner + foreman with different
-permissions) is out of scope until a future phase (see section 8).
+this phase. Single-owner data per operation for now — shared/multi-user
+farm access (e.g., owner + foreman with different permissions) is out of
+scope until a future phase (section 8).
 
 ## 3. Functional Requirements
 
@@ -57,16 +57,17 @@ entities defined in section 6:
 - **Animals** (individual, tracked by ear tag / brinco).
 - **Lots** (lotes/categorias: recria, engorda, matrizes, bezerros, etc.).
 - **Lifecycle events**: compra (purchase), venda (sale), desmama
-  (weaning), morte/perda (death/loss), plus the reproductive sub-events
-  needed to compute the indicators in 6.6 (cobertura/IA, diagnóstico de
-  gestação, parto).
+  (weaning), morte/perda (death/loss), **pesagens (weighings)**, and the
+  reproductive events needed to compute the indicators in 6.7 —
+  cobertura/IA (breeding), **diagnóstico de gestação confirmado (pregnancy
+  confirmed)**, and **parto (calving)**.
 - **Financial transactions**: receitas (income) and despesas (expenses),
   categorized and optionally linked to a specific animal, a specific lot,
   or the operation as a whole (unlinked = general overhead).
 
 Only the authenticated owner can create/modify their own animals, lots,
-events, and transactions. Broader roles/permissions remain TBD (see
-section 8).
+events, and transactions. Broader roles/permissions remain out of scope
+(section 8).
 
 ### 3.4 Tracking granularity
 Two levels of tracking are first-class, not one collapsed into the other:
@@ -86,17 +87,15 @@ Two levels of tracking are first-class, not one collapsed into the other:
   `operation`.
 - Despesas additionally carry a `costNature` (`efetivo` vs `não-efetivo`)
   so effective operating cost (COE) and total operating cost (COT)
-  indicators (6.6) can be computed separately. **ASSUMPTION:** this
-  efetivo/não-efetivo split follows the standard COE/COT cost-accounting
-  convention used in Brazilian pecuária de corte (e.g., depreciação is
-  não-efetivo); flagged because no Indicadores reference doc was found in
-  the repo to confirm the exact category taxonomy against.
+  indicators (6.7) can be computed separately, following the standard
+  COE/COT cost-accounting convention used in Brazilian pecuária de corte
+  (e.g., depreciação is não-efetivo).
 
 ### 3.6 Lifecycle event dates are mandatory
 Purchase and sale events **require** a date field. Days-held, GMD, idade
 de abate, and daily-profit indicators are derived from event **dates**,
-not inferred from weight records — weight is a separate, independently
-dated measurement (section 6.4).
+not inferred from weight records — a weighing is a separate, independently
+dated event (section 6.5).
 
 ## 4. Non-Functional Requirements
 
@@ -180,15 +179,15 @@ approach and placeholder tokens for reference.
 
 ## 6. Data Model
 
-Firestore, modular SDK v12. Collections are flat/top-level (each document
-carries `ownerUid`) to match the existing `users`/`items` convention and
-keep security rules simple in Phase 6+ (rules are still deny-all until
-then, per section 7). Field names below are the working contract for the
-CRUD phases (Phase 6 in the roadmap, section 9); minor renames are
-expected once forms are built, but the shape must not lose any field
-required by section 6.6's indicator matrix.
+Firestore, modular SDK v12. Six top-level collections: **`users`,
+`animals`, `lots`, `events`, `transactions`, `settings`**. Collections are
+flat (each document carries `ownerUid`) to keep security rules simple in
+Phase 7 (rules are deny-all until then, per section 7). Field names below
+are the working contract; exact final shapes are locked in Phase 5
+(section 9) when the CRUD forms are built, but no field required by
+section 6.7's indicator matrix may be dropped.
 
-### 6.1 `users` collection (unchanged)
+### 6.1 `users`
 Document ID: Firebase Auth `uid`.
 
 | Field        | Type      | Notes                                  |
@@ -200,20 +199,20 @@ Document ID: Firebase Auth `uid`.
 | `createdAt`  | timestamp | Server timestamp on first login        |
 | `lastLoginAt`| timestamp | Server timestamp, updated on login      |
 
-### 6.2 `properties` collection
-Document ID: `ownerUid` (1:1 with `users`, mirrors that convention). Holds
-the operation-wide values needed for area- and price-based indicators
-that no single animal/lot record can supply.
+### 6.2 `settings`
+Document ID: `ownerUid` (1:1 with `users`). Operation-wide values needed
+for area- and price-based indicators that no single animal/lot record can
+supply.
 
 | Field                     | Type      | Notes                                                        |
 |---------------------------|-----------|----------------------------------------------------------------|
 | `ownerUid`                | string    | References `users` document / Auth UID                        |
 | `totalAreaHa`             | number    | Total property area, hectares                                 |
 | `grazingAreaHa`           | number    | Usable pasture area; default fallback for lots without their own `areaHa` — feeds ganho/ha, lotação, lucro/ha |
-| `referenceArrobaPriceBRL` | number    | Manually-updated current @ market price (R$) — used for herd inventory valuation and as a custo-de-reposição proxy. **ASSUMPTION:** true replacement cost needs external market data this app doesn't source; flagged as an approximation, not a market feed. |
+| `referenceArrobaPriceBRL` | number    | Manually-updated current @ market price (R$) — used for herd inventory valuation and as a custo-de-reposição proxy. True replacement cost would need external market data this app doesn't source; this is an approximation, not a market feed. |
 | `createdAt`, `updatedAt`  | timestamp | Server timestamps                                              |
 
-### 6.3 `lots` collection (lotes)
+### 6.3 `lots` (lotes)
 Document ID: auto-generated.
 
 | Field       | Type      | Notes                                                    |
@@ -221,10 +220,10 @@ Document ID: auto-generated.
 | `ownerUid`  | string    | References `users` document / Auth UID                      |
 | `name`      | string    | e.g., "Lote 3 — Engorda"                                     |
 | `category`  | string    | `recria` \| `engorda` \| `matrizes` \| `bezerros` \| `outro` |
-| `areaHa`    | number \| null | Optional override; falls back to `properties.grazingAreaHa` when unset |
+| `areaHa`    | number \| null | Optional override; falls back to `settings.grazingAreaHa` when unset |
 | `createdAt`, `updatedAt` | timestamp | Server timestamps                              |
 
-### 6.4 `animals` collection (individual, brinco)
+### 6.4 `animals` (individual, brinco)
 Document ID: auto-generated.
 
 | Field                    | Type      | Notes                                                      |
@@ -236,7 +235,7 @@ Document ID: auto-generated.
 | `category`                | string    | Current category; changes over the animal's life (e.g. on desmama) |
 | `lotId`                   | string \| null | FK → `lots`                                             |
 | `birthDate`               | timestamp \| null | Known only if born on the property                    |
-| `birthDateIsEstimated`    | boolean   | **ASSUMPTION:** when an animal is purchased young and true birth date is unknown, a producer-estimated date may be stored here instead of leaving `birthDate` null, so idade-de-abate can still be approximated; flag is required whenever `birthDate` is set this way |
+| `birthDateIsEstimated`    | boolean   | When an animal is purchased young and the true birth date is unknown, a producer-estimated date may be stored so idade-de-abate can still be approximated; this flag is required whenever `birthDate` is set that way |
 | `damAnimalId`             | string \| null | FK → `animals`; mother reference, only known for animals born on the property — feeds IEP/reproductive indicators |
 | `acquisitionType`         | string    | `born` \| `purchased`                                        |
 | `purchaseDate`            | timestamp \| null | **Required** if `acquisitionType = purchased`; source of days-held, not weight |
@@ -244,11 +243,11 @@ Document ID: auto-generated.
 | `purchaseCostBRL`         | number \| null | Required alongside `purchaseDate`                       |
 | `status`                  | string    | `active` \| `sold` \| `dead`                                  |
 | `saleDate`                | timestamp \| null | **Required** when `status = sold`; source of days-held |
-| `saleArrobas`              | number \| null | Carcass basis, 1 @ = 15 kg; required with `saleDate`      |
+| `saleArrobas`             | number \| null | Carcass basis, 1 @ = 15 kg; required with `saleDate`      |
 | `salePricePerArrobaBRL`   | number \| null | Required with `saleDate`                                 |
 | `saleRevenueBRL`          | number \| null | `= saleArrobas × salePricePerArrobaBRL`, denormalized for quick reads |
-| `deathDate`                | timestamp \| null | Required when `status = dead`                          |
-| `deathCause`               | string \| null | Free text                                                |
+| `deathDate`               | timestamp \| null | Required when `status = dead`                          |
+| `deathCause`              | string \| null | Free text                                                |
 | `createdAt`, `updatedAt`  | timestamp | Server timestamps                                            |
 
 Note: `purchase*`/`sale*` fields here are a denormalized convenience copy
@@ -257,29 +256,18 @@ inventory valuation) without a join; `events` remains the source of
 truth/audit trail. Keeping the two in sync is a single write-path
 concern for the CRUD phase, not a schema ambiguity.
 
-### 6.5 `weighings` collection (pesagens)
-Document ID: auto-generated. Independent of purchase/sale events —
-weight is measured whenever the producer weighs the animal, not only at
-transaction time. This is what GMD and carcass yield are computed from.
-
-| Field       | Type      | Notes                                    |
-|-------------|-----------|--------------------------------------------|
-| `ownerUid`  | string    | References `users` document / Auth UID      |
-| `animalId`  | string    | FK → `animals`                              |
-| `date`      | timestamp | Required                                    |
-| `weightKg`  | number    | Required, live weight                       |
-| `createdAt` | timestamp | Server timestamp                            |
-
-### 6.6 `events` collection (eventos de ciclo de vida e reprodutivos)
-Document ID: auto-generated. Covers both the required lifecycle events
-(compra, venda, desmama, morte) and the reproductive sub-events needed to
-compute prenhez/desmame/natalidade/IEP, which section 3.3 requires but
-which don't otherwise have a home.
+### 6.5 `events` (ciclo de vida, pesagens e reprodução)
+Document ID: auto-generated. One collection covers all dated occurrences:
+lifecycle events (compra, venda, desmama, morte), **weighings
+(pesagens)** — recorded whenever the producer weighs an animal, not only
+at transaction time — and the reproductive events (cobertura/IA,
+diagnóstico de gestação, parto) needed to compute
+prenhez/desmame/natalidade/IEP.
 
 | Field        | Type      | Notes                                                         |
 |--------------|-----------|------------------------------------------------------------------|
 | `ownerUid`   | string    | References `users` document / Auth UID                           |
-| `type`       | string    | `purchase` \| `sale` \| `weaning` \| `death` \| `breeding` \| `pregnancy_check` \| `birth` |
+| `type`       | string    | `purchase` \| `sale` \| `weaning` \| `death` \| `weighing` \| `breeding` \| `pregnancy_check` \| `birth` |
 | `animalId`   | string \| null | FK → `animals`; null for a lot-level bulk event              |
 | `lotId`      | string \| null | FK → `lots`; set for bulk purchase/sale of a whole lot        |
 | `date`       | timestamp | **Required** for every type                                       |
@@ -294,11 +282,12 @@ which don't otherwise have a home.
 | `sale`             | `arrobas`, `pricePerArrobaBRL`, `revenueBRL` (= arrobas × price)      |
 | `weaning`          | `weightKg`, `damAnimalId`; triggers `animals.category` transition     |
 | `death`            | `cause`                                                                |
+| `weighing`         | `weightKg` (live weight, required)                                     |
 | `breeding`         | `method` (`natural` \| `IA`), `sireId` (optional), `femaleAnimalId`   |
 | `pregnancy_check`  | `femaleAnimalId`, `result` (`pregnant` \| `open`), `method`           |
 | `birth`            | `calfAnimalId`, `damAnimalId`, `birthWeightKg`                        |
 
-### 6.7 `transactions` collection (receitas e despesas)
+### 6.6 `transactions` (receitas e despesas)
 Document ID: auto-generated.
 
 | Field              | Type      | Notes                                                              |
@@ -306,7 +295,7 @@ Document ID: auto-generated.
 | `ownerUid`          | string    | References `users` document / Auth UID                                 |
 | `type`              | string    | `receita` \| `despesa`                                                  |
 | `category`          | string    | e.g., `venda-animal`, `compra-animal`, `alimentação`, `sanidade`, `mão-de-obra`, `arrendamento`, `depreciação`, `outros` |
-| `costNature`        | string \| null | `efetivo` \| `não-efetivo`; required when `type = despesa` (feeds COE vs COT, see 6.8) |
+| `costNature`        | string \| null | `efetivo` \| `não-efetivo`; required when `type = despesa` (feeds COE vs COT, see 6.7) |
 | `amountBRL`         | number    | Required                                                                 |
 | `date`              | timestamp | Required                                                                 |
 | `linkedScope`       | string    | `animal` \| `lot` \| `operation`                                        |
@@ -315,23 +304,24 @@ Document ID: auto-generated.
 | `description`       | string \| null | Free text                                                          |
 | `createdAt`         | timestamp | Server timestamp                                                        |
 
-### 6.8 Indicator computability matrix
+### 6.7 Indicator computability matrix
 
-Every indicator named in the Indicadores reference is derivable from
-6.1–6.7 as follows. (No Indicadores doc was found in the repo — formulas
-below follow the standard Brazilian pecuária de corte definitions implied
-by the indicator names given in the task; flagged as an assumption to
-confirm once that doc is available.)
+All four indicator groups — **desempenho animal (performance),
+reprodutivo, econômico-financeiro, and gestão** — must be computable from
+the stored data in 6.1–6.6, with no external inputs beyond the manually
+maintained `settings` values. Formulas follow standard Brazilian pecuária
+de corte definitions. Below, "weighings" means `events` with
+`type = weighing`.
 
 **Desempenho animal**
 | Indicator | Formula | Source |
 |---|---|---|
-| GMD (ganho médio diário) | (weightKg₂ − weightKg₁) / (date₂ − date₁) per animal | `weighings` |
-| Ganho/ha | Σ weight gain of animals in a lot over a period / lot area | `weighings` + `lots.areaHa` / `properties.grazingAreaHa` |
-| Lotação (UA/ha) | Σ (latest `weighings.weightKg` / 450) for active animals / area | `animals` + `weighings` + `lots`/`properties`. 450 kg/UA is the standard conversion constant. |
+| GMD (ganho médio diário) | (weightKg₂ − weightKg₁) / (date₂ − date₁) per animal | weighings |
+| Ganho/ha | Σ weight gain of animals in a lot over a period / lot area | weighings + `lots.areaHa` / `settings.grazingAreaHa` |
+| Lotação (UA/ha) | Σ (latest weighing `weightKg` / 450) for active animals / area | `animals` + weighings + `lots`/`settings`. 450 kg/UA is the standard conversion constant. |
 | Desfrute | count(`events` type=`sale`\|`death` in period) / count(active `animals` at period start) × 100 | `events` + `animals` |
 | Idade de abate | `events[sale].date` − `animals.birthDate` (or `purchaseDate` if `birthDate` is null — approximation, see 6.4) | `animals` + `events` |
-| Rendimento de carcaça | (`events[sale].arrobas` × 15) / latest `weighings.weightKg` before sale date × 100 | `events` + `weighings` |
+| Rendimento de carcaça | (`events[sale].arrobas` × 15) / latest weighing `weightKg` before sale date × 100 | `events` |
 
 **Reprodutivo**
 | Indicator | Formula | Source |
@@ -349,22 +339,22 @@ confirm once that doc is available.)
 | COT/@ | Σ `transactions` despesa (all) / total arrobas produced | `transactions` + `events` |
 | Margem bruta | Σ receita − Σ despesa (efetivo) | `transactions` |
 | Margem líquida | Σ receita − Σ despesa (all) | `transactions` |
-| Break-even (@) | total COT / current @ price | `transactions` + `properties.referenceArrobaPriceBRL` (or realized avg sale price from `events`) |
+| Break-even (@) | total COT / current @ price | `transactions` + `settings.referenceArrobaPriceBRL` (or realized avg sale price from `events`) |
 | ROI | (Σ receita − Σ despesa) / Σ despesa, scoped to an animal/lot/operation via `linkedScope` | `transactions` |
-| Lucro/ha | (Σ receita − Σ despesa linked to a lot/operation) / area | `transactions` + `lots`/`properties` |
+| Lucro/ha | (Σ receita − Σ despesa linked to a lot/operation) / area | `transactions` + `lots`/`settings` |
 
 **Gestão / capital de giro**
 | Indicator | Formula | Source |
 |---|---|---|
 | Giro de estoque | count(`events[sale]`) / average active-animal count over period | `events` + `animals` |
 | Fluxo de caixa | `transactions` grouped by period, running receita − despesa | `transactions` |
-| Custo de reposição | `properties.referenceArrobaPriceBRL` × typical category weight, or recent avg `compra-animal` despesa per category (approximation — flagged in 6.2) | `properties` + `transactions` |
-| Inventário (valorização do rebanho) | Σ active `animals`' latest `weighings.weightKg` converted to @ × `properties.referenceArrobaPriceBRL` | `animals` + `weighings` + `properties` |
+| Custo de reposição | `settings.referenceArrobaPriceBRL` × typical category weight, or recent avg `compra-animal` despesa per category (approximation — see 6.2) | `settings` + `transactions` |
+| Inventário (valorização do rebanho) | Σ active `animals`' latest weighing `weightKg` converted to @ × `settings.referenceArrobaPriceBRL` | `animals` + `events` + `settings` |
 
-### 6.9 Worked example (validation)
+### 6.8 Worked example (validation)
 
 Calf bought at 180 kg for R$3,000 on a purchase date; sold at 21 @
-(1 @ = 15 kg carcass; @ = R$350 → R$7,350) on a sale date.
+(1 @ = 15 kg carcass; @ = R$350 → 21 × 350 = R$7,350) on a sale date.
 
 ```
 animals/a1:
@@ -389,8 +379,9 @@ transactions:
     linkedScope: "animal", linkedAnimalId: "a1" }
 ```
 
-Derived:
-- **Days held** = `saleDate − purchaseDate` = 176 days (dates, not weights).
+Derived by the app:
+- **Days held** = `saleDate − purchaseDate` = 176 days (from dates, not
+  weights).
 - **Profit** = Σ receita − Σ despesa = 7,350 − 3,000 = **R$4,350**.
 - **Daily profit** = 4,350 / 176 ≈ **R$24.72/day**.
 
@@ -408,9 +399,11 @@ days-held).
   No npm install, no bundler-based imports.
 - **No frontend frameworks** (no React/Vue/etc.) and no CSS frameworks —
   vanilla HTML/CSS/JS only.
+- **Mobile-first** layout and **WCAG AA** contrast/accessibility baseline
+  (section 4).
 - **Firestore security**: `firestore.rules` denies all access by default
-  until the rules-hardening phase (section 9), when rules are scoped to
-  authenticated, owner-based access per the data model above.
+  until the rules-hardening phase (Phase 7, section 9), when rules are
+  scoped to authenticated, owner-based access per the data model above.
 
 ## 8. Out of Scope (for now)
 
@@ -427,17 +420,17 @@ days-held).
 
 1. Bootstrap: repo structure, spec, deny-all rules. *(done)*
 2. Design system + static app shell (mobile-first layout, modal shell,
-   mock data). *(done — current mock data in `index.html` still reflects
-   the old crop placeholder; will be replaced with cattle-domain sample
-   data during Phase 6 below)*
-3. **Cattle domain spec + data model** (this document, this round) —
-   resolves the entity definition that was previously deferred.
-4. Firebase Auth (Google login/logout) wiring.
-5. Firestore wiring for `users` on login.
-6. Cattle CRUD: `animals`, `lots`, `events` (compra/venda/desmama/morte +
-   reprodutivos), `transactions` (receitas/despesas) — modals + Firestore.
-7. Indicator dashboard: compute and surface the four indicator groups
-   from section 6.8 (desempenho, reprodutivo, econômico-financeiro,
+   mock data). *(done — the mock data in `index.html` still reflects the
+   pre-revision placeholder domain and will be replaced with
+   cattle-domain sample data in Phase 5)*
+3. Spec revision to the beef-cattle domain (this document). *(done)*
+4. Firebase Auth (Google login/logout) wiring, plus Firestore `users`
+   document on login.
+5. **Cattle data model + CRUD**: exact Firestore shapes for `animals`,
+   `lots`, `events` (lifecycle, weighings, reproductive), `transactions`,
+   and `settings` (section 6), with modal forms wired to Firestore.
+6. Indicator dashboard: compute and surface the four indicator groups
+   from section 6.7 (desempenho, reprodutivo, econômico-financeiro,
    gestão) from stored data.
-8. Tighten `firestore.rules` to real, owner-based access rules across all
-   collections in section 6.
+7. Harden `firestore.rules` from deny-all to real, owner-based access
+   rules across all collections in section 6.

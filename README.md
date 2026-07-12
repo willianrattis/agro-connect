@@ -1,10 +1,14 @@
 # Agro Connect
 
-A mobile-first, no-build web app for agricultural use, with Google login
-(Firebase Auth) and Firestore as the database. Every feature opens in a
-modal on top of a single-page shell — no frameworks, no bundler.
+A mobile-first, no-build web app for managing **beef cattle (gado de
+corte) operations**: individual animals (ear tag), lots/categories
+(recria, engorda, matrizes), lifecycle and reproductive events, weighings,
+and receitas/despesas — with zootechnical and financial indicators derived
+from that data. Google login (Firebase Auth), Firestore as the database,
+and every feature opens in a modal on top of a single-page shell — no
+frameworks, no bundler.
 
-Status: bootstrap phase — structure and spec only, no application code yet.
+Status: spec + UI scaffold phase — no Firebase wiring yet.
 See [docs/SPEC.md](docs/SPEC.md) for the full product/technical spec.
 
 ## Stack
