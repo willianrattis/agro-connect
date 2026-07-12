@@ -1,38 +1,48 @@
 <!DOCTYPE html>
 <!--
-  Agro Connect
-  Visual skeleton (Phase 2). No Firebase yet — mock/static data only.
+  Agro Connect — app shell (Phase 2 rebuild).
+  Visual skeleton only: no Firebase yet, mock cattle data.
   See docs/SPEC.md for the full product & technical spec.
 -->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Agro Connect</title>
-<style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#F5F1E8" />
+<title>Agro Connect — Gestão de gado de corte</title>
 
+<!-- Display face for numbers/KPIs; body stays on the system stack -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+
+<style>
   /* =====================================================
-     Design Tokens
+     1. Design tokens (semantic, dark-mode ready)
      ===================================================== */
   :root {
-    /* Colors */
-    --color-primary: #2e7d32;
-    --color-primary-dark: #1b5e20;
-    --color-primary-light: #60ad5e;
-    --color-accent: #f9a825;
-    --color-earth: #6d4c41;
+    /* Brand & feedback */
+    --brand: #1E4620;          /* deep forest green */
+    --brand-strong: #143317;
+    --accent: #2E7D32;         /* vivid pasture green — AA with white text */
+    --accent-tint: #E2F1DC;
+    --danger: #B3261E;
+    --success: #2E7D32;
 
-    --color-bg: #f4f7f2;
-    --color-surface: #ffffff;
+    /* Surfaces & text (warm sand neutrals, not gray) */
+    --bg: #F5F1E8;
+    --surface: #FFFEFA;
+    --surface-glass: rgba(247, 243, 234, 0.78);
+    --border: rgba(30, 70, 32, 0.14);
+    --text: #1A2418;
+    --text-muted: #56604F;
+    --on-brand: #FFFFFF;
 
-    --color-text: #1c2b1a;
-    --color-muted: #5f6b5c;
-
-    --color-on-primary: #ffffff;
-
-    /* Shape */
-    --radius: 12px;
-    --shadow: 0 2px 8px rgba(0, 0, 0, .08);
+    /* Category chips (tinted bg + dark same-hue text) */
+    --chip-bezerro-bg: #FBEED3;  --chip-bezerro-text: #6F4E0E;
+    --chip-recria-bg:  #E3F2DC;  --chip-recria-text:  #2C5A2E;
+    --chip-engorda-bg: #DBEFE4;  --chip-engorda-text: #175243;
+    --chip-matriz-bg:  #F0E4D7;  --chip-matriz-text:  #6B4423;
 
     /* Spacing scale */
     --space-1: 4px;
@@ -41,336 +51,725 @@
     --space-4: 16px;
     --space-5: 24px;
     --space-6: 32px;
+    --space-7: 48px;
+
+    /* Radii */
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 20px;
+    --radius-full: 999px;
+
+    /* Layered shadows */
+    --shadow-sm: 0 1px 2px rgba(20, 35, 18, 0.06), 0 1px 1px rgba(20, 35, 18, 0.04);
+    --shadow-md: 0 2px 4px rgba(20, 35, 18, 0.05), 0 10px 28px rgba(20, 35, 18, 0.09);
+    --shadow-lg: 0 4px 10px rgba(20, 35, 18, 0.08), 0 18px 44px rgba(20, 35, 18, 0.14);
+
+    /* Glass */
+    --blur: 14px;
+
+    /* Fluid typography */
+    --fs-xs: clamp(0.6875rem, 0.66rem + 0.15vw, 0.75rem);
+    --fs-sm: clamp(0.8125rem, 0.78rem + 0.2vw, 0.875rem);
+    --fs-base: clamp(0.9375rem, 0.9rem + 0.25vw, 1rem);
+    --fs-lg: clamp(1.0625rem, 1rem + 0.4vw, 1.1875rem);
+    --fs-xl: clamp(1.25rem, 1.15rem + 0.6vw, 1.5rem);
+    --fs-display: clamp(1.625rem, 1.4rem + 1.2vw, 2.125rem);
+
+    --font-display: "Sora", system-ui, sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
     /* Layout */
-    --container-max: 640px;
-    --header-height: 56px;
-
-    /* Typography (responsive via clamp) */
-    --font-size-base: 1rem;
-    --font-size-sm: 0.875rem;
-    --font-size-lg: clamp(1.05rem, 1rem + 0.4vw, 1.2rem);
-    --font-size-xl: clamp(1.15rem, 1.05rem + 0.8vw, 1.4rem);
+    --container-max: 680px;
+    --tabbar-height: 64px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  /*
+    Future dark mode: redefine ONLY the semantic surface/text tokens here.
+    @media (prefers-color-scheme: dark) { :root { --bg: …; --surface: …; } }
+  */
 
   /* =====================================================
-     Reset / Base
+     2. Reset / base
      ===================================================== */
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
+  *, *::before, *::after { box-sizing: border-box; }
 
-  html, body {
-    margin: 0;
-    padding: 0;
-  }
+  html { scroll-behavior: smooth; }
 
   body {
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    font-size: var(--font-size-base);
-    line-height: 1.5;
-    padding-top: var(--header-height);
-  }
-
-  h1, h2, h3, p {
     margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: var(--fs-base);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
   }
 
-  button {
-    font: inherit;
-    color: inherit;
-  }
+  h1, h2, h3, p, ul { margin: 0; padding: 0; }
+  ul { list-style: none; }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+  svg { display: block; }
 
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  a {
-    color: var(--color-primary-dark);
-  }
-
-  /* Keyboard focus visibility (accessibility) */
   :focus-visible {
-    outline: 3px solid var(--color-accent);
+    outline: 3px solid var(--accent);
     outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 
-  /* =====================================================
-     Layout / Container
-     ===================================================== */
   .container {
     max-width: var(--container-max);
     margin-inline: auto;
     padding-inline: var(--space-4);
   }
 
+  /* Press micro-interaction (buttons, cards that act like buttons) */
+  .pressable {
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  .pressable:active { transform: scale(0.96); }
+
   /* =====================================================
-     Header
+     3. Glass header
      ===================================================== */
   .app-header {
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    height: var(--header-height);
-    display: flex;
-    align-items: center;
-    background: var(--color-primary);
-    box-shadow: var(--shadow);
+    z-index: 40;
+    background: var(--surface-glass);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+    backdrop-filter: blur(var(--blur)) saturate(1.5);
+    border-bottom: 1px solid var(--border);
   }
 
   .app-header .container {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
+    min-height: 60px;
+    gap: var(--space-3);
   }
 
-  .app-header .brand {
-    color: var(--color-on-primary);
-    font-size: var(--font-size-xl);
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
     font-weight: 700;
-    letter-spacing: 0.2px;
+    color: var(--brand);
+    letter-spacing: -0.01em;
   }
 
-  .btn-login {
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--brand);
+    color: var(--on-brand);
+    display: grid;
+    place-items: center;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn-session {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     min-height: 44px;
     padding: var(--space-2) var(--space-4);
-    background: var(--color-primary-dark);
-    color: var(--color-on-primary);
-    border: none;
-    border-radius: var(--radius);
-    font-size: var(--font-size-sm);
+    border-radius: var(--radius-full);
+    background: var(--brand);
+    color: var(--on-brand);
+    font-size: var(--fs-sm);
     font-weight: 600;
-    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-session:hover { background: var(--brand-strong); }
+
+  /* =====================================================
+     4. Main / views
+     ===================================================== */
+  .app-main {
+    padding-block: var(--space-5) calc(var(--tabbar-height) + var(--safe-bottom) + 96px);
   }
 
-  .btn-login:hover {
-    background: var(--color-primary-light);
+  .view[hidden] { display: none; }
+
+  .view {
+    animation: view-in 0.25s ease both;
+  }
+  @keyframes view-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .view-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    color: var(--brand);
+    letter-spacing: -0.01em;
+  }
+
+  .view-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-block: var(--space-6) var(--space-4);
+  }
+
+  .view-header .count {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
   }
 
   /* =====================================================
-     Main / Content / Cards
+     5. Summary strip (stat tiles)
      ===================================================== */
-  .app-main {
-    padding-block: var(--space-5) var(--space-6);
-    min-height: calc(100vh - var(--header-height));
+  .summary-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
   }
 
-  .section-title {
-    font-size: var(--font-size-lg);
+  .stat-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-4);
+    box-shadow: var(--shadow-md);
+  }
+
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: var(--fs-display);
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--brand);
+    letter-spacing: -0.02em;
+  }
+
+  .stat-value small {
+    font-size: 0.5em;
     font-weight: 700;
-    margin-bottom: var(--space-4);
-    color: var(--color-primary-dark);
+    color: var(--text-muted);
   }
 
-  .item-list {
+  .stat-label {
+    margin-top: var(--space-1);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* =====================================================
+     6. Cattle cards
+     ===================================================== */
+  .herd-list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
 
   .card {
-    background: var(--color-surface);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
     padding: var(--space-4);
-    border-left: 4px solid var(--color-primary-light);
+    box-shadow: var(--shadow-md);
   }
 
-  .card-title {
-    font-size: var(--font-size-lg);
-    font-weight: 600;
-    margin-bottom: var(--space-1);
+  .card.enter {
+    animation: card-in 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
   }
 
-  .card-meta {
-    font-size: var(--font-size-sm);
-    color: var(--color-muted);
-    margin-bottom: var(--space-2);
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
   }
 
-  .card-desc {
-    font-size: var(--font-size-base);
+  .ear-tag {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    letter-spacing: -0.01em;
   }
+  .ear-tag .hash { color: var(--text-muted); font-weight: 600; }
 
-  .badge {
-    display: inline-block;
-    margin-top: var(--space-2);
+  .chip {
     padding: var(--space-1) var(--space-3);
-    background: var(--color-accent);
-    color: var(--color-text);
-    border-radius: 999px;
-    font-size: var(--font-size-sm);
-    font-weight: 600;
+    border-radius: var(--radius-full);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .chip-bezerro { background: var(--chip-bezerro-bg); color: var(--chip-bezerro-text); }
+  .chip-recria  { background: var(--chip-recria-bg);  color: var(--chip-recria-text); }
+  .chip-engorda { background: var(--chip-engorda-bg); color: var(--chip-engorda-text); }
+  .chip-matriz  { background: var(--chip-matriz-bg);  color: var(--chip-matriz-text); }
+
+  .card-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .mini-stat .mini-value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-base);
+  }
+  .mini-stat .mini-label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    margin-top: 2px;
   }
 
   /* =====================================================
-     Footer
+     7. Skeleton loading (shimmer)
      ===================================================== */
-  .app-footer {
-    padding-block: var(--space-4);
+  .skeleton { pointer-events: none; }
+
+  .sk-block {
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+      100deg,
+      rgba(30, 70, 32, 0.07) 40%,
+      rgba(30, 70, 32, 0.13) 50%,
+      rgba(30, 70, 32, 0.07) 60%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+  @keyframes shimmer {
+    to { background-position: -200% 0; }
+  }
+
+  .sk-tag   { width: 42%; height: 22px; }
+  .sk-chip  { width: 72px; height: 22px; border-radius: var(--radius-full); }
+  .sk-stat  { height: 34px; }
+
+  /* =====================================================
+     8. Empty states (placeholder views)
+     ===================================================== */
+  .empty-state {
+    margin-top: var(--space-6);
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-7) var(--space-5);
     text-align: center;
-    color: var(--color-muted);
-    font-size: var(--font-size-sm);
+    box-shadow: var(--shadow-sm);
+  }
+  .empty-state .icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius-full);
+    background: var(--accent-tint);
+    color: var(--brand);
+  }
+  .empty-state h3 {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    color: var(--brand);
+  }
+  .empty-state p {
+    margin-top: var(--space-2);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
   }
 
   /* =====================================================
-     FAB (Floating Action Button)
+     9. FAB
      ===================================================== */
   .fab {
     position: fixed;
-    right: var(--space-5);
-    bottom: var(--space-5);
+    right: var(--space-4);
+    bottom: calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-4));
+    z-index: 45;
     width: 56px;
     height: 56px;
-    border: none;
-    border-radius: 50%;
-    background: var(--color-accent);
-    color: var(--color-text);
-    font-size: 1.75rem;
-    line-height: 1;
-    box-shadow: var(--shadow);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
+    border-radius: var(--radius-full);
+    background: var(--accent);
+    color: var(--on-brand);
+    display: grid;
+    place-items: center;
+    box-shadow: var(--shadow-lg);
+  }
+  .fab:hover { background: var(--brand); }
+
+  /* =====================================================
+     10. Bottom tab bar (glass, safe-area aware)
+     ===================================================== */
+  .tabbar {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 50;
+    background: var(--surface-glass);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+    backdrop-filter: blur(var(--blur)) saturate(1.5);
+    border-top: 1px solid var(--border);
+    padding-bottom: var(--safe-bottom);
   }
 
-  .fab:hover {
-    background: var(--color-primary-light);
-    color: var(--color-on-primary);
+  .tabbar-inner {
+    max-width: var(--container-max);
+    margin-inline: auto;
+    height: var(--tabbar-height);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 44px;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    border-radius: var(--radius-md);
+  }
+  .tab[aria-current="page"] { color: var(--brand); }
+  .tab[aria-current="page"] .tab-icon {
+    background: var(--accent-tint);
+  }
+  .tab-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 26px;
+    border-radius: var(--radius-full);
+    transition: background-color 0.2s ease;
   }
 
   /* =====================================================
-     Responsive (wider viewports)
+     11. Wider viewports: tab bar becomes a left rail
      ===================================================== */
-  @media (min-width: 480px) {
-    .app-header .brand {
-      letter-spacing: 0.3px;
+  @media (min-width: 768px) {
+    body { padding-left: 96px; }
+
+    .tabbar {
+      inset: 0 auto 0 0;
+      width: 96px;
+      border-top: none;
+      border-right: 1px solid var(--border);
+      padding-bottom: 0;
     }
+    .tabbar-inner {
+      height: 100%;
+      max-width: none;
+      grid-template-columns: none;
+      grid-auto-rows: min-content;
+      align-content: center;
+      gap: var(--space-3);
+      padding-inline: var(--space-2);
+    }
+    .tab { padding-block: var(--space-2); }
+
+    .fab { bottom: var(--space-5); right: var(--space-5); }
+    .app-main { padding-bottom: var(--space-7); }
   }
 
-  @media (min-width: 640px) {
-    :root {
-      --header-height: 64px;
-    }
-
-    .container {
-      padding-inline: var(--space-5);
-    }
+  /* =====================================================
+     12. Reduced motion
+     ===================================================== */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .view, .card.enter { animation: none; }
+    .sk-block { animation: none; background: rgba(30, 70, 32, 0.09); }
+    .pressable { transition: none; }
+    .pressable:active { transform: none; }
   }
-
 </style>
 </head>
 <body>
 
-  <!-- ===== Header ===== -->
+  <!-- ===== Glass header ===== -->
   <header class="app-header">
     <div class="container">
-      <h1 class="brand">Agro Connect</h1>
-      <div class="session-area">
-        <button type="button" class="btn-login" id="login-btn">Log In</button>
-      </div>
+      <h1 class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <!-- leaf mark -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 20c0-8 4-14 12-16 1 8-2 15-10 16" />
+            <path d="M6 20c2-6 6-10 10-12" />
+          </svg>
+        </span>
+        Agro Connect
+      </h1>
+      <button type="button" class="btn-session pressable" id="session-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6" />
+        </svg>
+        Entrar
+      </button>
     </div>
   </header>
 
   <!-- ===== Main ===== -->
   <main class="app-main">
     <div class="container">
-      <h2 class="section-title">Meus itens</h2>
-      <ul class="item-list" id="item-list">
-        <!-- Cards rendered by JS from mock data -->
-      </ul>
+
+      <!-- Rebanho -->
+      <section class="view" id="view-rebanho" aria-labelledby="tab-rebanho">
+        <div class="summary-strip" id="summary-strip">
+          <div class="stat-tile">
+            <p class="stat-value" id="stat-head">—</p>
+            <p class="stat-label">Cabeças no rebanho</p>
+          </div>
+          <div class="stat-tile">
+            <p class="stat-value" id="stat-arrobas">—</p>
+            <p class="stat-label">Estoque estimado</p>
+          </div>
+        </div>
+
+        <div class="view-header">
+          <h2 class="view-title">Rebanho</h2>
+          <span class="count" id="herd-count"></span>
+        </div>
+
+        <ul class="herd-list" id="herd-list" aria-live="polite">
+          <!-- Skeletons, then cattle cards, rendered by JS -->
+        </ul>
+      </section>
+
+      <!-- Financeiro (placeholder) -->
+      <section class="view" id="view-financeiro" aria-labelledby="tab-financeiro" hidden>
+        <div class="view-header"><h2 class="view-title">Financeiro</h2></div>
+        <div class="empty-state">
+          <span class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+          </span>
+          <h3>Receitas e despesas</h3>
+          <p>Lançamentos financeiros chegam na fase de CRUD com Firestore.</p>
+        </div>
+      </section>
+
+      <!-- Indicadores (placeholder) -->
+      <section class="view" id="view-indicadores" aria-labelledby="tab-indicadores" hidden>
+        <div class="view-header"><h2 class="view-title">Indicadores</h2></div>
+        <div class="empty-state">
+          <span class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V12"/><path d="M12 20V6"/><path d="M19 20v-4"/></svg>
+          </span>
+          <h3>GMD, prenhez, COE/@ e mais</h3>
+          <p>O painel de indicadores é calculado dos dados reais em fase futura.</p>
+        </div>
+      </section>
+
+      <!-- Perfil (placeholder) -->
+      <section class="view" id="view-perfil" aria-labelledby="tab-perfil" hidden>
+        <div class="view-header"><h2 class="view-title">Perfil</h2></div>
+        <div class="empty-state">
+          <span class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
+          </span>
+          <h3>Sua conta</h3>
+          <p>Login com Google (Firebase Auth) será conectado na próxima fase.</p>
+        </div>
+      </section>
+
     </div>
   </main>
 
-  <!-- ===== Footer ===== -->
-  <footer class="app-footer">
-    <div class="container">
-      <p>Agro Connect &mdash; protótipo visual</p>
-    </div>
-  </footer>
-
   <!-- ===== FAB ===== -->
-  <button type="button" class="fab" id="fab-add" aria-label="Adicionar item">+</button>
+  <button type="button" class="fab pressable" id="fab-add" aria-label="Adicionar registro">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  </button>
+
+  <!-- ===== Bottom tab bar / left rail ===== -->
+  <nav class="tabbar" aria-label="Navegação principal">
+    <div class="tabbar-inner">
+      <button type="button" class="tab pressable" id="tab-rebanho" data-view="view-rebanho" aria-current="page">
+        <span class="tab-icon" aria-hidden="true">
+          <!-- ear tag -->
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v9a6 6 0 0 1-12 0V4a1 1 0 0 1 1-1z"/><circle cx="12" cy="7" r="1.4"/></svg>
+        </span>
+        Rebanho
+      </button>
+      <button type="button" class="tab pressable" id="tab-financeiro" data-view="view-financeiro">
+        <span class="tab-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </span>
+        Financeiro
+      </button>
+      <button type="button" class="tab pressable" id="tab-indicadores" data-view="view-indicadores">
+        <span class="tab-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V12"/><path d="M12 20V6"/><path d="M19 20v-4"/></svg>
+        </span>
+        Indicadores
+      </button>
+      <button type="button" class="tab pressable" id="tab-perfil" data-view="view-perfil">
+        <span class="tab-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
+        </span>
+        Perfil
+      </button>
+    </div>
+  </nav>
 
   <script type="module">
+    // =====================================================
+    // 1. Mock data (replaced by Firestore in a later phase)
+    // =====================================================
+    const CARCASS_YIELD = 0.5;   // live → carcass approximation for the mock @ estimate
+    const KG_PER_ARROBA = 15;
 
-    // =====================================================
-    // Mock Data (placeholder until Firestore is wired in)
-    // =====================================================
-    const mockItems = [
-      {
-        id: "mock-1",
-        title: "Talhão A — Milho",
-        meta: "Atualizado há 2 dias",
-        description: "Plantio em estágio vegetativo, irrigação em dia.",
-        badge: "Em andamento",
-      },
-      {
-        id: "mock-2",
-        title: "Estoque — Fertilizante NPK",
-        meta: "Atualizado há 5 dias",
-        description: "12 sacos de 25kg disponíveis no galpão 2.",
-        badge: "Estoque baixo",
-      },
-      {
-        id: "mock-3",
-        title: "Colheita — Trigo",
-        meta: "Atualizado hoje",
-        description: "Previsão de colheita concluída na próxima semana.",
-        badge: "Planejado",
-      },
+    const herd = [
+      { earTag: "1047", category: "engorda", weightKg: 438, entryDate: "2026-01-10", lastEvent: "Pesagem · 04/07" },
+      { earTag: "0982", category: "recria",  weightKg: 296, entryDate: "2025-11-02", lastEvent: "Sanidade · 28/06" },
+      { earTag: "1103", category: "bezerro", weightKg: 148, entryDate: "2026-03-19", lastEvent: "Pesagem · 30/06" },
+      { earTag: "0761", category: "matriz",  weightKg: 462, entryDate: "2024-08-15", lastEvent: "Parto · 19/03" },
+      { earTag: "1051", category: "engorda", weightKg: 401, entryDate: "2026-01-10", lastEvent: "Pesagem · 04/07" },
+      { earTag: "0899", category: "recria",  weightKg: 315, entryDate: "2025-10-12", lastEvent: "Troca de lote · 15/06" },
     ];
 
-    // =====================================================
-    // DOM References
-    // =====================================================
-    const itemListEl = document.getElementById("item-list");
-    const loginBtn = document.getElementById("login-btn");
-    const fabBtn = document.getElementById("fab-add");
+    const categoryLabel = {
+      bezerro: "Bezerro",
+      recria: "Recria",
+      engorda: "Engorda",
+      matriz: "Matriz",
+    };
 
     // =====================================================
-    // Render Functions
+    // 2. DOM references
     // =====================================================
-    function renderItems(items) {
-      itemListEl.innerHTML = items
+    const herdListEl = document.getElementById("herd-list");
+    const herdCountEl = document.getElementById("herd-count");
+    const statHeadEl = document.getElementById("stat-head");
+    const statArrobasEl = document.getElementById("stat-arrobas");
+    const sessionBtn = document.getElementById("session-btn");
+    const fabBtn = document.getElementById("fab-add");
+    const tabs = Array.from(document.querySelectorAll(".tab"));
+    const views = Array.from(document.querySelectorAll(".view"));
+
+    // =====================================================
+    // 3. Helpers
+    // =====================================================
+    function daysOnFarm(entryDate) {
+      const ms = Date.now() - new Date(`${entryDate}T00:00:00`).getTime();
+      return Math.max(0, Math.round(ms / 86_400_000));
+    }
+
+    function totalArrobas(animals) {
+      const kg = animals.reduce((sum, a) => sum + a.weightKg, 0);
+      return Math.round((kg * CARCASS_YIELD) / KG_PER_ARROBA);
+    }
+
+    // =====================================================
+    // 4. Render: skeletons → cattle cards (staggered)
+    // =====================================================
+    function renderSkeletons(count) {
+      herdListEl.innerHTML = Array.from({ length: count })
         .map(
-          (item) => `
-            <li class="card">
-              <h3 class="card-title">${item.title}</h3>
-              <p class="card-meta">${item.meta}</p>
-              <p class="card-desc">${item.description}</p>
-              <span class="badge">${item.badge}</span>
+          () => `
+            <li class="card skeleton" aria-hidden="true">
+              <div class="card-top">
+                <span class="sk-block sk-tag"></span>
+                <span class="sk-block sk-chip"></span>
+              </div>
+              <div class="card-stats" style="border-top: none;">
+                <span class="sk-block sk-stat"></span>
+                <span class="sk-block sk-stat"></span>
+                <span class="sk-block sk-stat"></span>
+              </div>
             </li>
           `
         )
         .join("");
     }
 
+    function renderHerd(animals) {
+      herdListEl.innerHTML = animals
+        .map(
+          (a, i) => `
+            <li class="card enter" style="--i: ${i}">
+              <div class="card-top">
+                <span class="ear-tag"><span class="hash">#</span>${a.earTag}</span>
+                <span class="chip chip-${a.category}">${categoryLabel[a.category]}</span>
+              </div>
+              <div class="card-stats">
+                <div class="mini-stat">
+                  <p class="mini-value">${a.weightKg} kg</p>
+                  <p class="mini-label">Peso atual</p>
+                </div>
+                <div class="mini-stat">
+                  <p class="mini-value">${daysOnFarm(a.entryDate)} d</p>
+                  <p class="mini-label">Na fazenda</p>
+                </div>
+                <div class="mini-stat">
+                  <p class="mini-value">${a.lastEvent}</p>
+                  <p class="mini-label">Último evento</p>
+                </div>
+              </div>
+            </li>
+          `
+        )
+        .join("");
+
+      statHeadEl.textContent = String(animals.length);
+      statArrobasEl.innerHTML = `${totalArrobas(animals)} <small>@</small>`;
+      herdCountEl.textContent = `${animals.length} animais ativos`;
+    }
+
     // =====================================================
-    // Event Listeners (placeholders — wired to Firebase later)
+    // 5. Tab navigation (simple view switcher)
     // =====================================================
-    loginBtn.addEventListener("click", () => {
-      console.log("[Agro Connect] Login clicked (placeholder — Firebase Auth pending).");
+    function activateTab(tab) {
+      tabs.forEach((t) => {
+        const active = t === tab;
+        if (active) t.setAttribute("aria-current", "page");
+        else t.removeAttribute("aria-current");
+      });
+      views.forEach((v) => {
+        v.hidden = v.id !== tab.dataset.view;
+      });
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => activateTab(tab));
+    });
+
+    // =====================================================
+    // 6. Placeholder actions (wired to Firebase/modals later)
+    // =====================================================
+    sessionBtn.addEventListener("click", () => {
+      console.log("[Agro Connect] Login placeholder — Firebase Auth na próxima fase.");
     });
 
     fabBtn.addEventListener("click", () => {
-      console.log("[Agro Connect] FAB clicked (placeholder — add-item modal pending).");
+      console.log("[Agro Connect] FAB placeholder — modal de registro em fase futura.");
     });
 
     // =====================================================
-    // Init
+    // 7. Init: skeleton demo, then mock data
     // =====================================================
-    renderItems(mockItems);
-
+    renderSkeletons(4);
+    setTimeout(() => renderHerd(herd), 900);
   </script>
 
 </body>
