@@ -492,7 +492,188 @@
   }
 
   /* =====================================================
-     12. Reduced motion
+     12. Auth & session UI (Google button, avatar, menu, welcome, toast)
+     ===================================================== */
+  .session { position: relative; display: flex; align-items: center; }
+
+  /* Google sign-in button (header + welcome hero) */
+  .btn-google {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-google:hover { background: var(--accent-tint); }
+  .btn-google .g-icon { width: 18px; height: 18px; flex: none; }
+
+  /* Avatar + dropdown */
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    border: 2px solid var(--border);
+    background: var(--accent-tint);
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    place-items: center;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-fallback {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--brand);
+  }
+
+  .session-menu {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    min-width: 224px;
+    z-index: 60;
+    background: var(--surface-glass);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+    backdrop-filter: blur(var(--blur)) saturate(1.5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-2);
+    transform-origin: top right;
+    animation: menu-in 0.16s ease both;
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .session-menu[hidden] { display: none; }
+
+  .session-menu-head {
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-2);
+  }
+  .session-name { font-weight: 700; color: var(--text); }
+  .session-email {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .session-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--danger);
+    text-align: left;
+  }
+  .session-menu-item:hover { background: rgba(179, 38, 30, 0.08); }
+
+  /* Welcome / hero (signed-out) */
+  .welcome {
+    margin-top: var(--space-6);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-7) var(--space-5);
+    text-align: center;
+    box-shadow: var(--shadow-md);
+  }
+  .welcome-mark {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius-full);
+    background: var(--brand);
+    color: var(--on-brand);
+    box-shadow: var(--shadow-md);
+  }
+  .welcome h2 {
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    color: var(--brand);
+    letter-spacing: -0.01em;
+  }
+  .welcome p {
+    margin-top: var(--space-2);
+    max-width: 44ch;
+    margin-inline: auto;
+    color: var(--text-muted);
+  }
+  .welcome .btn-google {
+    margin-top: var(--space-5);
+    min-height: 48px;
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--fs-base);
+    background: var(--brand);
+    color: var(--on-brand);
+    border-color: transparent;
+  }
+  .welcome .btn-google:hover { background: var(--brand-strong); }
+
+  /* Toast */
+  .toast-region {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--tabbar-height) + var(--safe-bottom) + var(--space-4));
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: min(92vw, 420px);
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--text);
+    color: var(--surface);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: var(--fs-sm);
+    animation: toast-in 0.2s ease both;
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .toast.leaving { animation: toast-out 0.2s ease both; }
+  @keyframes toast-out {
+    to { opacity: 0; transform: translateY(10px); }
+  }
+  @media (min-width: 768px) {
+    .toast-region { bottom: var(--space-5); }
+  }
+
+  /* --- Auth state machine: what shows for loading / out / in --- */
+  .session-skeleton, #btn-signin, #avatar-wrap, #welcome { display: none; }
+
+  body[data-auth="loading"] .session-skeleton { display: flex; }
+  body[data-auth="out"]     #btn-signin       { display: inline-flex; }
+  body[data-auth="in"]      #avatar-wrap      { display: block; }
+
+  body[data-auth="out"]     #welcome { display: block; }
+  body[data-auth="out"]     .view,
+  body[data-auth="loading"] .view { display: none; }   /* no data flash before auth resolves */
+  body:not([data-auth="in"]) .fab { display: none; }   /* FAB is a protected action */
+
+  /* =====================================================
+     13. Reduced motion
      ===================================================== */
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
@@ -500,10 +681,11 @@
     .sk-block { animation: none; background: rgba(30, 70, 32, 0.09); }
     .pressable { transition: none; }
     .pressable:active { transform: none; }
+    .session-menu, .toast, .toast.leaving { animation: none; }
   }
 </style>
 </head>
-<body>
+<body data-auth="loading">
 
   <!-- ===== Glass header ===== -->
   <header class="app-header">
@@ -518,19 +700,75 @@
         </span>
         Agro Connect
       </h1>
-      <button type="button" class="btn-session pressable" id="session-btn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6" />
-        </svg>
-        Entrar
-      </button>
+      <div class="session" id="session">
+        <!-- Loading: header skeleton while initial auth resolves (no UI flash) -->
+        <div class="session-skeleton" aria-hidden="true">
+          <span class="sk-block" style="width: 120px; height: 44px; border-radius: var(--radius-full);"></span>
+        </div>
+
+        <!-- Signed out -->
+        <button type="button" class="btn-google pressable" id="btn-signin" data-action="signin">
+          <span class="g-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="18" height="18">
+              <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+              <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+              <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
+              <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+            </svg>
+          </span>
+          Entrar com Google
+        </button>
+
+        <!-- Signed in -->
+        <div class="avatar-wrap" id="avatar-wrap">
+          <button type="button" class="avatar pressable" id="avatar-btn"
+                  aria-haspopup="menu" aria-expanded="false" aria-label="Sua conta">
+            <img id="avatar-img" alt="" referrerpolicy="no-referrer" />
+            <span class="avatar-fallback" id="avatar-fallback" aria-hidden="true"></span>
+          </button>
+          <div class="session-menu" id="session-menu" role="menu" aria-label="Conta" hidden>
+            <div class="session-menu-head">
+              <p class="session-name" id="menu-name"></p>
+              <p class="session-email" id="menu-email"></p>
+            </div>
+            <button type="button" class="session-menu-item" id="btn-signout" role="menuitem">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+              </svg>
+              Sair
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
   <!-- ===== Main ===== -->
   <main class="app-main">
     <div class="container">
+
+      <!-- Welcome / hero (shown while signed out; data views locked behind it) -->
+      <section class="welcome" id="welcome" aria-labelledby="welcome-title">
+        <span class="welcome-mark" aria-hidden="true">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 20c0-8 4-14 12-16 1 8-2 15-10 16" />
+            <path d="M6 20c2-6 6-10 10-12" />
+          </svg>
+        </span>
+        <h2 id="welcome-title">Bem-vindo ao Agro Connect</h2>
+        <p>Gerencie seu rebanho de corte, finanças e indicadores em um só lugar. Entre com sua conta Google para começar.</p>
+        <button type="button" class="btn-google pressable" data-action="signin">
+          <span class="g-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="18" height="18">
+              <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+              <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+              <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
+              <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+            </svg>
+          </span>
+          Entrar com Google
+        </button>
+      </section>
 
       <!-- Rebanho -->
       <section class="view" id="view-rebanho" aria-labelledby="tab-rebanho">
@@ -632,13 +870,22 @@
     </div>
   </nav>
 
+  <!-- ===== Toast region (discreet auth feedback) ===== -->
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
+
   <script type="module">
     // =====================================================
     // 0. Firebase (modular SDK v12 via CDN)
     // =====================================================
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-    import { getAuth, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+    import {
+      getAuth, GoogleAuthProvider,
+      signInWithPopup, signInWithRedirect, getRedirectResult,
+      onAuthStateChanged, signOut,
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, serverTimestamp,
+    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB_rY85_SSBNjQtbHFHY7Ms8EI9RYsHfsA",
@@ -704,7 +951,6 @@
     const herdCountEl = document.getElementById("herd-count");
     const statHeadEl = document.getElementById("stat-head");
     const statArrobasEl = document.getElementById("stat-arrobas");
-    const sessionBtn = document.getElementById("session-btn");
     const fabBtn = document.getElementById("fab-add");
     const tabs = Array.from(document.querySelectorAll(".tab"));
     const views = Array.from(document.querySelectorAll(".view"));
@@ -799,16 +1045,173 @@
     // =====================================================
     // 6. Placeholder actions (wired to Firebase/modals later)
     // =====================================================
-    sessionBtn.addEventListener("click", () => {
-      console.log("[Agro Connect] Login placeholder — Firebase Auth na próxima fase.");
-    });
-
     fabBtn.addEventListener("click", () => {
       console.log("[Agro Connect] FAB placeholder — modal de registro em fase futura.");
     });
 
     // =====================================================
-    // 7. Init: skeleton demo, then mock data
+    // 7. Auth — Google sign-in / session-aware UI
+    // =====================================================
+    // Desktop uses a popup; mobile (or coarse pointers, e.g. DevTools device
+    // mode) falls back to a full-page redirect, which popups handle poorly.
+    const isMobile = window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
+
+    const signinButtons = document.querySelectorAll("[data-action='signin']");
+    const avatarWrap = document.getElementById("avatar-wrap");
+    const avatarBtn = document.getElementById("avatar-btn");
+    const avatarImg = document.getElementById("avatar-img");
+    const avatarFallback = document.getElementById("avatar-fallback");
+    const sessionMenu = document.getElementById("session-menu");
+    const menuName = document.getElementById("menu-name");
+    const menuEmail = document.getElementById("menu-email");
+    const signoutBtn = document.getElementById("btn-signout");
+    const toastRegion = document.getElementById("toast-region");
+
+    // --- Toast (discreet, auto-dismissing; never alert()) ---
+    function showToast(message) {
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.setAttribute("role", "status");
+      el.textContent = message;
+      toastRegion.appendChild(el);
+      window.setTimeout(() => {
+        el.classList.add("leaving");
+        el.addEventListener("animationend", () => el.remove(), { once: true });
+        // Fallback if animations are disabled (reduced motion).
+        window.setTimeout(() => el.remove(), 250);
+      }, 4200);
+    }
+
+    function friendlyAuthError(code) {
+      switch (code) {
+        case "auth/popup-closed-by-user":
+        case "auth/cancelled-popup-request":
+          return "Login cancelado.";
+        case "auth/popup-blocked":
+          return "O pop-up foi bloqueado pelo navegador.";
+        case "auth/network-request-failed":
+          return "Falha de rede. Verifique a conexão.";
+        case "auth/unauthorized-domain":
+          return "Este domínio ainda não está autorizado no Firebase.";
+        default:
+          return "Não foi possível entrar. Tente novamente.";
+      }
+    }
+
+    // --- Sign in / out ---
+    async function signIn() {
+      try {
+        if (isMobile) {
+          await signInWithRedirect(auth, googleProvider);
+        } else {
+          await signInWithPopup(auth, googleProvider);
+        }
+      } catch (err) {
+        // A blocked popup is recoverable — retry once via redirect.
+        if (err?.code === "auth/popup-blocked") {
+          try { await signInWithRedirect(auth, googleProvider); return; } catch { /* fall through */ }
+        }
+        // Silent, self-inflicted cancellations don't deserve a toast.
+        if (err?.code !== "auth/cancelled-popup-request" && err?.code !== "auth/popup-closed-by-user") {
+          showToast(friendlyAuthError(err?.code));
+        }
+        console.warn("[Agro Connect] Sign-in error:", err?.code ?? err);
+      }
+    }
+
+    async function doSignOut() {
+      try {
+        await signOut(auth);
+      } catch (err) {
+        showToast("Não foi possível sair. Tente novamente.");
+        console.warn("[Agro Connect] Sign-out error:", err?.code ?? err);
+      }
+    }
+
+    // --- Account dropdown ---
+    function setMenu(open) {
+      sessionMenu.hidden = !open;
+      avatarBtn.setAttribute("aria-expanded", String(open));
+    }
+    avatarBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setMenu(sessionMenu.hidden);
+    });
+    document.addEventListener("click", (e) => {
+      if (!sessionMenu.hidden && !avatarWrap.contains(e.target)) setMenu(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") setMenu(false);
+    });
+
+    signinButtons.forEach((b) => b.addEventListener("click", signIn));
+    signoutBtn.addEventListener("click", () => { setMenu(false); doSignOut(); });
+
+    // --- users/{uid} upsert on login ---
+    // NOTE: deny-all rules block these writes until Phase 7 — we catch and keep
+    // the session alive rather than surfacing an error to the user.
+    async function upsertUserDoc(user) {
+      try {
+        const ref = doc(db, "users", user.uid);
+        const snap = await getDoc(ref);
+        const data = {
+          displayName: user.displayName ?? null,
+          email: user.email ?? null,
+          photoURL: user.photoURL ?? null,
+          lastLoginAt: serverTimestamp(),
+        };
+        if (!snap.exists()) data.createdAt = serverTimestamp();  // set once, on create
+        await setDoc(ref, data, { merge: true });
+      } catch (err) {
+        console.warn(
+          "[Agro Connect] users/{uid} não gravado (regras deny-all até a Fase 7):",
+          err?.code ?? err
+        );
+      }
+    }
+
+    // --- Complete any redirect-based sign-in on load ---
+    getRedirectResult(auth).catch((err) => {
+      showToast(friendlyAuthError(err?.code));
+      console.warn("[Agro Connect] Redirect result error:", err?.code ?? err);
+    });
+
+    function initialOf(user) {
+      const src = (user.displayName || user.email || "?").trim();
+      return src.charAt(0).toUpperCase();
+    }
+
+    // Photo can fail to load (expired/blocked URL) — show initials instead.
+    avatarImg.addEventListener("error", () => {
+      avatarImg.hidden = true;
+      avatarFallback.hidden = false;
+    });
+
+    // --- Single source of truth for session-aware UI ---
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        avatarFallback.textContent = initialOf(user);
+        if (user.photoURL) {
+          avatarFallback.hidden = true;
+          avatarImg.hidden = false;
+          avatarImg.src = user.photoURL;
+        } else {
+          avatarImg.hidden = true;
+          avatarFallback.hidden = false;
+        }
+        menuName.textContent = user.displayName || "Produtor(a)";
+        menuEmail.textContent = user.email || "";
+        document.body.dataset.auth = "in";
+        upsertUserDoc(user);
+      } else {
+        setMenu(false);
+        avatarImg.removeAttribute("src");
+        document.body.dataset.auth = "out";
+      }
+    });
+
+    // =====================================================
+    // 8. Init: skeleton demo, then mock data
     // =====================================================
     renderSkeletons(4);
     setTimeout(() => renderHerd(herd), 900);
