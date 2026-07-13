@@ -1134,7 +1134,192 @@
   .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 
   /* =====================================================
-     15. Reduced motion
+     15. Indicadores — KPI dashboard
+     ===================================================== */
+  .period-selector {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-3);
+  }
+  .period-chip {
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .period-chip.is-active {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: var(--on-brand);
+  }
+  .period-custom-range {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-5);
+  }
+  .period-custom-range .field { flex: 1 1 140px; }
+
+  .kpi-section { margin-top: var(--space-6); }
+  .kpi-section-header {
+    margin-bottom: var(--space-3);
+  }
+  .kpi-section-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    color: var(--brand);
+    letter-spacing: -0.01em;
+  }
+  .kpi-section-subtitle {
+    margin-top: 2px;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+  @media (min-width: 560px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (min-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-height: 128px;
+  }
+  .kpi-card-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .kpi-card-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    margin-top: auto;
+  }
+  .kpi-card-value {
+    font-family: var(--font-display);
+    font-size: var(--fs-display);
+    font-weight: 800;
+    line-height: 1.05;
+    color: var(--brand);
+    letter-spacing: -0.02em;
+  }
+  .kpi-card-unit {
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+  .kpi-card-context {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+
+  .kpi-card.is-missing {
+    justify-content: center;
+    background: var(--bg);
+    border-style: dashed;
+    box-shadow: none;
+  }
+  .kpi-card.is-missing .kpi-card-value-row { display: none; }
+  .kpi-card.is-missing .kpi-card-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .kpi-card.skeleton .kpi-card-label,
+  .kpi-card.skeleton .kpi-card-context { visibility: hidden; }
+
+  .cashflow-card { grid-column: 1 / -1; }
+  .cashflow-chart { width: 100%; height: 96px; overflow: visible; }
+  .cashflow-chart .cf-bar { fill: var(--accent); }
+  .cashflow-chart .cf-bar.negative { fill: var(--danger); }
+  .cashflow-chart .cf-axis { stroke: var(--border); stroke-width: 1; }
+  .cashflow-legend {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--space-2);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+
+  /* Animal detail sheet */
+  .detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .detail-section {
+    margin-top: var(--space-5);
+  }
+  .detail-section-title {
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+  }
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+  .result-tile {
+    background: var(--accent-tint);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    text-align: center;
+  }
+  .result-tile .result-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--fs-lg);
+    color: var(--brand);
+  }
+  .result-tile .result-label {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+  .weighing-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .weighing-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+  }
+  .weighing-row .weighing-gain { color: var(--text-muted); font-size: var(--fs-xs); }
+
+  /* =====================================================
+     16. Reduced motion
      ===================================================== */
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
@@ -1283,16 +1468,27 @@
         </ul>
       </section>
 
-      <!-- Indicadores (placeholder) -->
+      <!-- Indicadores -->
       <section class="view" id="view-indicadores" aria-labelledby="tab-indicadores" hidden>
         <div class="view-header"><h2 class="view-title">Indicadores</h2></div>
-        <div class="empty-state">
-          <span class="icon" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V12"/><path d="M12 20V6"/><path d="M19 20v-4"/></svg>
-          </span>
-          <h3>GMD, prenhez, COE/@ e mais</h3>
-          <p>O painel de indicadores é calculado dos dados reais em fase futura.</p>
+
+        <div class="period-selector" id="period-selector" role="tablist" aria-label="Selecionar período">
+          <button type="button" class="period-chip pressable" data-period="12m">Últimos 12 meses</button>
+          <button type="button" class="period-chip pressable" data-period="ytd">Ano corrente</button>
+          <button type="button" class="period-chip pressable" data-period="custom">Personalizado</button>
         </div>
+        <div class="period-custom-range" id="period-custom-range" hidden>
+          <div class="field">
+            <label class="field-label" for="period-start">De</label>
+            <input class="input" id="period-start" type="date" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="period-end">Até</label>
+            <input class="input" id="period-end" type="date" />
+          </div>
+        </div>
+
+        <div id="indicadores-root"></div>
       </section>
 
       <!-- Perfil -->
@@ -1314,6 +1510,30 @@
             <div class="mini-stat">
               <p class="mini-value" id="settings-price-value">—</p>
               <p class="mini-label">Preço padrão da @</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: var(--space-4);">
+          <div class="card-top">
+            <span class="ear-tag" style="font-size: var(--fs-base);">Parâmetros financeiros</span>
+            <button type="button" class="card-menu-btn pressable" id="settings-edit-btn-2" aria-label="Editar configurações">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+          </div>
+          <p class="field-hint" style="margin-bottom: var(--space-3);">Usados nos indicadores de COT, margem líquida e ROI (aba Indicadores).</p>
+          <div class="card-stats" style="grid-template-columns: repeat(3, 1fr); border-top: none; padding-top: 0;">
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-depreciation-value">—</p>
+              <p class="mini-label">Depreciação/mês</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-prolabore-value">—</p>
+              <p class="mini-label">Pró-labore/mês</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-capital-value">—</p>
+              <p class="mini-label">Capital investido</p>
             </div>
           </div>
         </div>
@@ -1525,7 +1745,11 @@
 
     const settingsAreaValueEl = document.getElementById("settings-area-value");
     const settingsPriceValueEl = document.getElementById("settings-price-value");
+    const settingsDepreciationValueEl = document.getElementById("settings-depreciation-value");
+    const settingsProlaboreValueEl = document.getElementById("settings-prolabore-value");
+    const settingsCapitalValueEl = document.getElementById("settings-capital-value");
     const settingsEditBtn = document.getElementById("settings-edit-btn");
+    const settingsEditBtn2 = document.getElementById("settings-edit-btn-2");
 
     // =====================================================
     // 3. Helpers
@@ -1667,7 +1891,7 @@
           const chipClass = categoryLabel[a.category] ? `chip-${a.category}` : "chip-recria";
           const saleResult = computeSaleResult(a, transactionsCache);
           return `
-            <li class="card enter" style="--i: ${i}">
+            <li class="card enter pressable" style="--i: ${i}" data-animal-id="${escapeHtml(a.id)}" tabindex="0" role="button" aria-label="Ver detalhes do animal #${escapeHtml(a.earTag)}">
               <div class="card-top">
                 <span class="ear-tag"><span class="hash">#</span>${escapeHtml(a.earTag)}</span>
                 <div class="card-top-right">
@@ -2574,11 +2798,28 @@
        wireDeleteAnimalForm(animal);
      }
 
-     herdListEl.addEventListener("click", (e) => {
-       const btn = e.target.closest('[data-action="animal-menu"]');
-       if (!btn) return;
-       const animal = animalsCache.find((a) => a.id === btn.dataset.id);
-       if (animal) openActionSheet(animal);
+     // Tapping the card opens the animal detail sheet (weighing history +
+     // "Resultado" for sold animals); the kebab button opens the action menu
+     // instead — checked first since it's nested inside the card.
+     function handleHerdCardActivate(e) {
+       const menuBtn = e.target.closest('[data-action="animal-menu"]');
+       if (menuBtn) {
+         const animal = animalsCache.find((a) => a.id === menuBtn.dataset.id);
+         if (animal) openActionSheet(animal);
+         return;
+       }
+       const card = e.target.closest("li[data-animal-id]");
+       if (!card) return;
+       const animal = animalsCache.find((a) => a.id === card.dataset.animalId);
+       if (animal) openAnimalDetailSheet(animal);
+     }
+     herdListEl.addEventListener("click", handleHerdCardActivate);
+     herdListEl.addEventListener("keydown", (e) => {
+       if (e.key !== "Enter" && e.key !== " ") return;
+       if (e.target.closest('[data-action="animal-menu"]')) return; // native button handles its own activation
+       if (!e.target.closest("li[data-animal-id]")) return;
+       e.preventDefault();
+       handleHerdCardActivate(e);
      });
 
      // --- Vender ---
@@ -3288,6 +3529,9 @@
        const price = settingsCache.defaultArrobaPriceBRL;
        settingsAreaValueEl.textContent = area != null ? `${area} ha` : "—";
        settingsPriceValueEl.textContent = price != null ? formatBRL(price) : "—";
+       settingsDepreciationValueEl.textContent = settingsCache.monthlyDepreciationBRL != null ? formatBRL(settingsCache.monthlyDepreciationBRL) : "—";
+       settingsProlaboreValueEl.textContent = settingsCache.monthlyProLaboreBRL != null ? formatBRL(settingsCache.monthlyProLaboreBRL) : "—";
+       settingsCapitalValueEl.textContent = settingsCache.investedCapitalBRL != null ? formatBRL(settingsCache.investedCapitalBRL) : "—";
      }
 
      function buildSettingsFormHTML() {
@@ -3303,6 +3547,23 @@
              <input class="input" id="settings-price" type="number" min="0" step="0.01" placeholder="Ex: 350" value="${settingsCache.defaultArrobaPriceBRL ?? ""}" />
              <p class="field-error" id="settings-price-error"></p>
            </div>
+           <div class="field">
+             <label class="field-label" for="settings-depreciation">Depreciação mensal (R$)</label>
+             <input class="input" id="settings-depreciation" type="number" min="0" step="0.01" placeholder="Ex: 800" value="${settingsCache.monthlyDepreciationBRL ?? ""}" />
+             <p class="field-hint">Custo não-efetivo mensal (máquinas, benfeitorias) — alimenta o COT/@ e a margem líquida.</p>
+             <p class="field-error" id="settings-depreciation-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="settings-prolabore">Pró-labore mensal (R$)</label>
+             <input class="input" id="settings-prolabore" type="number" min="0" step="0.01" placeholder="Ex: 3000" value="${settingsCache.monthlyProLaboreBRL ?? ""}" />
+             <p class="field-error" id="settings-prolabore-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="settings-capital">Capital investido (R$)</label>
+             <input class="input" id="settings-capital" type="number" min="0" step="0.01" placeholder="Ex: 500000" value="${settingsCache.investedCapitalBRL ?? ""}" />
+             <p class="field-hint">Usado para calcular o ROI %.</p>
+             <p class="field-error" id="settings-capital-error"></p>
+           </div>
            <p class="field-error" id="settings-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="settings-submit">Salvar configurações</button>
          </form>
@@ -3313,24 +3574,31 @@
        const form = document.getElementById("settings-form");
        const submitBtn = document.getElementById("settings-submit");
        const formError = document.getElementById("settings-form-error");
+       const numericFieldIds = ["settings-area", "settings-price", "settings-depreciation", "settings-prolabore", "settings-capital"];
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
          if (!currentUid) return;
 
          formError.textContent = "";
-         ["settings-area", "settings-price"].forEach(clearFieldError);
+         numericFieldIds.forEach(clearFieldError);
 
          let valid = true;
          const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
 
-         const areaRaw = document.getElementById("settings-area").value;
-         const area = areaRaw ? parseFloat(areaRaw) : null;
-         if (areaRaw && (!Number.isFinite(area) || area < 0)) fail("settings-area", "Informe uma área válida.");
+         function readOptionalNumber(id, label) {
+           const raw = document.getElementById(id).value;
+           if (!raw) return null;
+           const n = parseFloat(raw);
+           if (!Number.isFinite(n) || n < 0) { fail(id, `Informe ${label} válido(a).`); return null; }
+           return n;
+         }
 
-         const priceRaw = document.getElementById("settings-price").value;
-         const price = priceRaw ? parseFloat(priceRaw) : null;
-         if (priceRaw && (!Number.isFinite(price) || price < 0)) fail("settings-price", "Informe um preço válido.");
+         const area = readOptionalNumber("settings-area", "uma área");
+         const price = readOptionalNumber("settings-price", "um preço");
+         const monthlyDepreciationBRL = readOptionalNumber("settings-depreciation", "um valor");
+         const monthlyProLaboreBRL = readOptionalNumber("settings-prolabore", "um valor");
+         const investedCapitalBRL = readOptionalNumber("settings-capital", "um valor");
 
          if (!valid) return;
 
@@ -3344,6 +3612,9 @@
                ownerId: currentUid,
                propertyAreaHa: area,
                defaultArrobaPriceBRL: price,
+               monthlyDepreciationBRL,
+               monthlyProLaboreBRL,
+               investedCapitalBRL,
                updatedAt: serverTimestamp(),
              },
              { merge: true }
@@ -3368,6 +3639,7 @@
      }
 
      settingsEditBtn.addEventListener("click", openSettingsSheet);
+     settingsEditBtn2.addEventListener("click", openSettingsSheet);
 
      // =====================================================
      // 7e. Lotes — "..." action menu (Editar / Excluir)
@@ -3535,6 +3807,669 @@
        wireDeleteLotForm(lot);
      }
 
+     // =====================================================
+     // 7f. Indicadores — período, cálculo puro (client-side) e renderização
+     //     Pure derivation from animalsCache/eventsCache/transactionsCache/
+     //     settingsCache — no writes happen from this tab.
+     // =====================================================
+     const UA_KG = 450;              // kg de peso vivo por Unidade Animal
+     const DAYS_PER_MONTH = 30.44;
+     const DAYS_PER_YEAR = 365;
+
+     const periodSelectorEl = document.getElementById("period-selector");
+     const periodCustomRangeEl = document.getElementById("period-custom-range");
+     const periodStartInput = document.getElementById("period-start");
+     const periodEndInput = document.getElementById("period-end");
+     const indicadoresRootEl = document.getElementById("indicadores-root");
+
+     let periodMode = "12m"; // "12m" | "ytd" | "custom"
+
+     function computePeriodRange() {
+       const now = new Date();
+       const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+       if (periodMode === "ytd") {
+         return { start: new Date(now.getFullYear(), 0, 1), end: endOfToday };
+       }
+       if (periodMode === "custom" && periodStartInput.value && periodEndInput.value) {
+         const s = new Date(`${periodStartInput.value}T00:00:00`);
+         const e = new Date(`${periodEndInput.value}T23:59:59`);
+         if (s <= e) return { start: s, end: e };
+       }
+       // Default / fallback: trailing 12 months ending today.
+       return { start: new Date(now.getFullYear(), now.getMonth() - 11, now.getDate()), end: endOfToday };
+     }
+
+     function periodDays(range) {
+       return Math.max(1, Math.round((range.end.getTime() - range.start.getTime()) / 86_400_000));
+     }
+     function periodMonths(range) {
+       return Math.max(1 / 30, periodDays(range) / DAYS_PER_MONTH);
+     }
+     function inRange(dateValue, range) {
+       const d = toDateSafe(dateValue);
+       return !!d && d >= range.start && d <= range.end;
+     }
+     function periodLabelText(range) {
+       const fmt = (d) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+       return `Período: ${fmt(range.start)} – ${fmt(range.end)}`;
+     }
+
+     function syncPeriodChipActive() {
+       periodSelectorEl.querySelectorAll(".period-chip").forEach((btn) => {
+         const active = btn.dataset.period === periodMode;
+         btn.classList.toggle("is-active", active);
+         btn.setAttribute("aria-selected", String(active));
+       });
+       periodCustomRangeEl.hidden = periodMode !== "custom";
+     }
+
+     periodSelectorEl.addEventListener("click", (e) => {
+       const btn = e.target.closest(".period-chip");
+       if (!btn) return;
+       periodMode = btn.dataset.period;
+       if (periodMode === "custom" && !periodStartInput.value) {
+         const range = computePeriodRange();
+         periodStartInput.value = toDateInputValue(range.start);
+         periodEndInput.value = toDateInputValue(range.end);
+       }
+       syncPeriodChipActive();
+       renderIndicadores();
+     });
+     periodStartInput.addEventListener("change", () => { if (periodMode === "custom") renderIndicadores(); });
+     periodEndInput.addEventListener("change", () => { if (periodMode === "custom") renderIndicadores(); });
+     syncPeriodChipActive();
+
+     // --- Shared lookups over eventsCache/animalsCache ---
+     function animalEvents(animalId, type) {
+       return eventsCache.filter((e) => e.animalId === animalId && e.type === type);
+     }
+
+     // Best-known live weight of an animal at/before `date`: latest weighing
+     // on/before it, else purchaseWeightKg if already purchased by then.
+     function weightAtDate(animal, date) {
+       const priorWeighings = animalEvents(animal.id, "weighing")
+         .map((e) => ({ d: toDateSafe(e.date), w: e.payload?.weightKg }))
+         .filter((x) => x.d && x.d <= date && Number.isFinite(x.w))
+         .sort((a, b) => b.d - a.d);
+       if (priorWeighings.length) return priorWeighings[0].w;
+       const purchaseDate = toDateSafe(animal.purchaseDate);
+       if (animal.acquisitionType === "purchased" && purchaseDate && purchaseDate <= date) {
+         return Number.isFinite(animal.purchaseWeightKg) ? animal.purchaseWeightKg : null;
+       }
+       return null;
+     }
+
+     function animalAcquisitionDate(animal) {
+       return toDateSafe(animal.acquisitionType === "purchased" ? animal.purchaseDate : animal.birthDate);
+     }
+
+     // Was this animal part of the herd as of `date`? (acquired by then, and
+     // not yet sold/dead by then) — feeds the desfrute "opening count".
+     function wasActiveAt(animal, date) {
+       const acq = animalAcquisitionDate(animal);
+       if (acq && acq > date) return false;
+       if (animal.status === "sold") {
+         const sd = toDateSafe(animal.saleDate);
+         if (sd && sd <= date) return false;
+       }
+       if (animal.status === "dead") {
+         const dd = toDateSafe(animal.deathDate);
+         if (dd && dd <= date) return false;
+       }
+       return true;
+     }
+
+     function sumTx(range, predicate) {
+       return transactionsCache
+         .filter((t) => inRange(t.date, range) && predicate(t))
+         .reduce((sum, t) => sum + (t.amountBRL || 0), 0);
+     }
+
+     function arrobasProducedInPeriod(range) {
+       return animalsCache
+         .filter((a) => a.status === "sold" && inRange(a.saleDate, range) && Number.isFinite(a.saleArrobas))
+         .reduce((sum, a) => sum + a.saleArrobas, 0);
+     }
+
+     function averageRealizedArrobaPrice(range) {
+       const sold = animalsCache.filter(
+         (a) => a.status === "sold" && inRange(a.saleDate, range) && Number.isFinite(a.salePricePerArrobaBRL)
+       );
+       if (!sold.length) return null;
+       return sold.reduce((sum, a) => sum + a.salePricePerArrobaBRL, 0) / sold.length;
+     }
+
+     function monthlyExtraCosts() {
+       return (settingsCache.monthlyDepreciationBRL || 0) + (settingsCache.monthlyProLaboreBRL || 0);
+     }
+
+     // --- Number formatting ---
+     function fmtNum(n, decimals = 0) {
+       return n.toLocaleString("pt-BR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+     }
+
+     // --- KPI result shape: { ok:true, label, value, unit, context } | { ok:false, label, hint } ---
+     function kpiOk(label, value, unit, context) {
+       return { ok: true, label, value, unit, context };
+     }
+     function kpiMissing(label, hint) {
+       return { ok: false, label, hint };
+     }
+
+     // =========================== Grupo 1 — Desempenho animal ===========================
+     function computeGMDPerAnimal(range) {
+       const perAnimal = [];
+       for (const a of animalsCache) {
+         const weighings = animalEvents(a.id, "weighing")
+           .filter((e) => inRange(e.date, range) && Number.isFinite(e.payload?.weightKg))
+           .sort((x, y) => toDateSafe(x.date) - toDateSafe(y.date));
+         if (weighings.length < 2) continue;
+         const first = weighings[0];
+         const last = weighings[weighings.length - 1];
+         const days = (toDateSafe(last.date) - toDateSafe(first.date)) / 86_400_000;
+         if (days <= 0) continue;
+         const gDia = ((last.payload.weightKg - first.payload.weightKg) * 1000) / days;
+         perAnimal.push({ animal: a, gDia });
+       }
+       return perAnimal;
+     }
+
+     function kpiGMD(range) {
+       const perAnimal = computeGMDPerAnimal(range);
+       if (!perAnimal.length) {
+         return [kpiMissing("GMD do rebanho", "Cadastre ao menos 2 pesagens por animal no período para calcular o GMD.")];
+       }
+       const herdAvg = perAnimal.reduce((s, p) => s + p.gDia, 0) / perAnimal.length;
+       const cards = [kpiOk("GMD do rebanho", fmtNum(herdAvg), "g/dia", `${perAnimal.length} animal(is) com pesagens no período`)];
+
+       const byCategory = {};
+       for (const p of perAnimal) {
+         const cat = p.animal.category || "outro";
+         (byCategory[cat] ||= []).push(p.gDia);
+       }
+       for (const [cat, arr] of Object.entries(byCategory)) {
+         const avg = arr.reduce((s, v) => s + v, 0) / arr.length;
+         cards.push(kpiOk(`GMD — ${categoryLabel[cat] || cat}`, fmtNum(avg), "g/dia", `${arr.length} animal(is)`));
+       }
+       return cards;
+     }
+
+     function kpiGanhoHa(range) {
+       const area = settingsCache.propertyAreaHa;
+       if (!area) return kpiMissing("Ganho por área", "Informe a área da propriedade em Perfil.");
+
+       let variation = 0;
+       let knownAnimals = 0;
+       for (const a of animalsCache) {
+         if ((a.status || "active") !== "active") continue;
+         const wStart = weightAtDate(a, range.start);
+         const wEnd = Number.isFinite(a.currentWeightKg) ? a.currentWeightKg : weightAtDate(a, range.end);
+         if (wStart != null && wEnd != null) {
+           variation += wEnd - wStart;
+           knownAnimals++;
+         }
+       }
+
+       let kgSold = 0;
+       let soldCount = 0;
+       for (const a of animalsCache) {
+         if (a.status === "sold" && inRange(a.saleDate, range) && Number.isFinite(a.saleArrobas)) {
+           kgSold += (a.saleArrobas * KG_PER_ARROBA) / CARCASS_YIELD;
+           soldCount++;
+         }
+       }
+
+       if (knownAnimals === 0 && soldCount === 0) {
+         return kpiMissing("Ganho por área", "Cadastre pesagens e vendas no período para calcular o ganho por área.");
+       }
+
+       const annualized = ((variation + kgSold) / area) * (DAYS_PER_YEAR / periodDays(range));
+       return kpiOk("Ganho por área", fmtNum(annualized), "kg PV/ha/ano", `${knownAnimals} animal(is) pesado(s) + ${soldCount} venda(s) no período`);
+     }
+
+     function kpiLotacao() {
+       const area = settingsCache.propertyAreaHa;
+       if (!area) return kpiMissing("Taxa de lotação", "Informe a área da propriedade em Perfil.");
+       const active = animalsCache.filter((a) => (a.status || "active") === "active" && Number.isFinite(a.currentWeightKg));
+       if (!active.length) return kpiMissing("Taxa de lotação", "Cadastre o peso atual dos animais ativos (use \"Pesar\").");
+       const totalUA = active.reduce((s, a) => s + a.currentWeightKg, 0) / UA_KG;
+       return kpiOk("Taxa de lotação", fmtNum(totalUA / area, 2), "UA/ha", `${active.length} animal(is) ativo(s) com peso`);
+     }
+
+     function kpiDesfrute(range) {
+       const openingCount = animalsCache.filter((a) => wasActiveAt(a, range.start)).length;
+       if (!openingCount) return kpiMissing("Taxa de desfrute", "Sem animais ativos no início do período selecionado.");
+       const exits = eventsCache.filter((e) => (e.type === "sale" || e.type === "death") && inRange(e.date, range)).length;
+       return kpiOk("Taxa de desfrute", fmtNum((exits / openingCount) * 100, 1), "%", `${exits} saída(s) / ${openingCount} no início do período`);
+     }
+
+     function kpiAbate(range) {
+       const soldInPeriod = animalsCache.filter((a) => a.status === "sold" && inRange(a.saleDate, range));
+       if (!soldInPeriod.length) {
+         return [
+           kpiMissing("Idade média de abate", "Registre vendas no período para calcular a idade de abate."),
+           kpiMissing("Carcaça média ao abate", "Registre vendas no período para calcular a carcaça média."),
+         ];
+       }
+
+       const cards = [];
+       const ages = soldInPeriod
+         .map((a) => {
+           const birthRef = toDateSafe(a.birthDate) || toDateSafe(a.purchaseDate);
+           const saleDate = toDateSafe(a.saleDate);
+           return birthRef && saleDate ? (saleDate - birthRef) / (86_400_000 * DAYS_PER_MONTH) : null;
+         })
+         .filter((v) => v != null);
+       if (ages.length) {
+         cards.push(kpiOk("Idade média de abate", fmtNum(ages.reduce((s, v) => s + v, 0) / ages.length, 1), "meses", `${ages.length} animal(is) vendido(s)`));
+       } else {
+         cards.push(kpiMissing("Idade média de abate", "Cadastre data de nascimento (ou compra) dos animais vendidos."));
+       }
+
+       const arrobas = soldInPeriod.filter((a) => Number.isFinite(a.saleArrobas)).map((a) => a.saleArrobas);
+       if (arrobas.length) {
+         cards.push(kpiOk("Carcaça média ao abate", fmtNum(arrobas.reduce((s, v) => s + v, 0) / arrobas.length, 1), "@", `${arrobas.length} animal(is) vendido(s)`));
+       } else {
+         cards.push(kpiMissing("Carcaça média ao abate", "Registre @ de carcaça nas vendas."));
+       }
+       return cards;
+     }
+
+     function renderGroup1(range) {
+       return [...kpiGMD(range), kpiGanhoHa(range), kpiLotacao(), kpiDesfrute(range), ...kpiAbate(range)];
+     }
+
+     // =========================== Grupo 2 — Reprodutivo ===========================
+     // Realistically "sem dados suficientes" today — this app has no CRUD yet
+     // for cobertura/IA, diagnóstico de gestação or parto — but the math is
+     // ready the moment those events start being written.
+     function kpiPrenhez(range) {
+       const breedings = eventsCache.filter((e) => e.type === "breeding" && inRange(e.date, range));
+       const distinctFemales = new Set(breedings.map((e) => e.payload?.femaleAnimalId).filter(Boolean));
+       if (!distinctFemales.size) return kpiMissing("Taxa de prenhez", "Registre eventos de cobertura/IA no período.");
+       const positives = eventsCache.filter((e) => e.type === "pregnancy_check" && inRange(e.date, range) && e.payload?.result === "pregnant");
+       return kpiOk("Taxa de prenhez", fmtNum((positives.length / distinctFemales.size) * 100, 1), "%", `${positives.length} diagnóstico(s) positivo(s) / ${distinctFemales.size} fêmea(s) cobertas`);
+     }
+
+     function kpiDesmame(range) {
+       const births = eventsCache.filter((e) => e.type === "birth" && inRange(e.date, range));
+       if (!births.length) return kpiMissing("Taxa de desmame", "Registre partos no período para calcular a taxa de desmame.");
+       const weanings = eventsCache.filter((e) => e.type === "weaning" && inRange(e.date, range));
+       return kpiOk("Taxa de desmame", fmtNum((weanings.length / births.length) * 100, 1), "%", `${weanings.length} desmama(s) / ${births.length} parto(s)`);
+     }
+
+     function kpiNatalidade(range) {
+       const breedings = eventsCache.filter((e) => e.type === "breeding" && inRange(e.date, range));
+       const distinctFemales = new Set(breedings.map((e) => e.payload?.femaleAnimalId).filter(Boolean));
+       if (!distinctFemales.size) return kpiMissing("Taxa de natalidade", "Registre eventos de cobertura/IA no período.");
+       const births = eventsCache.filter((e) => e.type === "birth" && inRange(e.date, range));
+       return kpiOk("Taxa de natalidade", fmtNum((births.length / distinctFemales.size) * 100, 1), "%", `${births.length} parto(s) / ${distinctFemales.size} fêmea(s) cobertas`);
+     }
+
+     function kpiIEP() {
+       const byDam = {};
+       for (const e of eventsCache) {
+         if (e.type !== "birth" || !e.payload?.damAnimalId) continue;
+         (byDam[e.payload.damAnimalId] ||= []).push(toDateSafe(e.date));
+       }
+       const intervals = [];
+       for (const dates of Object.values(byDam)) {
+         const sorted = dates.filter(Boolean).sort((a, b) => a - b);
+         for (let i = 1; i < sorted.length; i++) intervals.push((sorted[i] - sorted[i - 1]) / (86_400_000 * DAYS_PER_MONTH));
+       }
+       if (!intervals.length) return kpiMissing("IEP (intervalo entre partos)", "Registre pelo menos 2 partos da mesma matriz.");
+       return kpiOk("IEP (intervalo entre partos)", fmtNum(intervals.reduce((s, v) => s + v, 0) / intervals.length, 1), "meses", `${intervals.length} intervalo(s) calculado(s)`);
+     }
+
+     function kpiBezerrosPorMatriz(range) {
+       const weanings = eventsCache.filter((e) => e.type === "weaning" && inRange(e.date, range) && e.payload?.damAnimalId);
+       if (!weanings.length) return kpiMissing("Bezerros desmamados/matriz/ano", "Registre desmamas vinculadas à matriz no período.");
+       const distinctDams = new Set(weanings.map((e) => e.payload.damAnimalId));
+       const rate = (weanings.length / distinctDams.size) * (DAYS_PER_YEAR / periodDays(range));
+       return kpiOk("Bezerros desmamados/matriz/ano", fmtNum(rate, 2), "bezerro(s)", `${weanings.length} desmama(s) / ${distinctDams.size} matriz(es)`);
+     }
+
+     function renderGroup2(range) {
+       return [kpiPrenhez(range), kpiDesmame(range), kpiNatalidade(range), kpiIEP(), kpiBezerrosPorMatriz(range)];
+     }
+
+     // =========================== Grupo 3 — Econômico-financeiro ===========================
+     function kpiCOE(range) {
+       const arrobas = arrobasProducedInPeriod(range);
+       if (!arrobas) return kpiMissing("COE/@", "Registre vendas (com @) no período para calcular o custo por arroba.");
+       const despesasEfetivo = sumTx(range, (t) => t.kind === "despesa" && t.costNature === "efetivo");
+       return kpiOk("COE/@", formatBRL(despesasEfetivo / arrobas), "/@", `${fmtNum(arrobas, 1)} @ produzida(s) no período`);
+     }
+
+     function kpiCOT(range) {
+       const arrobas = arrobasProducedInPeriod(range);
+       if (!arrobas) return kpiMissing("COT/@", "Registre vendas (com @) no período para calcular o custo total por arroba.");
+       const despesasEfetivo = sumTx(range, (t) => t.kind === "despesa" && t.costNature === "efetivo");
+       const extras = monthlyExtraCosts() * periodMonths(range);
+       const hasExtras = settingsCache.monthlyDepreciationBRL != null || settingsCache.monthlyProLaboreBRL != null;
+       return kpiOk(
+         "COT/@",
+         formatBRL((despesasEfetivo + extras) / arrobas),
+         "/@",
+         hasExtras ? "Inclui depreciação e pró-labore mensais" : "Informe depreciação/pró-labore em Perfil para um COT mais preciso"
+       );
+     }
+
+     function kpiMargens(range) {
+       const receitas = sumTx(range, (t) => t.kind === "receita");
+       const despesasAll = sumTx(range, (t) => t.kind === "despesa");
+       if (!receitas && !despesasAll) {
+         return [kpiMissing("Margem bruta", "Registre receitas e despesas no período."), kpiMissing("Margem líquida", "Registre receitas e despesas no período.")];
+       }
+       const margemBruta = receitas - despesasAll;
+       const margemLiquida = margemBruta - monthlyExtraCosts() * periodMonths(range);
+       const area = settingsCache.propertyAreaHa;
+       return [
+         kpiOk("Margem bruta", formatBRL(margemBruta), "", area ? `${formatBRL(margemBruta / area)}/ha no período` : "Informe a área em Perfil para ver R$/ha"),
+         kpiOk("Margem líquida", formatBRL(margemLiquida), "", area ? `${formatBRL(margemLiquida / area)}/ha no período` : "Informe a área em Perfil para ver R$/ha"),
+       ];
+     }
+
+     function kpiBreakEven(range) {
+       const area = settingsCache.propertyAreaHa;
+       const cot = sumTx(range, (t) => t.kind === "despesa") + monthlyExtraCosts() * periodMonths(range);
+       const price = settingsCache.defaultArrobaPriceBRL || averageRealizedArrobaPrice(range);
+       if (!price) return kpiMissing("Break-even", "Informe o preço padrão da @ em Perfil ou registre vendas no período.");
+       if (!area) return kpiMissing("Break-even", "Informe a área da propriedade em Perfil.");
+       if (!cot) return kpiMissing("Break-even", "Registre despesas no período.");
+       const breakEvenArrobas = cot / price;
+       return kpiOk("Break-even", fmtNum(breakEvenArrobas / area, 2), "@/ha", `${fmtNum(breakEvenArrobas, 1)} @ no total, a ${formatBRL(price)}/@`);
+     }
+
+     function kpiROI(range) {
+       const capital = settingsCache.investedCapitalBRL;
+       if (!capital) return kpiMissing("ROI", "Informe o capital investido em Perfil.");
+       const receitas = sumTx(range, (t) => t.kind === "receita");
+       const despesasAll = sumTx(range, (t) => t.kind === "despesa");
+       const margemLiquida = receitas - despesasAll - monthlyExtraCosts() * periodMonths(range);
+       return kpiOk("ROI", fmtNum((margemLiquida / capital) * 100, 1), "%", `Margem líquida ${formatBRL(margemLiquida)} / capital ${formatBRL(capital)}`);
+     }
+
+     function kpiLucroHa(range) {
+       const area = settingsCache.propertyAreaHa;
+       if (!area) return kpiMissing("Lucro por hectare", "Informe a área da propriedade em Perfil.");
+       const receitas = sumTx(range, (t) => t.kind === "receita");
+       const despesasAll = sumTx(range, (t) => t.kind === "despesa");
+       const margemLiquida = receitas - despesasAll - monthlyExtraCosts() * periodMonths(range);
+       const annualized = (margemLiquida / area) * (DAYS_PER_YEAR / periodDays(range));
+       return kpiOk("Lucro por hectare", formatBRL(annualized), "/ha/ano", "Baseado na margem líquida do período, anualizada");
+     }
+
+     function renderGroup3(range) {
+       return [kpiCOE(range), kpiCOT(range), ...kpiMargens(range), kpiBreakEven(range), kpiROI(range), kpiLucroHa(range)];
+     }
+
+     // =========================== Grupo 4 — Gestão ===========================
+     function kpiGiro(range) {
+       const days = animalsCache
+         .filter((a) => a.status === "sold" && inRange(a.saleDate, range))
+         .map((a) => saleDaysHeld(a))
+         .filter((d) => d != null);
+       if (!days.length) return kpiMissing("Giro (dias até a venda)", "Registre vendas no período com data de compra/nascimento conhecida.");
+       return kpiOk("Giro (dias até a venda)", fmtNum(days.reduce((s, d) => s + d, 0) / days.length, 0), "dias", `${days.length} animal(is) vendido(s) no período`);
+     }
+
+     function kpiCustoReposicao(range) {
+       const purchasedInPeriod = animalsCache.filter(
+         (a) => a.acquisitionType === "purchased" && inRange(a.purchaseDate, range) && Number.isFinite(a.purchaseWeightKg) && Number.isFinite(a.purchaseCostBRL)
+       );
+       const soldInPeriod = animalsCache.filter((a) => a.status === "sold" && inRange(a.saleDate, range) && Number.isFinite(a.salePricePerArrobaBRL));
+
+       const cards = [];
+       if (purchasedInPeriod.length) {
+         const totalCost = purchasedInPeriod.reduce((s, a) => s + a.purchaseCostBRL, 0);
+         const totalKg = purchasedInPeriod.reduce((s, a) => s + a.purchaseWeightKg, 0);
+         cards.push(kpiOk("Custo de reposição — compra", formatBRL(totalCost / totalKg), "/kg", `${purchasedInPeriod.length} compra(s) no período`));
+       } else {
+         cards.push(kpiMissing("Custo de reposição — compra", "Registre compras de animais no período."));
+       }
+       if (soldInPeriod.length) {
+         const avgPrice = soldInPeriod.reduce((s, a) => s + a.salePricePerArrobaBRL, 0) / soldInPeriod.length;
+         cards.push(kpiOk("Preço médio de venda", formatBRL(avgPrice), "/@", `${soldInPeriod.length} venda(s) no período`));
+       } else {
+         cards.push(kpiMissing("Preço médio de venda", "Registre vendas de animais no período."));
+       }
+       return cards;
+     }
+
+     function kpiInventario() {
+       const price = settingsCache.defaultArrobaPriceBRL;
+       if (!price) return kpiMissing("Inventário atual", "Informe o preço padrão da @ em Perfil.");
+       const active = animalsCache.filter((a) => (a.status || "active") === "active");
+       const arrobas = totalArrobas(active);
+       return kpiOk("Inventário atual", formatBRL(arrobas * price), "", `${active.length} cabeça(s) · ${arrobas} @ estimada(s)`);
+     }
+
+     function renderGroup4Cards(range) {
+       return [kpiGiro(range), ...kpiCustoReposicao(range), kpiInventario()];
+     }
+
+     function computeMonthlyCashflow() {
+       return buildRecentMonthKeys(12).map((key) => ({
+         key,
+         net: transactionsCache
+           .filter((t) => { const d = toDateSafe(t.date); return d && monthKey(d) === key; })
+           .reduce((s, t) => s + (t.kind === "receita" ? (t.amountBRL || 0) : -(t.amountBRL || 0)), 0),
+       }));
+     }
+
+     function renderCashflowCard() {
+       if (!transactionsCache.length) {
+         return `
+           <div class="kpi-card cashflow-card is-missing">
+             <p class="kpi-card-label">Fluxo de caixa mensal</p>
+             <p class="kpi-card-hint">Registre receitas e despesas para ver o fluxo de caixa dos últimos 12 meses.</p>
+           </div>
+         `;
+       }
+       const months = computeMonthlyCashflow();
+       const maxAbs = Math.max(1, ...months.map((m) => Math.abs(m.net)));
+       const w = 300, h = 72;
+       const barW = w / months.length - 4;
+       const bars = months
+         .map((m, i) => {
+           const barH = Math.max(2, (Math.abs(m.net) / maxAbs) * (h / 2 - 4));
+           const x = (i * (w / months.length) + 2).toFixed(1);
+           const y = (m.net >= 0 ? h / 2 - barH : h / 2).toFixed(1);
+           return `<rect class="cf-bar${m.net < 0 ? " negative" : ""}" x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="2"><title>${escapeHtml(monthChipLabel(m.key))}: ${escapeHtml(formatBRL(m.net))}</title></rect>`;
+         })
+         .join("");
+       return `
+         <div class="kpi-card cashflow-card">
+           <p class="kpi-card-label">Fluxo de caixa mensal</p>
+           <svg class="cashflow-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Fluxo de caixa mensal dos últimos 12 meses">
+             <line class="cf-axis" x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" />
+             ${bars}
+           </svg>
+           <div class="cashflow-legend">
+             <span>${escapeHtml(monthChipLabel(months[0].key))}</span>
+             <span>${escapeHtml(monthChipLabel(months[months.length - 1].key))}</span>
+           </div>
+         </div>
+       `;
+     }
+
+     // --- Card / section HTML builders ---
+     function kpiCardHTML(item) {
+       if (!item.ok) {
+         return `
+           <div class="kpi-card is-missing">
+             <p class="kpi-card-label">${escapeHtml(item.label)}</p>
+             <p class="kpi-card-hint">${escapeHtml(item.hint)}</p>
+           </div>
+         `;
+       }
+       return `
+         <div class="kpi-card">
+           <p class="kpi-card-label">${escapeHtml(item.label)}</p>
+           <div class="kpi-card-value-row">
+             <span class="kpi-card-value">${item.value}</span>
+             ${item.unit ? `<span class="kpi-card-unit">${escapeHtml(item.unit)}</span>` : ""}
+           </div>
+           ${item.context ? `<p class="kpi-card-context">${escapeHtml(item.context)}</p>` : ""}
+         </div>
+       `;
+     }
+
+     function kpiSectionHTML(title, subtitle, cardsHTML) {
+       return `
+         <div class="kpi-section">
+           <div class="kpi-section-header">
+             <h3 class="kpi-section-title">${escapeHtml(title)}</h3>
+             ${subtitle ? `<p class="kpi-section-subtitle">${escapeHtml(subtitle)}</p>` : ""}
+           </div>
+           <div class="kpi-grid">${cardsHTML}</div>
+         </div>
+       `;
+     }
+
+     function kpiSkeletonCardHTML() {
+       return `
+         <div class="kpi-card skeleton" aria-hidden="true">
+           <span class="sk-block" style="width: 60%; height: 14px;"></span>
+           <div class="kpi-card-value-row">
+             <span class="sk-block" style="width: 70%; height: 32px;"></span>
+           </div>
+         </div>
+       `;
+     }
+
+     function renderIndicadoresLoading() {
+       const groups = [
+         ["Desempenho animal", 5],
+         ["Reprodutivo", 5],
+         ["Econômico-financeiro", 6],
+         ["Gestão", 4],
+       ];
+       indicadoresRootEl.innerHTML = groups
+         .map(([title, count]) => kpiSectionHTML(title, "", Array.from({ length: count }).map(kpiSkeletonCardHTML).join("")))
+         .join("");
+     }
+
+     function renderIndicadores() {
+       if (!loadedFlags.animals || !loadedFlags.transactions || !loadedFlags.events || !loadedFlags.settings) {
+         renderIndicadoresLoading();
+         return;
+       }
+       const range = computePeriodRange();
+       const label = periodLabelText(range);
+
+       indicadoresRootEl.innerHTML = [
+         kpiSectionHTML("Desempenho animal", label, renderGroup1(range).map(kpiCardHTML).join("")),
+         kpiSectionHTML("Reprodutivo", "Cobertura/IA, diagnóstico de gestação e partos", renderGroup2(range).map(kpiCardHTML).join("")),
+         kpiSectionHTML("Econômico-financeiro", label, renderGroup3(range).map(kpiCardHTML).join("")),
+         kpiSectionHTML("Gestão", "Fluxo dos últimos 12 meses; demais indicadores no período selecionado", renderGroup4Cards(range).map(kpiCardHTML).join("") + renderCashflowCard()),
+       ].join("");
+     }
+
+     renderIndicadoresLoading();
+
+     // =====================================================
+     // 7g. Animal detail sheet — weighing history + "Resultado" (sold animals)
+     // =====================================================
+     function computeAnimalWeighingRows(animal) {
+       const weighings = animalEvents(animal.id, "weighing").slice().sort((a, b) => toDateSafe(a.date) - toDateSafe(b.date));
+       return weighings.map((w, i) => {
+         const date = toDateSafe(w.date);
+         const weight = w.payload?.weightKg;
+         let gainLabel = "";
+         if (i > 0) {
+           const prev = weighings[i - 1];
+           const prevDate = toDateSafe(prev.date);
+           const days = (date - prevDate) / 86_400_000;
+           if (days > 0 && Number.isFinite(weight) && Number.isFinite(prev.payload?.weightKg)) {
+             const gDia = ((weight - prev.payload.weightKg) * 1000) / days;
+             gainLabel = `${gDia >= 0 ? "+" : ""}${fmtNum(gDia)} g/dia`;
+           }
+         }
+         return { date, weight, gainLabel };
+       });
+     }
+
+     function buildAnimalDetailHTML(animal) {
+       const isActive = (animal.status || "active") === "active";
+       const days = isActive ? daysOnFarm(animal) : saleDaysHeld(animal);
+       const saleResult = computeSaleResult(animal, transactionsCache);
+       const weighingRows = computeAnimalWeighingRows(animal);
+
+       const weighingListHTML = weighingRows.length
+         ? `<ul class="weighing-list">${weighingRows
+             .map(
+               (w) => `
+               <li class="weighing-row">
+                 <span>${w.date ? formatDayLabel(w.date) : "—"}</span>
+                 <span>${w.weight != null ? `${w.weight} kg` : "—"}</span>
+                 <span class="weighing-gain">${escapeHtml(w.gainLabel)}</span>
+               </li>
+             `
+             )
+             .join("")}</ul>`
+         : `<p class="field-hint">Nenhuma pesagem registrada — use "Pesar" para acompanhar o GMD deste animal.</p>`;
+
+       const resultHTML = saleResult
+         ? `
+           <div class="detail-section">
+             <p class="detail-section-title">Resultado</p>
+             <div class="result-grid">
+               <div class="result-tile">
+                 <p class="result-value">${saleResult.days}</p>
+                 <p class="result-label">Dias até a venda</p>
+               </div>
+               <div class="result-tile">
+                 <p class="result-value">${formatBRL(saleResult.profit)}</p>
+                 <p class="result-label">Lucro total</p>
+               </div>
+               <div class="result-tile">
+                 <p class="result-value">${formatBRL(saleResult.dailyProfit)}</p>
+                 <p class="result-label">Lucro/dia</p>
+               </div>
+             </div>
+           </div>
+         `
+         : "";
+
+       return `
+         <div class="card-stats" style="grid-template-columns: repeat(3, 1fr); border-top: none; padding-top: 0;">
+           <div class="mini-stat">
+             <p class="mini-value">${animal.currentWeightKg != null ? `${animal.currentWeightKg} kg` : "—"}</p>
+             <p class="mini-label">Peso atual</p>
+           </div>
+           <div class="mini-stat">
+             <p class="mini-value">${days != null ? `${days} d` : "—"}</p>
+             <p class="mini-label">${isActive ? "Na fazenda" : "Dias até a venda"}</p>
+           </div>
+           <div class="mini-stat">
+             <p class="mini-value">${statusLabel[animal.status] || "Ativo"}</p>
+             <p class="mini-label">Status</p>
+           </div>
+         </div>
+
+         ${resultHTML}
+
+         <div class="detail-section">
+           <p class="detail-section-title">Histórico de pesagens</p>
+           ${weighingListHTML}
+         </div>
+
+         <div class="detail-section">
+           <button type="button" class="btn-secondary pressable" id="animal-detail-actions-btn">Ações do animal</button>
+         </div>
+       `;
+     }
+
+     function openAnimalDetailSheet(animal) {
+       Sheet.open({
+         title: `#${escapeHtml(animal.earTag)}`,
+         content: buildAnimalDetailHTML(animal),
+       });
+       document.getElementById("animal-detail-actions-btn")?.addEventListener("click", () => openActionSheet(animal));
+     }
+
     // =====================================================
     // 8. Firestore listeners (animals + lots + transactions + settings)
     //    — lifecycle tied to auth
@@ -3543,16 +4478,23 @@
     let lotsCache = [];
     let animalsCache = [];
     let transactionsCache = [];
+    let eventsCache = [];
     let settingsCache = {};
     let unsubAnimals = null;
     let unsubLots = null;
     let unsubTransactions = null;
+    let unsubEvents = null;
     let unsubSettings = null;
+
+    // Indicadores needs all four caches to have resolved at least once before
+    // it can tell "no data yet" apart from "still loading" (skeleton vs. hint).
+    let loadedFlags = { animals: false, transactions: false, events: false, settings: false };
 
     function startFirestoreListeners(uid) {
       currentUid = uid;
       renderSkeletons(4);
       herdCountEl.textContent = "Carregando…";
+      loadedFlags = { animals: false, transactions: false, events: false, settings: false };
 
       const animalsQuery = query(
         collection(db, "animals"),
@@ -3566,10 +4508,14 @@
           if (animalsCache.length === 0) renderHerdEmpty();
           else renderHerd(animalsCache);
           renderLots();
+          loadedFlags.animals = true;
+          renderIndicadores();
         },
         (err) => {
           console.warn("[Agro Connect] animals onSnapshot error:", err?.code ?? err);
           renderHerdError(err);
+          loadedFlags.animals = true;
+          renderIndicadores();
         }
       );
 
@@ -3604,10 +4550,36 @@
           transactionsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           if (animalsCache.length) renderHerd(animalsCache);
           renderFinanceiro();
+          loadedFlags.transactions = true;
+          renderIndicadores();
         },
         (err) => {
           console.warn("[Agro Connect] transactions onSnapshot error:", err?.code ?? err);
           transactionsCache = [];
+          loadedFlags.transactions = true;
+          renderIndicadores();
+        }
+      );
+
+      // Weighings, reproductive and lifecycle events — read-only here, feeds
+      // GMD/reprodutivo/idade-de-abate indicators (no writes from this view).
+      const eventsQuery = query(
+        collection(db, "events"),
+        where("ownerId", "==", uid),
+        orderBy("date", "asc")
+      );
+      unsubEvents = onSnapshot(
+        eventsQuery,
+        (snap) => {
+          eventsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          loadedFlags.events = true;
+          renderIndicadores();
+        },
+        (err) => {
+          console.warn("[Agro Connect] events onSnapshot error:", err?.code ?? err);
+          eventsCache = [];
+          loadedFlags.events = true;
+          renderIndicadores();
         }
       );
 
@@ -3616,10 +4588,14 @@
         (snap) => {
           settingsCache = snap.exists() ? snap.data() : {};
           renderSettingsCard();
+          loadedFlags.settings = true;
+          renderIndicadores();
         },
         (err) => {
           console.warn("[Agro Connect] settings onSnapshot error:", err?.code ?? err);
           settingsCache = {};
+          loadedFlags.settings = true;
+          renderIndicadores();
         }
       );
     }
@@ -3628,16 +4604,20 @@
       unsubAnimals?.();
       unsubLots?.();
       unsubTransactions?.();
+      unsubEvents?.();
       unsubSettings?.();
       unsubAnimals = null;
       unsubLots = null;
       unsubTransactions = null;
+      unsubEvents = null;
       unsubSettings = null;
       currentUid = null;
       lotsCache = [];
       animalsCache = [];
       transactionsCache = [];
+      eventsCache = [];
       settingsCache = {};
+      loadedFlags = { animals: false, transactions: false, events: false, settings: false };
       herdListEl.innerHTML = "";
       statHeadEl.textContent = "—";
       statArrobasEl.textContent = "—";
@@ -3652,6 +4632,10 @@
       txListEl.innerHTML = "";
       settingsAreaValueEl.textContent = "—";
       settingsPriceValueEl.textContent = "—";
+      settingsDepreciationValueEl.textContent = "—";
+      settingsProlaboreValueEl.textContent = "—";
+      settingsCapitalValueEl.textContent = "—";
+      renderIndicadoresLoading();
     }
 
     // =====================================================
