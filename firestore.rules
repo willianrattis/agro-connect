@@ -30,9 +30,14 @@ service cloud.firestore {
     // Lots
     match /lots/{id} {
       allow read:   if owns(resource);
-      allow create: if ownsNew()
-                    && request.resource.data.name is string
-                    && request.resource.data.name.size() > 0;
+      allow create: if ownsNew() && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && (
+                         !("trackingMode" in request.resource.data)
+                         || request.resource.data.trackingMode == "individual"
+                         || (request.resource.data.trackingMode == "aggregate"
+                             && request.resource.data.headcount is number)
+                       );
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
     }
