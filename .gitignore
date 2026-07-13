@@ -10,9 +10,15 @@ node_modules/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
-
+firebase.json
+firebase.indexes.json
+.firebaserc
 # Build output
 dist/
 
 # OS / editor
 .DS_Store
+
+# AI 
+.claude/
+docs/
