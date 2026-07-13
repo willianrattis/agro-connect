@@ -277,6 +277,9 @@
 
   .month-chip {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-full);
     border: 1px solid var(--border);
@@ -425,8 +428,8 @@
   .card-menu-btn {
     display: grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     border-radius: var(--radius-full);
     color: var(--text-muted);
     flex: none;
@@ -591,11 +594,13 @@
     align-items: center;
     justify-content: center;
     gap: 3px;
+    min-width: 0;
     min-height: 44px;
     color: var(--text-muted);
     font-size: var(--fs-xs);
     font-weight: 600;
     border-radius: var(--radius-md);
+    text-align: center;
   }
   .tab[aria-current="page"] { color: var(--brand); }
   .tab[aria-current="page"] .tab-icon {
@@ -663,8 +668,8 @@
 
   /* Avatar + dropdown */
   .avatar {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: var(--radius-full);
     overflow: hidden;
     border: 2px solid var(--border);
@@ -807,15 +812,17 @@
     .toast-region { bottom: var(--space-5); }
   }
 
-  /* --- Auth state machine: what shows for loading / out / in --- */
-  .session-skeleton, #avatar-wrap, #welcome { display: none; }
+  /* --- Auth state machine: what shows for loading / out / in / error --- */
+  .session-skeleton, #avatar-wrap, #welcome, #auth-error { display: none; }
 
   body[data-auth="loading"] .session-skeleton { display: flex; }
   body[data-auth="in"]      #avatar-wrap      { display: block; }
 
   body[data-auth="out"]     #welcome { display: block; }
+  body[data-auth="error"]   #auth-error { display: block; }
   body[data-auth="out"]     .view,
-  body[data-auth="loading"] .view { display: none; }   /* no data flash before auth resolves */
+  body[data-auth="loading"] .view,
+  body[data-auth="error"]   .view { display: none; }   /* no data flash before auth resolves */
   body:not([data-auth="in"]) .fab { display: none; }   /* FAB is a protected action */
 
   /* =====================================================
@@ -895,8 +902,8 @@
    .sheet-close {
      display: grid;
      place-items: center;
-     width: 36px;
-     height: 36px;
+     width: 44px;
+     height: 44px;
      border-radius: var(--radius-full);
      color: var(--text-muted);
      flex: none;
@@ -1009,6 +1016,10 @@
   }
   .segmented label {
     flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
     text-align: center;
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-full);
@@ -1143,6 +1154,9 @@
     margin-bottom: var(--space-3);
   }
   .period-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-full);
     border: 1px solid var(--border);
@@ -1266,13 +1280,6 @@
   }
 
   /* Animal detail sheet */
-  .detail-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    margin-bottom: var(--space-4);
-  }
   .detail-section {
     margin-top: var(--space-5);
   }
@@ -1405,9 +1412,19 @@
         </button>
       </section>
 
+      <!-- Shown when auth never resolves (offline / network failure on init) -->
+      <section class="welcome" id="auth-error" aria-labelledby="auth-error-title">
+        <span class="welcome-mark" aria-hidden="true" style="background: var(--danger);">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+        </span>
+        <h2 id="auth-error-title">Não foi possível verificar sua sessão</h2>
+        <p>Verifique sua conexão com a internet e tente novamente.</p>
+        <button type="button" class="btn-primary pressable" id="auth-retry-btn">Tentar novamente</button>
+      </section>
+
       <!-- Rebanho -->
       <section class="view" id="view-rebanho" aria-labelledby="tab-rebanho">
-        <div class="summary-strip" id="summary-strip">
+        <div class="summary-strip" id="summary-strip" aria-live="polite">
           <div class="stat-tile">
             <p class="stat-value" id="stat-head">—</p>
             <p class="stat-label">Cabeças no rebanho</p>
@@ -1443,7 +1460,7 @@
           <!-- Month chips, rendered by JS -->
         </div>
 
-        <div class="summary-strip fin-summary">
+        <div class="summary-strip fin-summary" aria-live="polite">
           <div class="stat-tile">
             <p class="stat-value" id="fin-receitas">—</p>
             <p class="stat-label">Receitas</p>
@@ -1473,9 +1490,9 @@
         <div class="view-header"><h2 class="view-title">Indicadores</h2></div>
 
         <div class="period-selector" id="period-selector" role="tablist" aria-label="Selecionar período">
-          <button type="button" class="period-chip pressable" data-period="12m">Últimos 12 meses</button>
-          <button type="button" class="period-chip pressable" data-period="ytd">Ano corrente</button>
-          <button type="button" class="period-chip pressable" data-period="custom">Personalizado</button>
+          <button type="button" class="period-chip pressable" role="tab" data-period="12m">Últimos 12 meses</button>
+          <button type="button" class="period-chip pressable" role="tab" data-period="ytd">Ano corrente</button>
+          <button type="button" class="period-chip pressable" role="tab" data-period="custom">Personalizado</button>
         </div>
         <div class="period-custom-range" id="period-custom-range" hidden>
           <div class="field">
@@ -1488,7 +1505,7 @@
           </div>
         </div>
 
-        <div id="indicadores-root"></div>
+        <div id="indicadores-root" aria-live="polite"></div>
       </section>
 
       <!-- Perfil -->
@@ -1789,7 +1806,15 @@
 
     function totalArrobas(animals) {
       const kg = animals.reduce((sum, a) => sum + (a.currentWeightKg || 0), 0);
-      return Math.round((kg * CARCASS_YIELD) / KG_PER_ARROBA);
+      return (kg * CARCASS_YIELD) / KG_PER_ARROBA;
+    }
+
+    // pt-BR display helpers: kg as whole numbers, @ (arroba) with 1 decimal.
+    function formatKg(n) {
+      return Math.round(n).toLocaleString("pt-BR");
+    }
+    function formatArrobas(n) {
+      return n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
 
     // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
@@ -1887,7 +1912,7 @@
       herdListEl.innerHTML = animals
         .map((a, i) => {
           const days = daysOnFarm(a);
-          const weight = a.currentWeightKg != null ? `${a.currentWeightKg} kg` : "—";
+          const weight = a.currentWeightKg != null ? `${formatKg(a.currentWeightKg)} kg` : "—";
           const chipClass = categoryLabel[a.category] ? `chip-${a.category}` : "chip-recria";
           const saleResult = computeSaleResult(a, transactionsCache);
           return `
@@ -1929,7 +1954,7 @@
 
       const active = animals.filter((a) => (a.status || "active") === "active");
       statHeadEl.textContent = String(active.length);
-      statArrobasEl.innerHTML = `${totalArrobas(active)} <small>@</small>`;
+      statArrobasEl.innerHTML = `${formatArrobas(totalArrobas(active))} <small>@</small>`;
       herdCountEl.textContent = `${active.length} animais ativos`;
     }
 
@@ -1961,8 +1986,8 @@
             <h3>${isPermission ? "Sem permissão para ler o rebanho" : "Não foi possível carregar"}</h3>
             <p>${
               isPermission
-                ? "As regras do Firestore ainda estão em modo deny-all nesta fase do projeto — a leitura será liberada quando as regras forem ajustadas."
-                : "Tente novamente em instantes."
+                ? "Sua conta não tem acesso a estes dados. Verifique se você está logado com a conta correta."
+                : "Verifique sua conexão e tente novamente em instantes."
             }</p>
           </div>
         </li>
@@ -1970,6 +1995,21 @@
       statHeadEl.textContent = "—";
       statArrobasEl.textContent = "—";
       herdCountEl.textContent = "";
+    }
+
+    function renderLotsError() {
+      lotListEl.innerHTML = `
+        <li>
+          <div class="empty-state">
+            <span class="icon" aria-hidden="true" style="background: rgba(179,38,30,0.12); color: var(--danger);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+            </span>
+            <h3>Não foi possível carregar os lotes</h3>
+            <p>Verifique sua conexão e tente novamente em instantes.</p>
+          </div>
+        </li>
+      `;
+      lotCountEl.textContent = "";
     }
 
     // Reads lotsCache + animalsCache directly (both kept fresh by their own
@@ -2012,7 +2052,7 @@
                   <p class="mini-label">Animais</p>
                 </div>
                 <div class="mini-stat">
-                  <p class="mini-value">${l.areaHa != null ? `${l.areaHa} ha` : "—"}</p>
+                  <p class="mini-value">${l.areaHa != null ? `${l.areaHa.toLocaleString("pt-BR")} ha` : "—"}</p>
                   <p class="mini-label">Área</p>
                 </div>
               </div>
@@ -2030,7 +2070,7 @@
 
     function renderMonthChips() {
       monthSelectorEl.innerHTML = buildRecentMonthKeys(12)
-        .map((key) => `<button type="button" class="month-chip pressable" data-month="${key}">${monthChipLabel(key)}</button>`)
+        .map((key) => `<button type="button" class="month-chip pressable" role="tab" data-month="${key}">${monthChipLabel(key)}</button>`)
         .join("");
       syncMonthChipActive();
     }
@@ -2084,6 +2124,24 @@
           </div>
         </li>
       `;
+    }
+
+    function renderFinError() {
+      txListEl.innerHTML = `
+        <li>
+          <div class="empty-state">
+            <span class="icon" aria-hidden="true" style="background: rgba(179,38,30,0.12); color: var(--danger);">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+            </span>
+            <h3>Não foi possível carregar os lançamentos</h3>
+            <p>Verifique sua conexão e tente novamente em instantes.</p>
+          </div>
+        </li>
+      `;
+      finReceitasEl.textContent = "—";
+      finDespesasEl.textContent = "—";
+      finSaldoEl.textContent = "—";
+      finCountEl.textContent = "";
     }
 
     function renderFinEmpty() {
@@ -2838,7 +2896,7 @@
            </div>
            <div class="field">
              <label class="field-label" for="sale-price">Preço da @ (R$) *</label>
-             <input class="input" id="sale-price" type="number" min="0" step="0.01" value="${defaultPrice != null ? defaultPrice : ""}" />
+             <input class="input" id="sale-price" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="${defaultPrice != null ? formatBRL(defaultPrice) : ""}" />
              <p class="field-error" id="sale-price-error"></p>
            </div>
            <div class="field">
@@ -2861,13 +2919,13 @@
 
        function recomputeTotal() {
          const arrobas = parseFloat(arrobasInput.value);
-         const price = parseFloat(priceInput.value);
+         const price = parseBRLToNumber(priceInput.value);
          const total = Number.isFinite(arrobas) && Number.isFinite(price) ? arrobas * price : 0;
          totalEl.textContent = formatBRL(total);
          return total;
        }
        arrobasInput.addEventListener("input", recomputeTotal);
-       priceInput.addEventListener("input", recomputeTotal);
+       priceInput.addEventListener("input", () => { formatCurrencyInput(priceInput); recomputeTotal(); });
        recomputeTotal();
 
        form.addEventListener("submit", async (e) => {
@@ -2886,7 +2944,7 @@
          const arrobas = parseFloat(arrobasInput.value);
          if (!Number.isFinite(arrobas) || arrobas <= 0) fail("sale-arrobas", "Informe o peso de carcaça em @.");
 
-         const price = parseFloat(priceInput.value);
+         const price = parseBRLToNumber(priceInput.value);
          if (!Number.isFinite(price) || price <= 0) fail("sale-price", "Informe o preço da @.");
 
          if (!valid) return;
@@ -3527,7 +3585,7 @@
      function renderSettingsCard() {
        const area = settingsCache.propertyAreaHa;
        const price = settingsCache.defaultArrobaPriceBRL;
-       settingsAreaValueEl.textContent = area != null ? `${area} ha` : "—";
+       settingsAreaValueEl.textContent = area != null ? `${area.toLocaleString("pt-BR")} ha` : "—";
        settingsPriceValueEl.textContent = price != null ? formatBRL(price) : "—";
        settingsDepreciationValueEl.textContent = settingsCache.monthlyDepreciationBRL != null ? formatBRL(settingsCache.monthlyDepreciationBRL) : "—";
        settingsProlaboreValueEl.textContent = settingsCache.monthlyProLaboreBRL != null ? formatBRL(settingsCache.monthlyProLaboreBRL) : "—";
@@ -4242,7 +4300,7 @@
        if (!price) return kpiMissing("Inventário atual", "Informe o preço padrão da @ em Perfil.");
        const active = animalsCache.filter((a) => (a.status || "active") === "active");
        const arrobas = totalArrobas(active);
-       return kpiOk("Inventário atual", formatBRL(arrobas * price), "", `${active.length} cabeça(s) · ${arrobas} @ estimada(s)`);
+       return kpiOk("Inventário atual", formatBRL(arrobas * price), "", `${active.length} cabeça(s) · ${formatArrobas(arrobas)} @ estimada(s)`);
      }
 
      function renderGroup4Cards(range) {
@@ -4403,7 +4461,7 @@
                (w) => `
                <li class="weighing-row">
                  <span>${w.date ? formatDayLabel(w.date) : "—"}</span>
-                 <span>${w.weight != null ? `${w.weight} kg` : "—"}</span>
+                 <span>${w.weight != null ? `${formatKg(w.weight)} kg` : "—"}</span>
                  <span class="weighing-gain">${escapeHtml(w.gainLabel)}</span>
                </li>
              `
@@ -4436,7 +4494,7 @@
        return `
          <div class="card-stats" style="grid-template-columns: repeat(3, 1fr); border-top: none; padding-top: 0;">
            <div class="mini-stat">
-             <p class="mini-value">${animal.currentWeightKg != null ? `${animal.currentWeightKg} kg` : "—"}</p>
+             <p class="mini-value">${animal.currentWeightKg != null ? `${formatKg(animal.currentWeightKg)} kg` : "—"}</p>
              <p class="mini-label">Peso atual</p>
            </div>
            <div class="mini-stat">
@@ -4534,6 +4592,7 @@
         (err) => {
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
           lotsCache = [];
+          renderLotsError();
         }
       );
 
@@ -4556,6 +4615,7 @@
         (err) => {
           console.warn("[Agro Connect] transactions onSnapshot error:", err?.code ?? err);
           transactionsCache = [];
+          renderFinError();
           loadedFlags.transactions = true;
           renderIndicadores();
         }
@@ -4578,6 +4638,7 @@
         (err) => {
           console.warn("[Agro Connect] events onSnapshot error:", err?.code ?? err);
           eventsCache = [];
+          showToast("Não foi possível carregar os eventos. Verifique sua conexão.");
           loadedFlags.events = true;
           renderIndicadores();
         }
@@ -4594,6 +4655,7 @@
         (err) => {
           console.warn("[Agro Connect] settings onSnapshot error:", err?.code ?? err);
           settingsCache = {};
+          showToast("Não foi possível carregar suas configurações. Verifique sua conexão.");
           loadedFlags.settings = true;
           renderIndicadores();
         }
@@ -4777,29 +4839,48 @@
     });
 
     // --- Single source of truth for session-aware UI ---
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        avatarFallback.textContent = initialOf(user);
-        if (user.photoURL) {
-          avatarFallback.hidden = true;
-          avatarImg.hidden = false;
-          avatarImg.src = user.photoURL;
-        } else {
-          avatarImg.hidden = true;
-          avatarFallback.hidden = false;
-        }
-        menuName.textContent = user.displayName || "Produtor(a)";
-        menuEmail.textContent = user.email || "";
-        document.body.dataset.auth = "in";
-        upsertUserDoc(user);
-        startFirestoreListeners(user.uid);
-      } else {
-        setMenu(false);
-        avatarImg.removeAttribute("src");
-        document.body.dataset.auth = "out";
-        stopFirestoreListeners();
-      }
+    // If Firebase Auth can't resolve the session (offline, network failure)
+    // onAuthStateChanged never fires — fall back to a retry screen instead of
+    // leaving the loading skeleton up forever.
+    const authInitTimeout = window.setTimeout(() => {
+      document.body.dataset.auth = "error";
+    }, 12000);
+    document.getElementById("auth-retry-btn").addEventListener("click", () => {
+      window.location.reload();
     });
+
+    onAuthStateChanged(
+      auth,
+      (user) => {
+        window.clearTimeout(authInitTimeout);
+        if (user) {
+          avatarFallback.textContent = initialOf(user);
+          if (user.photoURL) {
+            avatarFallback.hidden = true;
+            avatarImg.hidden = false;
+            avatarImg.src = user.photoURL;
+          } else {
+            avatarImg.hidden = true;
+            avatarFallback.hidden = false;
+          }
+          menuName.textContent = user.displayName || "Produtor(a)";
+          menuEmail.textContent = user.email || "";
+          document.body.dataset.auth = "in";
+          upsertUserDoc(user);
+          startFirestoreListeners(user.uid);
+        } else {
+          setMenu(false);
+          avatarImg.removeAttribute("src");
+          document.body.dataset.auth = "out";
+          stopFirestoreListeners();
+        }
+      },
+      (err) => {
+        console.warn("[Agro Connect] Auth state error:", err?.code ?? err);
+        window.clearTimeout(authInitTimeout);
+        document.body.dataset.auth = "error";
+      }
+    );
   </script>
 
 </body>
