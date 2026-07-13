@@ -58,5 +58,14 @@ service cloud.firestore {
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
     }
+
+    // Properties
+    match /properties/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew() && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
   }
 }

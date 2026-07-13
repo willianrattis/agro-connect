@@ -1514,6 +1514,25 @@
 
         <div class="card">
           <div class="card-top">
+            <span class="ear-tag" style="font-size: var(--fs-base);">Propriedades</span>
+          </div>
+          <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+            <div class="mini-stat">
+              <p class="mini-value" id="properties-count-value">—</p>
+              <p class="mini-label">Propriedades</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="properties-area-value">—</p>
+              <p class="mini-label">Área total (ha)</p>
+            </div>
+          </div>
+          <div class="detail-section">
+            <button type="button" class="btn-secondary pressable" id="properties-manage-btn">Gerenciar propriedades</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: var(--space-4);">
+          <div class="card-top">
             <span class="ear-tag" style="font-size: var(--fs-base);">Configurações da propriedade</span>
             <button type="button" class="card-menu-btn pressable" id="settings-edit-btn" aria-label="Editar configurações">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -1767,6 +1786,10 @@
     const settingsCapitalValueEl = document.getElementById("settings-capital-value");
     const settingsEditBtn = document.getElementById("settings-edit-btn");
     const settingsEditBtn2 = document.getElementById("settings-edit-btn-2");
+
+    const propertiesCountValueEl = document.getElementById("properties-count-value");
+    const propertiesAreaValueEl = document.getElementById("properties-area-value");
+    const propertiesManageBtn = document.getElementById("properties-manage-btn");
 
     // =====================================================
     // 3. Helpers
@@ -3740,6 +3763,9 @@
        const categoryOptions = Object.entries(lotCategoryLabel)
          .map(([value, label]) => `<option value="${value}" ${lot.category === value ? "selected" : ""}>${label}</option>`)
          .join("");
+       const propertyOptions = propertiesCache
+         .map((p) => `<option value="${escapeHtml(p.id)}" ${lot.propertyId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
+         .join("");
        return `
          <form id="lot-form" class="form-grid" novalidate>
            <div class="field">
@@ -3755,6 +3781,13 @@
            <div class="field">
              <label class="field-label" for="lot-area">Área (ha)</label>
              <input class="input" id="lot-area" type="number" min="0" step="0.01" placeholder="Opcional" value="${lot.areaHa ?? ""}" />
+           </div>
+           <div class="field">
+             <label class="field-label" for="lot-property">Propriedade</label>
+             <select class="select" id="lot-property">
+               <option value="" ${!lot.propertyId ? "selected" : ""}>Sem propriedade</option>
+               ${propertyOptions}
+             </select>
            </div>
            <p class="field-error" id="lot-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="lot-submit">Salvar alterações</button>
@@ -3784,13 +3817,15 @@
          const areaRaw = document.getElementById("lot-area").value;
          const areaHa = areaRaw ? parseFloat(areaRaw) : null;
 
+         const propertyId = document.getElementById("lot-property").value || null;
+
          if (!valid) return;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
 
          try {
-           await updateDoc(doc(db, "lots", lot.id), { name, category, areaHa, updatedAt: serverTimestamp() });
+           await updateDoc(doc(db, "lots", lot.id), { name, category, areaHa, propertyId, updatedAt: serverTimestamp() });
            showToast("Lote atualizado.");
            Sheet.close();
          } catch (err) {
@@ -3863,6 +3898,250 @@
        const linkedCount = animalsCache.filter((a) => a.lotId === lot.id).length;
        Sheet.open({ title: "Excluir lote", content: buildDeleteLotHTML(lot, linkedCount) });
        wireDeleteLotForm(lot);
+     }
+
+     // =====================================================
+     // 7e-bis. Perfil — Propriedades (manage sheet: list, CRUD)
+     // =====================================================
+     function renderPropertiesCard() {
+       propertiesCountValueEl.textContent = String(propertiesCache.length);
+       const totalArea = propertiesCache.reduce((s, p) => s + (Number.isFinite(p.areaHa) ? p.areaHa : 0), 0);
+       propertiesAreaValueEl.textContent = totalArea > 0 ? `${totalArea.toLocaleString("pt-BR")} ha` : "—";
+     }
+
+     function buildPropertiesListHTML() {
+       const newButton = `<button type="button" class="btn-primary pressable" id="property-new-btn">Nova propriedade</button>`;
+
+       if (propertiesCache.length === 0) {
+         return `
+           <div class="form-grid">
+             ${newButton}
+             <div class="empty-state">
+               <span class="icon" aria-hidden="true">
+                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+               </span>
+               <h3>Nenhuma propriedade cadastrada</h3>
+               <p>Cadastre sua primeira propriedade para acompanhar área e indicadores.</p>
+             </div>
+           </div>
+         `;
+       }
+
+       const cards = propertiesCache
+         .map((p, i) => {
+           const lotCount = lotsCache.filter((l) => l.propertyId === p.id).length;
+           return `
+             <li class="card enter" style="--i: ${i}">
+               <div class="card-top">
+                 <span class="ear-tag" style="font-size: var(--fs-base);">${escapeHtml(p.name)}</span>
+                 <button type="button" class="card-menu-btn pressable" data-action="property-menu" data-id="${escapeHtml(p.id)}" aria-label="Ações da propriedade ${escapeHtml(p.name)}">
+                   ${ICONS.menu}
+                 </button>
+               </div>
+               <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+                 <div class="mini-stat">
+                   <p class="mini-value">${p.areaHa != null ? `${p.areaHa.toLocaleString("pt-BR")} ha` : "—"}</p>
+                   <p class="mini-label">Área</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${lotCount}</p>
+                   <p class="mini-label">${lotCount === 1 ? "Lote vinculado" : "Lotes vinculados"}</p>
+                 </div>
+               </div>
+             </li>
+           `;
+         })
+         .join("");
+
+       return `
+         <div class="form-grid">
+           ${newButton}
+           <ul class="herd-list">${cards}</ul>
+         </div>
+       `;
+     }
+
+     function openPropertiesSheet() {
+       Sheet.open({ title: "Propriedades", content: buildPropertiesListHTML() });
+       document.getElementById("property-new-btn")?.addEventListener("click", openNewPropertySheet);
+       document.querySelectorAll('#sheet-body [data-action="property-menu"]').forEach((btn) => {
+         btn.addEventListener("click", () => {
+           const property = propertiesCache.find((p) => p.id === btn.dataset.id);
+           if (property) openPropertyActionSheet(property);
+         });
+       });
+     }
+
+     propertiesManageBtn.addEventListener("click", openPropertiesSheet);
+
+     // --- "..." action menu (Editar / Excluir) ---
+     function buildPropertyActionMenuHTML() {
+       return `
+         <div class="action-list">
+           <button type="button" class="action-item pressable" data-menu-action="edit">
+             <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
+             Editar
+           </button>
+           <button type="button" class="action-item danger pressable" data-menu-action="delete">
+             <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
+             Excluir
+           </button>
+         </div>
+       `;
+     }
+
+     function openPropertyActionSheet(property) {
+       Sheet.open({ title: `Ações · ${escapeHtml(property.name)}`, content: buildPropertyActionMenuHTML() });
+       document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
+         btn.addEventListener("click", () => {
+           if (btn.dataset.menuAction === "edit") openEditPropertySheet(property);
+           else if (btn.dataset.menuAction === "delete") openDeletePropertySheet(property);
+           else Sheet.close();
+         });
+       });
+     }
+
+     // --- Nova / editar propriedade (shared form; addDoc vs. updateDoc) ---
+     function buildPropertyFormHTML(property) {
+       return `
+         <form id="property-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="property-name">Nome *</label>
+             <input class="input" id="property-name" type="text" placeholder="Ex: Fazenda Santa Rosa" autocomplete="off" value="${property ? escapeHtml(property.name) : ""}" />
+             <p class="field-error" id="property-name-error"></p>
+           </div>
+           <div class="field">
+             <label class="field-label" for="property-area">Área (ha)</label>
+             <input class="input" id="property-area" type="number" min="0" step="0.01" placeholder="Opcional" value="${property?.areaHa ?? ""}" />
+           </div>
+           <div class="field">
+             <label class="field-label" for="property-notes">Observações</label>
+             <textarea class="textarea" id="property-notes" placeholder="Opcional">${property?.notes ? escapeHtml(property.notes) : ""}</textarea>
+           </div>
+           <p class="field-error" id="property-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="property-submit">${property ? "Salvar alterações" : "Criar propriedade"}</button>
+         </form>
+       `;
+     }
+
+     function wirePropertyForm(property) {
+       const form = document.getElementById("property-form");
+       const submitBtn = document.getElementById("property-submit");
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         clearFieldError("property-name");
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const name = document.getElementById("property-name").value.trim();
+         if (!name) fail("property-name", "Informe o nome da propriedade.");
+
+         const areaRaw = document.getElementById("property-area").value;
+         const areaHa = areaRaw ? parseFloat(areaRaw) : null;
+
+         const notes = document.getElementById("property-notes").value.trim() || null;
+
+         if (!valid) return;
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           if (property) {
+             // Editar: updateDoc on the existing document — never recreate.
+             await updateDoc(doc(db, "properties", property.id), { name, areaHa, notes, updatedAt: serverTimestamp() });
+             showToast("Propriedade atualizada.");
+           } else {
+             await addDoc(collection(db, "properties"), {
+               ownerId: currentUid,
+               name,
+               areaHa,
+               notes,
+               createdAt: serverTimestamp(),
+               updatedAt: serverTimestamp(),
+             });
+             showToast("Propriedade criada.");
+           }
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao salvar propriedade:", err?.code ?? err);
+           showToast(
+             err?.code === "permission-denied" ? "Sem permissão para gravar." : "Não foi possível salvar. Tente novamente."
+           );
+           submitBtn.disabled = false;
+           submitBtn.textContent = property ? "Salvar alterações" : "Criar propriedade";
+         }
+       });
+     }
+
+     function openNewPropertySheet() {
+       Sheet.open({ title: "Nova propriedade", content: buildPropertyFormHTML(null) });
+       wirePropertyForm(null);
+     }
+
+     function openEditPropertySheet(property) {
+       Sheet.open({ title: "Editar propriedade", content: buildPropertyFormHTML(property) });
+       wirePropertyForm(property);
+     }
+
+     // --- Excluir propriedade (nunca sem confirmação) ---
+     function buildDeletePropertyHTML(property, linkedCount) {
+       return `
+         <div class="form-grid">
+           <div class="confirm-warning">
+             <span class="confirm-warning-icon" aria-hidden="true">${ICONS.warning}</span>
+             <p>Tem certeza que deseja excluir a propriedade <strong>${escapeHtml(property.name)}</strong>? Esta ação não pode ser desfeita.${
+               linkedCount > 0 ? ` ${linkedCount} lote(s) vinculado(s) ficará(ão) sem propriedade.` : ""
+             }</p>
+           </div>
+           <div class="confirm-actions">
+             <button type="button" class="btn-secondary pressable" id="delete-property-cancel">Cancelar</button>
+             <button type="button" class="btn-primary btn-danger pressable" id="delete-property-confirm">Excluir propriedade</button>
+           </div>
+         </div>
+       `;
+     }
+
+     function wireDeletePropertyForm(property) {
+       const cancelBtn = document.getElementById("delete-property-cancel");
+       const confirmBtn = document.getElementById("delete-property-confirm");
+
+       cancelBtn.addEventListener("click", () => Sheet.close());
+
+       confirmBtn.addEventListener("click", async () => {
+         if (!currentUid) return;
+         confirmBtn.disabled = true;
+         cancelBtn.disabled = true;
+         confirmBtn.textContent = "Excluindo…";
+
+         try {
+           const linkedLots = lotsCache.filter((l) => l.propertyId === property.id);
+           await Promise.all(
+             linkedLots.map((l) => updateDoc(doc(db, "lots", l.id), { propertyId: null, updatedAt: serverTimestamp() }))
+           );
+           await deleteDoc(doc(db, "properties", property.id));
+           showToast("Propriedade excluída.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao excluir propriedade:", err?.code ?? err);
+           showToast(
+             err?.code === "permission-denied" ? "Sem permissão para excluir." : "Não foi possível excluir. Tente novamente."
+           );
+           confirmBtn.disabled = false;
+           cancelBtn.disabled = false;
+           confirmBtn.textContent = "Excluir propriedade";
+         }
+       });
+     }
+
+     function openDeletePropertySheet(property) {
+       const linkedCount = lotsCache.filter((l) => l.propertyId === property.id).length;
+       Sheet.open({ title: "Excluir propriedade", content: buildDeletePropertyHTML(property, linkedCount) });
+       wireDeletePropertyForm(property);
      }
 
      // =====================================================
@@ -4052,8 +4331,15 @@
        return cards;
      }
 
+     // per-property indicator scoping: Phase F — for now, area-based KPIs
+     // sum every property's areaHa rather than scoping per property.
+     function totalPropertyAreaHa() {
+       const sum = propertiesCache.reduce((s, p) => s + (Number.isFinite(p.areaHa) ? p.areaHa : 0), 0);
+       return sum || settingsCache.propertyAreaHa;
+     }
+
      function kpiGanhoHa(range) {
-       const area = settingsCache.propertyAreaHa;
+       const area = totalPropertyAreaHa();
        if (!area) return kpiMissing("Ganho por área", "Informe a área da propriedade em Perfil.");
 
        let variation = 0;
@@ -4086,7 +4372,7 @@
      }
 
      function kpiLotacao() {
-       const area = settingsCache.propertyAreaHa;
+       const area = totalPropertyAreaHa();
        if (!area) return kpiMissing("Taxa de lotação", "Informe a área da propriedade em Perfil.");
        const active = animalsCache.filter((a) => (a.status || "active") === "active" && Number.isFinite(a.currentWeightKg));
        if (!active.length) return kpiMissing("Taxa de lotação", "Cadastre o peso atual dos animais ativos (use \"Pesar\").");
@@ -4221,7 +4507,7 @@
        }
        const margemBruta = receitas - despesasAll;
        const margemLiquida = margemBruta - monthlyExtraCosts() * periodMonths(range);
-       const area = settingsCache.propertyAreaHa;
+       const area = totalPropertyAreaHa();
        return [
          kpiOk("Margem bruta", formatBRL(margemBruta), "", area ? `${formatBRL(margemBruta / area)}/ha no período` : "Informe a área em Perfil para ver R$/ha"),
          kpiOk("Margem líquida", formatBRL(margemLiquida), "", area ? `${formatBRL(margemLiquida / area)}/ha no período` : "Informe a área em Perfil para ver R$/ha"),
@@ -4229,7 +4515,7 @@
      }
 
      function kpiBreakEven(range) {
-       const area = settingsCache.propertyAreaHa;
+       const area = totalPropertyAreaHa();
        const cot = sumTx(range, (t) => t.kind === "despesa") + monthlyExtraCosts() * periodMonths(range);
        const price = settingsCache.defaultArrobaPriceBRL || averageRealizedArrobaPrice(range);
        if (!price) return kpiMissing("Break-even", "Informe o preço padrão da @ em Perfil ou registre vendas no período.");
@@ -4249,7 +4535,7 @@
      }
 
      function kpiLucroHa(range) {
-       const area = settingsCache.propertyAreaHa;
+       const area = totalPropertyAreaHa();
        if (!area) return kpiMissing("Lucro por hectare", "Informe a área da propriedade em Perfil.");
        const receitas = sumTx(range, (t) => t.kind === "receita");
        const despesasAll = sumTx(range, (t) => t.kind === "despesa");
@@ -4538,21 +4824,28 @@
     let transactionsCache = [];
     let eventsCache = [];
     let settingsCache = {};
+    let propertiesCache = [];
     let unsubAnimals = null;
     let unsubLots = null;
     let unsubTransactions = null;
     let unsubEvents = null;
     let unsubSettings = null;
+    let unsubProperties = null;
 
     // Indicadores needs all four caches to have resolved at least once before
     // it can tell "no data yet" apart from "still loading" (skeleton vs. hint).
-    let loadedFlags = { animals: false, transactions: false, events: false, settings: false };
+    let loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false };
+
+    // Guards the one-time settings.propertyAreaHa → properties/{id} migration
+    // (see maybeMigratePropertyArea) so it fires at most once per session.
+    let propertyMigrationAttempted = false;
 
     function startFirestoreListeners(uid) {
       currentUid = uid;
       renderSkeletons(4);
       herdCountEl.textContent = "Carregando…";
-      loadedFlags = { animals: false, transactions: false, events: false, settings: false };
+      loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false };
+      propertyMigrationAttempted = false;
 
       const animalsQuery = query(
         collection(db, "animals"),
@@ -4650,6 +4943,7 @@
           settingsCache = snap.exists() ? snap.data() : {};
           renderSettingsCard();
           loadedFlags.settings = true;
+          maybeMigratePropertyArea();
           renderIndicadores();
         },
         (err) => {
@@ -4660,6 +4954,50 @@
           renderIndicadores();
         }
       );
+
+      const propertiesQuery = query(
+        collection(db, "properties"),
+        where("ownerId", "==", uid),
+        orderBy("name")
+      );
+      unsubProperties = onSnapshot(
+        propertiesQuery,
+        (snap) => {
+          propertiesCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          renderPropertiesCard();
+          loadedFlags.properties = true;
+          maybeMigratePropertyArea();
+          renderIndicadores();
+        },
+        (err) => {
+          console.warn("[Agro Connect] properties onSnapshot error:", err?.code ?? err);
+          propertiesCache = [];
+          loadedFlags.properties = true;
+          renderIndicadores();
+        }
+      );
+    }
+
+    // One-time compat migration: users who set an area under the old
+    // single-property settings.propertyAreaHa get it seeded as their first
+    // "Principal" property, so multi-property indicators have data to sum.
+    function maybeMigratePropertyArea() {
+      if (propertyMigrationAttempted) return;
+      if (!loadedFlags.properties || !loadedFlags.settings) return;
+      propertyMigrationAttempted = true;
+      if (propertiesCache.length > 0) return;
+      const legacyArea = settingsCache.propertyAreaHa;
+      if (legacyArea == null) return;
+      addDoc(collection(db, "properties"), {
+        ownerId: currentUid,
+        name: "Principal",
+        areaHa: legacyArea,
+        notes: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }).catch((err) => {
+        console.warn("[Agro Connect] Falha ao migrar área da propriedade:", err?.code ?? err);
+      });
     }
 
     function stopFirestoreListeners() {
@@ -4668,18 +5006,22 @@
       unsubTransactions?.();
       unsubEvents?.();
       unsubSettings?.();
+      unsubProperties?.();
       unsubAnimals = null;
       unsubLots = null;
       unsubTransactions = null;
       unsubEvents = null;
       unsubSettings = null;
+      unsubProperties = null;
       currentUid = null;
       lotsCache = [];
       animalsCache = [];
       transactionsCache = [];
       eventsCache = [];
       settingsCache = {};
-      loadedFlags = { animals: false, transactions: false, events: false, settings: false };
+      propertiesCache = [];
+      loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false };
+      propertyMigrationAttempted = false;
       herdListEl.innerHTML = "";
       statHeadEl.textContent = "—";
       statArrobasEl.textContent = "—";
@@ -4696,6 +5038,8 @@
       settingsPriceValueEl.textContent = "—";
       settingsDepreciationValueEl.textContent = "—";
       settingsProlaboreValueEl.textContent = "—";
+      propertiesCountValueEl.textContent = "—";
+      propertiesAreaValueEl.textContent = "—";
       settingsCapitalValueEl.textContent = "—";
       renderIndicadoresLoading();
     }
