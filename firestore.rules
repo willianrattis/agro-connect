@@ -81,5 +81,15 @@ service cloud.firestore {
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
     }
+
+    // Lot movements (aggregate-lot ledger: entries/exits, headcount deltas)
+    match /movements/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew() && request.resource.data.lotId is string
+                    && request.resource.data.date is timestamp
+                    && request.resource.data.qty is number;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
   }
 }
