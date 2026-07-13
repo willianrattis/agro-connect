@@ -1247,6 +1247,36 @@
   .live-calc-label { font-size: var(--fs-xs); color: var(--text-muted); }
   .live-calc-value { font-size: var(--fs-lg); font-weight: 700; color: var(--text); }
 
+  /* "Mesclar lotes": scrollable checkbox list of source lots */
+  .merge-source-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-2);
+  }
+  .merge-source-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .merge-source-item:hover { background: var(--accent-tint); }
+  .merge-source-item input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    margin-top: 2px;
+    accent-color: var(--accent);
+  }
+  .merge-source-item-info { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); }
+  .merge-source-item-info small { color: var(--text-muted); font-size: var(--fs-xs); }
+
   /* =====================================================
      15. Indicadores — KPI dashboard
      ===================================================== */
@@ -1551,6 +1581,7 @@
           <h2 class="view-title">Lotes</h2>
           <div class="view-header-actions">
             <span class="count" id="lot-count"></span>
+            <button type="button" class="btn-inline pressable" id="lot-merge-btn">Mesclar lotes</button>
             <button type="button" class="btn-inline pressable" id="lot-new-btn">+ Novo lote</button>
           </div>
         </div>
@@ -1773,7 +1804,7 @@
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
     import {
       getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
-      collection, addDoc, query, where, orderBy, onSnapshot, getDocs,
+      collection, addDoc, query, where, orderBy, onSnapshot, getDocs, writeBatch,
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -5069,6 +5100,286 @@
      function openLotMovementSheet(lot) {
        Sheet.open({ title: `Nova movimentação · ${escapeHtml(lot.name)}`, content: buildMovementFormHTML(lot) });
        wireMovementForm(lot);
+     }
+
+     // =====================================================
+     // 7e4. Lotes — "Mesclar lotes": combine two or more aggregate lots into
+     //      one, recomputing headcount and weighted-average weight/cost.
+     //      Source movements are reassigned to the target (history kept);
+     //      source lots are deleted after confirmation.
+     // =====================================================
+
+     // Weighted by headcount (SPEC): avg cost/weight over the target + every
+     // checked source, as if all their heads had always belonged to one lot.
+     function computeMergePreview(lots) {
+       const totalHeadcount = lots.reduce((s, l) => s + (l.headcount ?? 0), 0);
+       const totalCost = lots.reduce((s, l) => s + (l.headcount ?? 0) * (l.avgPurchaseCostBRL ?? 0), 0);
+       const totalWeight = lots.reduce((s, l) => s + (l.headcount ?? 0) * (l.avgWeightKg ?? 0), 0);
+       return {
+         totalHeadcount,
+         newAvgCostBRL: totalHeadcount > 0 ? totalCost / totalHeadcount : 0,
+         newAvgWeightKg: totalHeadcount > 0 ? Math.round(totalWeight / totalHeadcount) : 0,
+         totalPurchaseCostBRL: totalCost,
+       };
+     }
+
+     function buildMergeFormHTML() {
+       const aggregateLots = lotsCache.filter((l) => (l.trackingMode || "individual") === "aggregate");
+       const targetOptions = aggregateLots
+         .map((l) => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)} (${l.headcount ?? 0} cabeças)</option>`)
+         .join("");
+       return `
+         <div class="form-grid">
+           <div class="field">
+             <label class="field-label" for="merge-target">Lote de destino *</label>
+             <select class="select" id="merge-target">
+               <option value="" selected>Selecione</option>
+               ${targetOptions}
+             </select>
+             <p class="field-error" id="merge-target-error"></p>
+           </div>
+
+           <div class="field">
+             <span class="field-label">Lotes de origem *</span>
+             <div class="merge-source-list" id="merge-source-list">
+               <p class="field-hint">Selecione o lote de destino para ver as opções.</p>
+             </div>
+             <p class="field-error" id="merge-sources-error"></p>
+           </div>
+
+           <div class="live-calc" id="merge-preview" hidden>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Total de cabeças</span>
+               <span class="live-calc-value" id="merge-calc-headcount">—</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Peso médio</span>
+               <span class="live-calc-value" id="merge-calc-weight">—</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Custo médio</span>
+               <span class="live-calc-value" id="merge-calc-cost">—</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Custo total</span>
+               <span class="live-calc-value" id="merge-calc-total">—</span>
+             </div>
+           </div>
+
+           <label class="field checkbox-field" for="merge-migrate-linked">
+             <input type="checkbox" id="merge-migrate-linked" checked />
+             <span class="field-label">Migrar lançamentos vinculados</span>
+           </label>
+
+           <p class="field-error" id="merge-form-error" role="alert"></p>
+           <button type="button" class="btn-primary pressable" id="merge-submit">Mesclar lotes</button>
+         </div>
+       `;
+     }
+
+     function buildMergeSourceListHTML(sourceCandidates) {
+       if (!sourceCandidates.length) {
+         return `<p class="field-hint">Nenhum outro lote por cabeça disponível para mesclar.</p>`;
+       }
+       return sourceCandidates
+         .map(
+           (l) => `
+             <label class="merge-source-item">
+               <input type="checkbox" value="${escapeHtml(l.id)}" data-merge-source />
+               <span class="merge-source-item-info">
+                 <span>${escapeHtml(l.name)}</span>
+                 <small>${l.headcount ?? 0} cabeças · ${l.avgWeightKg != null ? `${formatKg(l.avgWeightKg)} kg` : "—"} · ${l.avgPurchaseCostBRL != null ? formatBRL(l.avgPurchaseCostBRL) : "—"}/cab.</small>
+               </span>
+             </label>
+           `
+         )
+         .join("");
+     }
+
+     function wireMergeForm() {
+       const targetSelect = document.getElementById("merge-target");
+       const sourceListEl = document.getElementById("merge-source-list");
+       const previewEl = document.getElementById("merge-preview");
+       const submitBtn = document.getElementById("merge-submit");
+       const formError = document.getElementById("merge-form-error");
+
+       function checkedSourceLots() {
+         const ids = Array.from(sourceListEl.querySelectorAll("[data-merge-source]:checked")).map((c) => c.value);
+         return lotsCache.filter((l) => ids.includes(l.id));
+       }
+
+       function updatePreview() {
+         const targetLot = lotsCache.find((l) => l.id === targetSelect.value);
+         const sources = targetLot ? checkedSourceLots() : [];
+         if (!targetLot || !sources.length) {
+           previewEl.hidden = true;
+           return;
+         }
+         const preview = computeMergePreview([targetLot, ...sources]);
+         document.getElementById("merge-calc-headcount").textContent = `${preview.totalHeadcount} cabeças`;
+         document.getElementById("merge-calc-weight").textContent = `${formatKg(preview.newAvgWeightKg)} kg`;
+         document.getElementById("merge-calc-cost").textContent = formatBRL(preview.newAvgCostBRL);
+         document.getElementById("merge-calc-total").textContent = formatBRL(preview.totalPurchaseCostBRL);
+         previewEl.hidden = false;
+       }
+
+       function renderSourceOptions() {
+         const targetId = targetSelect.value;
+         if (!targetId) {
+           sourceListEl.innerHTML = `<p class="field-hint">Selecione o lote de destino para ver as opções.</p>`;
+           updatePreview();
+           return;
+         }
+         const candidates = lotsCache.filter(
+           (l) => l.id !== targetId && (l.trackingMode || "individual") === "aggregate"
+         );
+         sourceListEl.innerHTML = buildMergeSourceListHTML(candidates);
+         sourceListEl.querySelectorAll("[data-merge-source]").forEach((cb) => cb.addEventListener("change", updatePreview));
+         updatePreview();
+       }
+
+       targetSelect.addEventListener("change", renderSourceOptions);
+
+       submitBtn.addEventListener("click", () => {
+         formError.textContent = "";
+         clearFieldError("merge-target");
+         clearFieldError("merge-sources");
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const targetLot = lotsCache.find((l) => l.id === targetSelect.value);
+         if (!targetLot) fail("merge-target", "Selecione o lote de destino.");
+
+         const sources = targetLot ? checkedSourceLots() : [];
+         if (targetLot && !sources.length) fail("merge-sources", "Selecione ao menos um lote de origem.");
+
+         if (!valid) return;
+
+         // Guards: no self-merge (target excluded from the source list above)
+         // and no mixing tracking modes (source list is aggregate-only above).
+         if (sources.some((l) => l.id === targetLot.id)) {
+           fail("merge-sources", "O lote de destino não pode ser também de origem.");
+           return;
+         }
+         if (sources.some((l) => (l.trackingMode || "individual") !== "aggregate")) {
+           fail("merge-sources", "Só é possível mesclar lotes por cabeça (aggregate).");
+           return;
+         }
+
+         const migrateLinked = document.getElementById("merge-migrate-linked").checked;
+         openMergeConfirmSheet(targetLot, sources, migrateLinked);
+       });
+     }
+
+     function openMergeLotsSheet() {
+       const aggregateLots = lotsCache.filter((l) => (l.trackingMode || "individual") === "aggregate");
+       if (aggregateLots.length < 2) {
+         showToast("É preciso ao menos 2 lotes por cabeça para mesclar.");
+         return;
+       }
+       Sheet.open({ title: "Mesclar lotes", content: buildMergeFormHTML() });
+       wireMergeForm();
+     }
+
+     document.getElementById("lot-merge-btn").addEventListener("click", openMergeLotsSheet);
+
+     // --- Confirmação da mesclagem ---
+     function buildMergeConfirmHTML(targetLot, sourceLots, preview) {
+       const sourceNames = sourceLots.map((l) => escapeHtml(l.name)).join(", ");
+       return `
+         <div class="form-grid">
+           <div class="confirm-warning">
+             <span class="confirm-warning-icon" aria-hidden="true">${ICONS.warning}</span>
+             <p>
+               Os lotes <strong>${sourceNames}</strong> serão mesclados em <strong>${escapeHtml(targetLot.name)}</strong>.
+               O histórico de movimentações será preservado sob o lote de destino, e os lotes de origem serão excluídos.
+               Esta ação não pode ser desfeita.
+             </p>
+           </div>
+
+           <div class="live-calc">
+             <div class="live-calc-item">
+               <span class="live-calc-label">Total de cabeças</span>
+               <span class="live-calc-value">${preview.totalHeadcount} cabeças</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Peso médio</span>
+               <span class="live-calc-value">${formatKg(preview.newAvgWeightKg)} kg</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Custo médio</span>
+               <span class="live-calc-value">${formatBRL(preview.newAvgCostBRL)}</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Custo total</span>
+               <span class="live-calc-value">${formatBRL(preview.totalPurchaseCostBRL)}</span>
+             </div>
+           </div>
+
+           <div class="confirm-actions">
+             <button type="button" class="btn-secondary pressable" id="merge-confirm-cancel">Cancelar</button>
+             <button type="button" class="btn-primary pressable" id="merge-confirm-submit">Confirmar mesclagem</button>
+           </div>
+         </div>
+       `;
+     }
+
+     function wireMergeConfirmForm(targetLot, sourceLots, migrateLinked, preview) {
+       const cancelBtn = document.getElementById("merge-confirm-cancel");
+       const confirmBtn = document.getElementById("merge-confirm-submit");
+
+       cancelBtn.addEventListener("click", () => Sheet.close());
+
+       confirmBtn.addEventListener("click", async () => {
+         if (!currentUid) return;
+         confirmBtn.disabled = true;
+         cancelBtn.disabled = true;
+         confirmBtn.textContent = "Mesclando…";
+
+         try {
+           const sourceIds = sourceLots.map((l) => l.id);
+           const batch = writeBatch(db);
+
+           batch.update(doc(db, "lots", targetLot.id), {
+             headcount: preview.totalHeadcount,
+             avgWeightKg: preview.newAvgWeightKg,
+             avgPurchaseCostBRL: preview.newAvgCostBRL,
+             totalPurchaseCostBRL: preview.totalPurchaseCostBRL,
+             updatedAt: serverTimestamp(),
+           });
+
+           movementsCache
+             .filter((m) => sourceIds.includes(m.lotId))
+             .forEach((m) => batch.update(doc(db, "movements", m.id), { lotId: targetLot.id }));
+
+           if (migrateLinked) {
+             transactionsCache
+               .filter((t) => sourceIds.includes(t.linkedLotId))
+               .forEach((t) => batch.update(doc(db, "transactions", t.id), { linkedLotId: targetLot.id }));
+           }
+
+           sourceLots.forEach((l) => batch.delete(doc(db, "lots", l.id)));
+
+           await batch.commit();
+           showToast("Lotes mesclados.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao mesclar lotes:", err?.code ?? err);
+           showToast(
+             err?.code === "permission-denied" ? "Sem permissão para gravar." : "Não foi possível mesclar. Tente novamente."
+           );
+           confirmBtn.disabled = false;
+           cancelBtn.disabled = false;
+           confirmBtn.textContent = "Confirmar mesclagem";
+         }
+       });
+     }
+
+     function openMergeConfirmSheet(targetLot, sourceLots, migrateLinked) {
+       const preview = computeMergePreview([targetLot, ...sourceLots]);
+       Sheet.open({ title: "Confirmar mesclagem", content: buildMergeConfirmHTML(targetLot, sourceLots, preview) });
+       wireMergeConfirmForm(targetLot, sourceLots, migrateLinked, preview);
      }
 
      // =====================================================
