@@ -4773,15 +4773,15 @@
        wireLotForm(lot);
      }
 
-     // --- Excluir lote (limpa lotId dos animais vinculados) ---
+     // --- Excluir lote (cascata completa: animais, eventos, transações e movimentações) ---
      function buildDeleteLotHTML(lot, linkedCount) {
        return `
          <div class="form-grid">
            <div class="confirm-warning">
              <span class="confirm-warning-icon" aria-hidden="true">${ICONS.warning}</span>
-             <p>Tem certeza que deseja excluir o lote <strong>${escapeHtml(lot.name)}</strong>? Esta ação não pode ser desfeita.${
-               linkedCount > 0 ? ` ${linkedCount} animal(is) vinculado(s) ficará(ão) sem lote.` : ""
-             }</p>
+             <p>Tem certeza que deseja excluir o lote <strong>${escapeHtml(lot.name)}</strong>? Esta ação não pode ser desfeita e excluirá permanentemente${
+               linkedCount > 0 ? ` os ${linkedCount} animal(is) vinculado(s)` : " todos os animais vinculados"
+             } e todos os lançamentos financeiros, eventos e movimentações relacionados.</p>
            </div>
            <div class="confirm-actions">
              <button type="button" class="btn-secondary pressable" id="delete-lot-cancel">Cancelar</button>
@@ -4789,6 +4789,35 @@
            </div>
          </div>
        `;
+     }
+
+     // Collects every doc ref tied to a lot from the in-memory caches and
+     // deletes them via writeBatch, chunked to stay under Firestore's 500-op
+     // limit. The lot doc itself is deleted last, in the final chunk.
+     async function deleteLotCascade(lot) {
+       const linkedAnimals = animalsCache.filter((a) => a.lotId === lot.id);
+       const animalIds = new Set(linkedAnimals.map((a) => a.id));
+
+       const linkedEvents = eventsCache.filter((e) => animalIds.has(e.animalId));
+       const linkedTransactions = transactionsCache.filter(
+         (t) => t.linkedLotId === lot.id || animalIds.has(t.linkedAnimalId)
+       );
+       const linkedMovements = movementsCache.filter((m) => m.lotId === lot.id);
+
+       const refs = [
+         ...linkedAnimals.map((a) => doc(db, "animals", a.id)),
+         ...linkedEvents.map((e) => doc(db, "events", e.id)),
+         ...linkedTransactions.map((t) => doc(db, "transactions", t.id)),
+         ...linkedMovements.map((m) => doc(db, "movements", m.id)),
+         doc(db, "lots", lot.id),
+       ];
+
+       const CHUNK_SIZE = 450;
+       for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+         const batch = writeBatch(db);
+         refs.slice(i, i + CHUNK_SIZE).forEach((ref) => batch.delete(ref));
+         await batch.commit();
+       }
      }
 
      function wireDeleteLotForm(lot) {
@@ -4804,11 +4833,7 @@
          confirmBtn.textContent = "Excluindo…";
 
          try {
-           const linkedAnimals = animalsCache.filter((a) => a.lotId === lot.id);
-           await Promise.all(
-             linkedAnimals.map((a) => updateDoc(doc(db, "animals", a.id), { lotId: null, updatedAt: serverTimestamp() }))
-           );
-           await deleteDoc(doc(db, "lots", lot.id));
+           await deleteLotCascade(lot);
            showToast("Lote excluído.");
            Sheet.close();
          } catch (err) {
