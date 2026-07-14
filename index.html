@@ -1912,9 +1912,11 @@
       bezerra_lactente: "bezerra_desmamada",
     };
 
-    // animals.category → lots.category (SPEC 6.3), used when an animal form
-    // creates a lot inline ("+ Novo lote") without asking for its category.
-    const LOT_CATEGORY_BY_ANIMAL_CATEGORY = {
+    // CATTLE_CATEGORIES key (lots.entryCategory) → legacy coarse lots.category
+    // bucket, kept alongside entryCategory on every new lot so the existing
+    // lot-list chip/label rendering (lotCategoryLabel/LOT_CHIP_CLASS) keeps
+    // working without a migration.
+    const LOT_CATEGORY_BUCKET = {
       bezerro_lactente: "bezerros",
       bezerra_lactente: "bezerros",
       bezerro_desmamado: "recria",
@@ -2166,6 +2168,11 @@
       input.value = out;
     }
 
+    // UF: 2 letters, uppercased as typed.
+    function formatUFInput(input) {
+      input.value = input.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
+    }
+
     // Auto-detects landline (10 digits) vs. mobile (11 digits) as the user
     // types, rather than requiring an explicit toggle.
     function formatPhoneInput(input) {
@@ -2315,7 +2322,7 @@
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v9a6 6 0 0 1-12 0V4a1 1 0 0 1 1-1z"/><circle cx="12" cy="7" r="1.4"/></svg>
             </span>
             <h3>Nenhum animal ainda</h3>
-            <p>Toque em + para cadastrar.</p>
+            <p>Toque em + para criar um lote — adicione brincos nele para ver animais aqui.</p>
           </div>
         </li>
       `;
@@ -2372,7 +2379,7 @@
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
               </span>
               <h3>Nenhum lote ainda</h3>
-              <p>Lotes são criados a partir do cadastro de um animal.</p>
+              <p>Toque em + para criar um lote.</p>
             </div>
           </li>
         `;
@@ -2803,28 +2810,31 @@
      window.Sheet = Sheet;
 
      // =====================================================
-     // 7. FAB → "Novo animal" form (Rebanho tab only)
+     // 7. Animal edit form ("Editar" on an existing animal's action menu).
+     //    Creation now happens exclusively through the lot-centric "Novo
+     //    lote" sheet below (optional ear-tag rows) — there's no more
+     //    standalone "Novo animal" entry point.
      // =====================================================
      function buildAnimalFormHTML(lots, animal) {
        const lotOptions = lots
-         .map((l) => `<option value="${escapeHtml(l.id)}" ${animal?.lotId === l.id ? "selected" : ""}>${escapeHtml(l.name)}</option>`)
+         .map((l) => `<option value="${escapeHtml(l.id)}" ${animal.lotId === l.id ? "selected" : ""}>${escapeHtml(l.name)}</option>`)
          .join("");
-       const origin = animal?.acquisitionType || "purchased";
-       const priceValue = animal?.purchaseCostBRL != null ? formatBRL(animal.purchaseCostBRL) : "";
-       const initialSex = animal?.sex || "";
-       const initialCategory = resolveCategoryKey(animal?.category, animal?.sex) || "";
+       const origin = animal.acquisitionType || "purchased";
+       const priceValue = animal.purchaseCostBRL != null ? formatBRL(animal.purchaseCostBRL) : "";
+       const initialSex = animal.sex || "";
+       const initialCategory = resolveCategoryKey(animal.category, animal.sex) || "";
        return `
          <form id="animal-form" class="form-grid" novalidate>
            <div class="field">
              <label class="field-label" for="af-earTag">Brinco *</label>
-             <input class="input" id="af-earTag" type="text" placeholder="Ex: 1104" autocomplete="off" value="${animal ? escapeHtml(animal.earTag) : ""}" />
+             <input class="input" id="af-earTag" type="text" placeholder="Ex: 1104" autocomplete="off" value="${escapeHtml(animal.earTag)}" />
              <p class="field-error" id="af-earTag-error"></p>
            </div>
 
            <div class="field">
              <label class="field-label" for="af-sex">Sexo *</label>
              <select class="select" id="af-sex">
-               <option value="" ${animal ? "" : "selected"}>Selecione</option>
+               <option value="" ${initialSex ? "" : "selected"}>Selecione</option>
                <option value="F" ${initialSex === "F" ? "selected" : ""}>Fêmea</option>
                <option value="M" ${initialSex === "M" ? "selected" : ""}>Macho</option>
              </select>
@@ -2853,12 +2863,12 @@
            <div id="af-purchased-fields" class="form-grid" ${origin === "purchased" ? "" : "hidden"}>
              <div class="field">
                <label class="field-label" for="af-purchaseDate">Data da compra *</label>
-               <input class="input" id="af-purchaseDate" type="date" value="${toDateInputValue(animal?.purchaseDate)}" />
+               <input class="input" id="af-purchaseDate" type="date" value="${toDateInputValue(animal.purchaseDate)}" />
                <p class="field-error" id="af-purchaseDate-error"></p>
              </div>
              <div class="field">
                <label class="field-label" for="af-purchaseWeightKg">Peso na compra (kg) *</label>
-               <input class="input" id="af-purchaseWeightKg" type="number" min="0" step="0.1" placeholder="Ex: 220" value="${animal?.purchaseWeightKg ?? ""}" />
+               <input class="input" id="af-purchaseWeightKg" type="number" min="0" step="0.1" placeholder="Ex: 220" value="${animal.purchaseWeightKg ?? ""}" />
                <p class="field-error" id="af-purchaseWeightKg-error"></p>
              </div>
              <div class="field">
@@ -2871,7 +2881,7 @@
            <div id="af-born-fields" class="form-grid" ${origin === "born" ? "" : "hidden"}>
              <div class="field">
                <label class="field-label" for="af-birthDate">Data de nascimento *</label>
-               <input class="input" id="af-birthDate" type="date" value="${toDateInputValue(animal?.birthDate)}" />
+               <input class="input" id="af-birthDate" type="date" value="${toDateInputValue(animal.birthDate)}" />
                <p class="field-error" id="af-birthDate-error"></p>
              </div>
            </div>
@@ -2879,31 +2889,24 @@
            <div class="field">
              <label class="field-label" for="af-lot">Lote</label>
              <select class="select" id="af-lot">
-               <option value="" ${!animal?.lotId ? "selected" : ""}>Sem lote</option>
+               <option value="" ${!animal.lotId ? "selected" : ""}>Sem lote</option>
                ${lotOptions}
-               <option value="__new__">+ Novo lote…</option>
              </select>
-           </div>
-
-           <div class="field" id="af-newlot-field" hidden>
-             <label class="field-label" for="af-newlot-name">Nome do novo lote *</label>
-             <input class="input" id="af-newlot-name" type="text" placeholder="Ex: Lote 3 — Engorda" autocomplete="off" />
-             <p class="field-error" id="af-newlot-name-error"></p>
            </div>
 
            <div class="field">
              <label class="field-label" for="af-currentWeightKg">Peso atual (kg)</label>
-             <input class="input" id="af-currentWeightKg" type="number" min="0" step="0.1" placeholder="Ex: 320" value="${animal?.currentWeightKg ?? ""}" />
+             <input class="input" id="af-currentWeightKg" type="number" min="0" step="0.1" placeholder="Ex: 320" value="${animal.currentWeightKg ?? ""}" />
            </div>
 
            <div class="field">
              <label class="field-label" for="af-notes">Observações</label>
-             <textarea class="textarea" id="af-notes" placeholder="Opcional">${animal?.notes ? escapeHtml(animal.notes) : ""}</textarea>
+             <textarea class="textarea" id="af-notes" placeholder="Opcional">${animal.notes ? escapeHtml(animal.notes) : ""}</textarea>
            </div>
 
            <p class="field-error" id="af-form-error" role="alert"></p>
 
-           <button type="submit" class="btn-primary pressable" id="af-submit">${animal ? "Salvar alterações" : "Cadastrar animal"}</button>
+           <button type="submit" class="btn-primary pressable" id="af-submit">Salvar alterações</button>
          </form>
        `;
      }
@@ -2920,12 +2923,11 @@
        if (err) err.textContent = message;
      }
 
-     function wireAnimalForm(animal = null) {
+     function wireAnimalForm(animal) {
        const form = document.getElementById("animal-form");
        const purchasedFields = document.getElementById("af-purchased-fields");
        const bornFields = document.getElementById("af-born-fields");
        const lotSelect = document.getElementById("af-lot");
-       const newLotField = document.getElementById("af-newlot-field");
        const priceInput = document.getElementById("af-purchasePriceBRL");
        const submitBtn = document.getElementById("af-submit");
        const formError = document.getElementById("af-form-error");
@@ -2933,7 +2935,7 @@
        const categorySelect = document.getElementById("af-category");
        const allFieldIds = [
          "af-earTag", "af-category", "af-sex", "af-purchaseDate", "af-purchaseWeightKg",
-         "af-purchasePriceBRL", "af-birthDate", "af-newlot-name",
+         "af-purchasePriceBRL", "af-birthDate",
        ];
 
        function originValue() {
@@ -2957,10 +2959,6 @@
            <option value="" selected>${sex ? "Selecione" : "Selecione o sexo primeiro"}</option>
            ${sex ? categoriesForSex(sex).map((c) => `<option value="${c.value}">${c.label}</option>`).join("") : ""}
          `;
-       });
-
-       lotSelect.addEventListener("change", () => {
-         newLotField.hidden = lotSelect.value !== "__new__";
        });
 
        priceInput.addEventListener("input", () => formatCurrencyInput(priceInput));
@@ -3005,12 +3003,7 @@
            if (!birthDate) fail("af-birthDate", "Informe a data de nascimento.");
          }
 
-         let lotId = lotSelect.value || null;
-         let newLotName = "";
-         if (lotId === "__new__") {
-           newLotName = document.getElementById("af-newlot-name").value.trim();
-           if (!newLotName) fail("af-newlot-name", "Informe o nome do lote.");
-         }
+         const lotId = lotSelect.value || null;
 
          const currentWeightKgRaw = document.getElementById("af-currentWeightKg").value;
          const currentWeightKg = currentWeightKgRaw ? parseFloat(currentWeightKgRaw) : null;
@@ -3022,78 +3015,24 @@
          submitBtn.textContent = "Salvando…";
 
          try {
-           if (lotId === "__new__") {
-             const lotRef = await addDoc(collection(db, "lots"), {
-               ownerId: currentUid,
-               name: newLotName,
-               category: LOT_CATEGORY_BY_ANIMAL_CATEGORY[category] || "outro",
-               areaHa: null,
-               createdAt: serverTimestamp(),
-               updatedAt: serverTimestamp(),
-             });
-             lotId = lotRef.id;
-           }
-
-           if (animal) {
-             // Editar: updateDoc on the existing document — never recreate.
-             // Lifecycle fields (status/sale/death) are owned by their own
-             // sheets (Vender, Registrar morte, ...), not this form.
-             await updateDoc(doc(db, "animals", animal.id), {
-               earTag,
-               sex,
-               category,
-               lotId: lotId || null,
-               birthDate: origin === "born" ? new Date(`${birthDate}T00:00:00`) : null,
-               acquisitionType: origin,
-               purchaseDate: origin === "purchased" ? new Date(`${purchaseDate}T00:00:00`) : null,
-               purchaseWeightKg: origin === "purchased" ? purchaseWeightKg : null,
-               purchaseCostBRL: origin === "purchased" ? purchasePriceBRL : null,
-               currentWeightKg,
-               notes,
-               updatedAt: serverTimestamp(),
-             });
-             showToast("Animal atualizado.");
-           } else {
-             const animalRef = await addDoc(collection(db, "animals"), {
-               ownerId: currentUid,
-               earTag,
-               sex,
-               breed: null,
-               category,
-               lotId: lotId || null,
-               birthDate: origin === "born" ? new Date(`${birthDate}T00:00:00`) : null,
-               birthDateIsEstimated: false,
-               damAnimalId: null,
-               acquisitionType: origin,
-               purchaseDate: origin === "purchased" ? new Date(`${purchaseDate}T00:00:00`) : null,
-               purchaseWeightKg: origin === "purchased" ? purchaseWeightKg : null,
-               purchaseCostBRL: origin === "purchased" ? purchasePriceBRL : null,
-               currentWeightKg,
-               notes,
-               status: "active",
-               saleDate: null,
-               saleArrobas: null,
-               salePricePerArrobaBRL: null,
-               saleRevenueBRL: null,
-               deathDate: null,
-               deathCause: null,
-               createdAt: serverTimestamp(),
-               updatedAt: serverTimestamp(),
-             });
-
-             if (origin === "purchased") {
-               await addDoc(collection(db, "events"), {
-                 ownerId: currentUid,
-                 type: "purchase",
-                 animalId: animalRef.id,
-                 lotId: lotId || null,
-                 date: new Date(`${purchaseDate}T00:00:00`),
-                 payload: { weightKg: purchaseWeightKg, costBRL: purchasePriceBRL },
-                 createdAt: serverTimestamp(),
-               });
-             }
-             showToast("Animal cadastrado com sucesso.");
-           }
+           // Editar: updateDoc on the existing document — never recreate.
+           // Lifecycle fields (status/sale/death) are owned by their own
+           // sheets (Vender, Registrar morte, ...), not this form.
+           await updateDoc(doc(db, "animals", animal.id), {
+             earTag,
+             sex,
+             category,
+             lotId,
+             birthDate: origin === "born" ? new Date(`${birthDate}T00:00:00`) : null,
+             acquisitionType: origin,
+             purchaseDate: origin === "purchased" ? new Date(`${purchaseDate}T00:00:00`) : null,
+             purchaseWeightKg: origin === "purchased" ? purchaseWeightKg : null,
+             purchaseCostBRL: origin === "purchased" ? purchasePriceBRL : null,
+             currentWeightKg,
+             notes,
+             updatedAt: serverTimestamp(),
+           });
+           showToast("Animal atualizado.");
            Sheet.close();
          } catch (err) {
            console.warn("[Agro Connect] Falha ao salvar animal:", err?.code ?? err);
@@ -3103,17 +3042,9 @@
                : "Não foi possível salvar. Tente novamente."
            );
            submitBtn.disabled = false;
-           submitBtn.textContent = animal ? "Salvar alterações" : "Cadastrar animal";
+           submitBtn.textContent = "Salvar alterações";
          }
        });
-     }
-
-     function openNewAnimalSheet() {
-       Sheet.open({
-         title: "Novo animal",
-         content: buildAnimalFormHTML(lotsCache, null),
-       });
-       wireAnimalForm(null);
      }
 
      function openEditAnimalSheet(animal) {
@@ -3127,7 +3058,7 @@
      fabBtn.addEventListener("click", () => {
        const activeView = views.find((v) => !v.hidden);
        if (activeView?.id === "view-rebanho") {
-         openNewAnimalSheet();
+         openNewLotSheet();
        } else if (activeView?.id === "view-financeiro") {
          openNewTransactionSheet();
        } else {
@@ -4315,18 +4246,16 @@
      }
 
      // =====================================================
-     // 7e2. Lotes — "Novo lote" (aggregate purchase by headcount, no ear
-     //      tags). The default entry path for most purchases — the
-     //      per-animal "Novo animal" flow above stays untouched.
+     // 7e2. Lotes — unified "Novo lote" sheet (FAB "+" and the "+ Novo lote"
+     //      button both open this). Every lot is created here: Compra or
+     //      Nascimento, always tied to a property, sex + taxonomy category,
+     //      headcount as the source of truth. Ear tags are an optional
+     //      subset — tagging 0..headcount animals never changes headcount.
      // =====================================================
      function buildNewLotFormHTML() {
-       const categoryOptions = Object.entries(lotCategoryLabel)
-         .map(([value, label]) => `<option value="${value}">${label}</option>`)
-         .join("");
        const propertyOptions = propertiesCache
          .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
          .join("");
-       const defaultYieldPct = CARCASS_YIELD * 100;
 
        return `
          <form id="nl-form" class="form-grid" novalidate>
@@ -4337,21 +4266,23 @@
            </div>
 
            <div class="field">
-             <label class="field-label" for="nl-category">Categoria *</label>
-             <select class="select" id="nl-category">
-               <option value="" selected>Selecione</option>
-               ${categoryOptions}
-             </select>
-             <p class="field-error" id="nl-category-error"></p>
+             <span class="field-label">Origem *</span>
+             <div class="segmented" role="radiogroup" aria-label="Origem do lote">
+               <input type="radio" id="nl-origin-purchased" name="nl-origin" value="purchased" checked />
+               <label for="nl-origin-purchased">Compra</label>
+               <input type="radio" id="nl-origin-born" name="nl-origin" value="born" />
+               <label for="nl-origin-born">Nascimento</label>
+             </div>
            </div>
 
            <div class="field">
-             <label class="field-label" for="nl-property">Propriedade</label>
+             <label class="field-label" for="nl-property">Propriedade *</label>
              <select class="select" id="nl-property">
-               <option value="" selected>Sem propriedade</option>
+               <option value="" selected>Selecione</option>
                ${propertyOptions}
                <option value="__new__">+ Nova propriedade…</option>
              </select>
+             <p class="field-error" id="nl-property-error"></p>
            </div>
            <div class="field" id="nl-newproperty-field" hidden>
              <label class="field-label" for="nl-newproperty-name">Nome da nova propriedade *</label>
@@ -4359,21 +4290,26 @@
              <p class="field-error" id="nl-newproperty-name-error"></p>
            </div>
 
-           <div class="field autocomplete">
-             <label class="field-label" for="nl-produtor">Produtor</label>
-             <input class="input" id="nl-produtor" type="text" placeholder="Nome do produtor" autocomplete="off" />
-             <ul class="autocomplete-list" id="nl-produtor-list" hidden></ul>
-             <div class="supplier-picked" id="nl-produtor-picked" hidden>
-               <div class="supplier-picked-info">
-                 <strong id="nl-produtor-picked-name"></strong>
-                 <span id="nl-produtor-picked-doc"></span>
-               </div>
-               <button type="button" class="supplier-picked-clear pressable" id="nl-produtor-clear">Trocar</button>
-             </div>
+           <div class="field">
+             <label class="field-label" for="nl-sex">Sexo *</label>
+             <select class="select" id="nl-sex">
+               <option value="" selected>Selecione</option>
+               <option value="F">Fêmea</option>
+               <option value="M">Macho</option>
+             </select>
+             <p class="field-error" id="nl-sex-error"></p>
            </div>
 
            <div class="field">
-             <label class="field-label" for="nl-acquisitionDate">Data da aquisição *</label>
+             <label class="field-label" for="nl-category">Categoria *</label>
+             <select class="select" id="nl-category" disabled>
+               <option value="" selected>Selecione o sexo primeiro</option>
+             </select>
+             <p class="field-error" id="nl-category-error"></p>
+           </div>
+
+           <div class="field">
+             <label class="field-label" for="nl-acquisitionDate">Data de entrada *</label>
              <input class="input" id="nl-acquisitionDate" type="date" value="${toDateInputValue(new Date())}" />
              <p class="field-error" id="nl-acquisitionDate-error"></p>
            </div>
@@ -4385,92 +4321,132 @@
            </div>
 
            <div class="field">
-             <span class="field-label">Peso</span>
-             <div class="segmented" role="radiogroup" aria-label="Modo de peso informado">
-               <input type="radio" id="nl-weightmode-avg" name="nl-weightmode" value="avg" checked />
-               <label for="nl-weightmode-avg">Peso médio</label>
-               <input type="radio" id="nl-weightmode-total" name="nl-weightmode" value="total" />
-               <label for="nl-weightmode-total">Peso total</label>
-             </div>
-           </div>
-           <div class="field" id="nl-avgweight-field">
-             <label class="field-label" for="nl-avgWeightKg">Peso médio (kg) *</label>
+             <label class="field-label" for="nl-avgWeightKg">Peso na entrada (kg) *</label>
              <input class="input" id="nl-avgWeightKg" type="number" min="0" step="1" placeholder="Ex: 210" />
              <p class="field-error" id="nl-avgWeightKg-error"></p>
            </div>
-           <div class="field" id="nl-totalweight-field" hidden>
-             <label class="field-label" for="nl-totalWeightKg">Peso total (kg) *</label>
-             <input class="input" id="nl-totalWeightKg" type="number" min="0" step="1" placeholder="Ex: 29400" />
-             <p class="field-error" id="nl-totalWeightKg-error"></p>
-           </div>
 
            <div class="field">
-             <label class="field-label" for="nl-carcassYield">Aproveitamento de carcaça (%) *</label>
-             <input class="input" id="nl-carcassYield" type="number" min="0.1" max="100" step="0.1" value="${defaultYieldPct}" />
-             <p class="field-error" id="nl-carcassYield-error"></p>
+             <label class="field-label" for="nl-birthDateRef">Data de nascimento (ref.)</label>
+             <input class="input" id="nl-birthDateRef" type="date" />
            </div>
-
-           <div class="live-calc">
-             <div class="live-calc-item">
-               <span class="live-calc-label">@ por cabeça</span>
-               <span class="live-calc-value" id="nl-calc-perhead">—</span>
-             </div>
-             <div class="live-calc-item">
-               <span class="live-calc-label">@ total</span>
-               <span class="live-calc-value" id="nl-calc-total">—</span>
-             </div>
-           </div>
-
-           <div class="field">
-             <span class="field-label">Modo de preço *</span>
-             <div class="segmented" role="radiogroup" aria-label="Modo de preço">
-               <input type="radio" id="nl-pricemode-head" name="nl-pricemode" value="per_head" checked />
-               <label for="nl-pricemode-head">Por cabeça</label>
-               <input type="radio" id="nl-pricemode-kg" name="nl-pricemode" value="per_kg" />
-               <label for="nl-pricemode-kg">Por kg</label>
-               <input type="radio" id="nl-pricemode-lump" name="nl-pricemode" value="lump_sum" />
-               <label for="nl-pricemode-lump">Valor total</label>
-             </div>
-           </div>
-           <div class="field" id="nl-price-head-field">
-             <label class="field-label" for="nl-pricePerHead">Preço por cabeça (R$) *</label>
-             <input class="input" id="nl-pricePerHead" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
-             <p class="field-error" id="nl-pricePerHead-error"></p>
-           </div>
-           <div class="field" id="nl-price-kg-field" hidden>
-             <label class="field-label" for="nl-pricePerKg">Preço por kg (R$) *</label>
-             <input class="input" id="nl-pricePerKg" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
-             <p class="field-error" id="nl-pricePerKg-error"></p>
-           </div>
-           <div class="field" id="nl-price-lump-field" hidden>
-             <label class="field-label" for="nl-priceLump">Valor total (R$) *</label>
-             <input class="input" id="nl-priceLump" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
-             <p class="field-error" id="nl-priceLump-error"></p>
-           </div>
-
-           <div class="field">
-             <span class="field-label">Total da compra</span>
-             <p class="stat-value" id="nl-calc-purchase-total" style="font-size: var(--fs-lg);">R$ 0,00</p>
-           </div>
-
-           <div class="field">
-             <label class="field-label" for="nl-freight">Frete (R$)</label>
-             <input class="input" id="nl-freight" type="text" inputmode="decimal" placeholder="R$ 0,00 (opcional)" autocomplete="off" />
-           </div>
-
-           <div class="field">
-             <label class="field-label" for="nl-gta">GTA (em breve)</label>
-             <input class="input" id="nl-gta" type="text" placeholder="Disponível em breve" disabled />
-           </div>
-
-           <label class="field checkbox-field" for="nl-gen-purchase-expense">
-             <input type="checkbox" id="nl-gen-purchase-expense" checked />
-             <span class="field-label">Gerar despesa da compra</span>
+           <label class="field checkbox-field" id="nl-birthDateRefEstimated-field" for="nl-birthDateRefEstimated" hidden>
+             <input type="checkbox" id="nl-birthDateRefEstimated" />
+             <span class="field-label">Data estimada</span>
            </label>
-           <label class="field checkbox-field" id="nl-gen-freight-expense-field" for="nl-gen-freight-expense" hidden>
-             <input type="checkbox" id="nl-gen-freight-expense" checked />
-             <span class="field-label">Gerar despesa do frete</span>
-           </label>
+
+           <div class="field">
+             <button type="button" class="btn-inline pressable" id="nl-tags-toggle">+ Adicionar brincos (opcional)</button>
+           </div>
+           <div class="form-grid" id="nl-tags-container" hidden>
+             <p class="field-hint">Brincos são opcionais — identificam um subconjunto do lote e nunca alteram a quantidade de cabeças.</p>
+             <ul id="nl-tags-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-3);"></ul>
+             <button type="button" class="btn-secondary pressable" id="nl-tags-add">+ Adicionar brinco</button>
+             <p class="field-hint" id="nl-tags-hint">0 brinco(s) adicionados.</p>
+           </div>
+
+           <div id="nl-purchase-fields" class="form-grid">
+             <div class="field autocomplete">
+               <label class="field-label" for="nl-produtor">Nome do produtor</label>
+               <input class="input" id="nl-produtor" type="text" placeholder="Opcional" autocomplete="off" />
+               <ul class="autocomplete-list" id="nl-produtor-list" hidden></ul>
+               <div class="supplier-picked" id="nl-produtor-picked" hidden>
+                 <div class="supplier-picked-info">
+                   <strong id="nl-produtor-picked-name"></strong>
+                   <span id="nl-produtor-picked-doc"></span>
+                 </div>
+                 <button type="button" class="supplier-picked-clear pressable" id="nl-produtor-clear">Trocar</button>
+               </div>
+             </div>
+
+             <div class="form-grid" id="nl-seller-details">
+               <div class="field">
+                 <label class="field-label" for="nl-seller-fazenda">Propriedade do vendedor</label>
+                 <input class="input" id="nl-seller-fazenda" type="text" placeholder="Opcional" autocomplete="off" />
+               </div>
+
+               <div class="field">
+                 <span class="field-label">Documento do vendedor</span>
+                 <div class="segmented" role="radiogroup" aria-label="Tipo de documento do vendedor">
+                   <input type="radio" id="nl-seller-doctype-none" name="nl-seller-doctype" value="none" checked />
+                   <label for="nl-seller-doctype-none">Nenhum</label>
+                   <input type="radio" id="nl-seller-doctype-cnpj" name="nl-seller-doctype" value="cnpj" />
+                   <label for="nl-seller-doctype-cnpj">CNPJ</label>
+                   <input type="radio" id="nl-seller-doctype-cpf" name="nl-seller-doctype" value="cpf" />
+                   <label for="nl-seller-doctype-cpf">CPF</label>
+                 </div>
+               </div>
+
+               <div class="form-grid" id="nl-seller-cnpj-fields" hidden>
+                 <div class="field">
+                   <span class="field-label">Formato do CNPJ</span>
+                   <div class="segmented" role="radiogroup" aria-label="Formato do CNPJ do vendedor">
+                     <input type="radio" id="nl-seller-cnpj-format-numeric" name="nl-seller-cnpj-format" value="numeric" checked />
+                     <label for="nl-seller-cnpj-format-numeric">Numérico</label>
+                     <input type="radio" id="nl-seller-cnpj-format-alnum" name="nl-seller-cnpj-format" value="alnum" />
+                     <label for="nl-seller-cnpj-format-alnum">Alfanumérico</label>
+                   </div>
+                 </div>
+                 <div class="field">
+                   <label class="field-label" for="nl-seller-cnpj">CNPJ</label>
+                   <input class="input" id="nl-seller-cnpj" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0000-00" />
+                   <p class="field-error" id="nl-seller-cnpj-error"></p>
+                 </div>
+               </div>
+
+               <div class="field" id="nl-seller-cpf-field" hidden>
+                 <label class="field-label" for="nl-seller-cpf">CPF</label>
+                 <input class="input" id="nl-seller-cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" />
+                 <p class="field-error" id="nl-seller-cpf-error"></p>
+               </div>
+
+               <div class="field">
+                 <label class="field-label" for="nl-seller-municipio">Município</label>
+                 <input class="input" id="nl-seller-municipio" type="text" placeholder="Opcional" autocomplete="off" />
+               </div>
+               <div class="field">
+                 <label class="field-label" for="nl-seller-estado">Estado (UF)</label>
+                 <input class="input" id="nl-seller-estado" type="text" maxlength="2" placeholder="Ex: MG" autocomplete="off" />
+               </div>
+             </div>
+
+             <div class="field">
+               <span class="field-label">Modo de preço *</span>
+               <div class="segmented" role="radiogroup" aria-label="Modo de preço">
+                 <input type="radio" id="nl-pricemode-head" name="nl-pricemode" value="per_head" checked />
+                 <label for="nl-pricemode-head">Por cabeça</label>
+                 <input type="radio" id="nl-pricemode-kg" name="nl-pricemode" value="per_kg" />
+                 <label for="nl-pricemode-kg">Por kg</label>
+                 <input type="radio" id="nl-pricemode-lump" name="nl-pricemode" value="lump_sum" />
+                 <label for="nl-pricemode-lump">Valor total</label>
+               </div>
+             </div>
+             <p class="field-hint" id="nl-price-hint">Informe o preço por cabeça ou o valor total — o outro é calculado automaticamente.</p>
+             <div class="field" id="nl-price-unit-field">
+               <label class="field-label" id="nl-priceUnit-label" for="nl-priceUnit">Preço por cabeça (R$)</label>
+               <input class="input" id="nl-priceUnit" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
+               <p class="field-error" id="nl-priceUnit-error"></p>
+             </div>
+             <div class="field">
+               <label class="field-label" for="nl-priceTotal">Valor total (R$)</label>
+               <input class="input" id="nl-priceTotal" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
+               <p class="field-error" id="nl-priceTotal-error"></p>
+             </div>
+
+             <div class="field">
+               <label class="field-label" for="nl-freight">Frete (R$)</label>
+               <input class="input" id="nl-freight" type="text" inputmode="decimal" placeholder="R$ 0,00 (opcional)" autocomplete="off" />
+             </div>
+
+             <label class="field checkbox-field" for="nl-gen-purchase-expense">
+               <input type="checkbox" id="nl-gen-purchase-expense" checked />
+               <span class="field-label">Gerar despesa da compra</span>
+             </label>
+             <label class="field checkbox-field" id="nl-gen-freight-expense-field" for="nl-gen-freight-expense" hidden>
+               <input type="checkbox" id="nl-gen-freight-expense" checked />
+               <span class="field-label">Gerar despesa do frete</span>
+             </label>
+           </div>
 
            <p class="field-error" id="nl-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="nl-submit">Criar lote</button>
@@ -4482,27 +4458,38 @@
        const form = document.getElementById("nl-form");
        const propertySelect = document.getElementById("nl-property");
        const newPropertyField = document.getElementById("nl-newproperty-field");
+       const sexSelect = document.getElementById("nl-sex");
+       const categorySelect = document.getElementById("nl-category");
+       const headcountInput = document.getElementById("nl-headcount");
+       const avgWeightInput = document.getElementById("nl-avgWeightKg");
+       const birthDateRefInput = document.getElementById("nl-birthDateRef");
+       const birthDateRefEstimatedField = document.getElementById("nl-birthDateRefEstimated-field");
+       const birthDateRefEstimatedCheckbox = document.getElementById("nl-birthDateRefEstimated");
+       const tagsToggle = document.getElementById("nl-tags-toggle");
+       const tagsContainer = document.getElementById("nl-tags-container");
+       const tagsList = document.getElementById("nl-tags-list");
+       const tagsAddBtn = document.getElementById("nl-tags-add");
+       const tagsHint = document.getElementById("nl-tags-hint");
+       const purchaseFields = document.getElementById("nl-purchase-fields");
        const produtorInput = document.getElementById("nl-produtor");
        const produtorList = document.getElementById("nl-produtor-list");
        const produtorPicked = document.getElementById("nl-produtor-picked");
        const produtorPickedName = document.getElementById("nl-produtor-picked-name");
        const produtorPickedDoc = document.getElementById("nl-produtor-picked-doc");
        const produtorClearBtn = document.getElementById("nl-produtor-clear");
-       const headcountInput = document.getElementById("nl-headcount");
-       const avgWeightField = document.getElementById("nl-avgweight-field");
-       const totalWeightField = document.getElementById("nl-totalweight-field");
-       const avgWeightInput = document.getElementById("nl-avgWeightKg");
-       const totalWeightInput = document.getElementById("nl-totalWeightKg");
-       const carcassYieldInput = document.getElementById("nl-carcassYield");
-       const calcPerHeadEl = document.getElementById("nl-calc-perhead");
-       const calcTotalEl = document.getElementById("nl-calc-total");
-       const priceHeadField = document.getElementById("nl-price-head-field");
-       const priceKgField = document.getElementById("nl-price-kg-field");
-       const priceLumpField = document.getElementById("nl-price-lump-field");
-       const pricePerHeadInput = document.getElementById("nl-pricePerHead");
-       const pricePerKgInput = document.getElementById("nl-pricePerKg");
-       const priceLumpInput = document.getElementById("nl-priceLump");
-       const purchaseTotalEl = document.getElementById("nl-calc-purchase-total");
+       const sellerDetails = document.getElementById("nl-seller-details");
+       const sellerFazendaInput = document.getElementById("nl-seller-fazenda");
+       const sellerCnpjFields = document.getElementById("nl-seller-cnpj-fields");
+       const sellerCpfField = document.getElementById("nl-seller-cpf-field");
+       const sellerCnpjInput = document.getElementById("nl-seller-cnpj");
+       const sellerCpfInput = document.getElementById("nl-seller-cpf");
+       const sellerMunicipioInput = document.getElementById("nl-seller-municipio");
+       const sellerEstadoInput = document.getElementById("nl-seller-estado");
+       const priceUnitField = document.getElementById("nl-price-unit-field");
+       const priceHintEl = document.getElementById("nl-price-hint");
+       const priceUnitLabel = document.getElementById("nl-priceUnit-label");
+       const priceUnitInput = document.getElementById("nl-priceUnit");
+       const priceTotalInput = document.getElementById("nl-priceTotal");
        const freightInput = document.getElementById("nl-freight");
        const genPurchaseExpenseCheckbox = document.getElementById("nl-gen-purchase-expense");
        const genFreightExpenseField = document.getElementById("nl-gen-freight-expense-field");
@@ -4513,18 +4500,93 @@
        let selectedSupplierId = null;
 
        const allFieldIds = [
-         "nl-name", "nl-category", "nl-newproperty-name", "nl-acquisitionDate", "nl-headcount",
-         "nl-avgWeightKg", "nl-totalWeightKg", "nl-carcassYield",
-         "nl-pricePerHead", "nl-pricePerKg", "nl-priceLump",
+         "nl-name", "nl-property", "nl-newproperty-name", "nl-sex", "nl-category",
+         "nl-acquisitionDate", "nl-headcount", "nl-avgWeightKg",
+         "nl-seller-cnpj", "nl-seller-cpf", "nl-priceUnit", "nl-priceTotal",
        ];
 
-       // --- Propriedade: "+ Nova propriedade…" reveals an inline name field,
-       //     same pattern as the animal form's "+ Novo lote…" ---
+       // --- Origem: Compra shows seller + price + freight; Nascimento hides them ---
+       function originValue() {
+         return form.querySelector('input[name="nl-origin"]:checked').value;
+       }
+       function syncOrigin() {
+         purchaseFields.hidden = originValue() !== "purchased";
+       }
+       form.querySelectorAll('input[name="nl-origin"]').forEach((r) => r.addEventListener("change", syncOrigin));
+       syncOrigin();
+
+       // --- Categoria options are scoped to the chosen sex (CATTLE_CATEGORIES) ---
+       sexSelect.addEventListener("change", () => {
+         const sex = sexSelect.value;
+         categorySelect.disabled = !sex;
+         categorySelect.innerHTML = `
+           <option value="" selected>${sex ? "Selecione" : "Selecione o sexo primeiro"}</option>
+           ${sex ? categoriesForSex(sex).map((c) => `<option value="${c.value}">${c.label}</option>`).join("") : ""}
+         `;
+       });
+
+       // --- Propriedade: "+ Nova propriedade…" reveals an inline name field ---
        propertySelect.addEventListener("change", () => {
          newPropertyField.hidden = propertySelect.value !== "__new__";
        });
 
-       // --- Produtor autocomplete over suppliersCache (Phase B) ---
+       // --- Data de nascimento (ref.): "estimada" only makes sense once a date is set ---
+       birthDateRefInput.addEventListener("change", () => {
+         birthDateRefEstimatedField.hidden = !birthDateRefInput.value;
+         if (!birthDateRefInput.value) birthDateRefEstimatedCheckbox.checked = false;
+       });
+
+       // --- Brincos (opcional): collapsible list of up-to-`headcount` ear-tag rows ---
+       let tagRowSeq = 0;
+       function tagRowCount() {
+         return tagsList.querySelectorAll("[data-tag-row]").length;
+       }
+       function syncTagsAddState() {
+         const headcount = parseInt(headcountInput.value, 10);
+         const capped = Number.isInteger(headcount) && headcount > 0 && tagRowCount() >= headcount;
+         tagsAddBtn.disabled = capped;
+         const count = tagRowCount();
+         tagsHint.textContent = Number.isInteger(headcount) && headcount > 0
+           ? `${count} de ${headcount} brinco(s) adicionados.`
+           : `${count} brinco(s) adicionados.`;
+       }
+       function addTagRow() {
+         const headcount = parseInt(headcountInput.value, 10);
+         if (Number.isInteger(headcount) && headcount > 0 && tagRowCount() >= headcount) return;
+         tagRowSeq += 1;
+         const li = document.createElement("li");
+         li.className = "field";
+         li.dataset.tagRow = "";
+         li.innerHTML = `
+           <label class="field-label" for="nl-tag-${tagRowSeq}">Brinco</label>
+           <div style="display: flex; gap: var(--space-2);">
+             <input class="input" id="nl-tag-${tagRowSeq}" type="text" placeholder="Ex: 1104" autocomplete="off" />
+             <button type="button" class="btn-secondary pressable" data-remove-tag aria-label="Remover brinco">Remover</button>
+           </div>
+         `;
+         tagsList.appendChild(li);
+         syncTagsAddState();
+         li.querySelector("input").focus();
+       }
+       tagsToggle.addEventListener("click", () => {
+         const willShow = tagsContainer.hidden;
+         tagsContainer.hidden = !willShow;
+         tagsToggle.textContent = willShow ? "− Ocultar brincos" : "+ Adicionar brincos (opcional)";
+         if (willShow && !tagRowCount()) addTagRow();
+       });
+       tagsAddBtn.addEventListener("click", addTagRow);
+       tagsList.addEventListener("click", (e) => {
+         const btn = e.target.closest("[data-remove-tag]");
+         if (!btn) return;
+         btn.closest("[data-tag-row]").remove();
+         syncTagsAddState();
+       });
+       headcountInput.addEventListener("input", syncTagsAddState);
+       syncTagsAddState();
+
+       // --- Produtor autocomplete over suppliersCache; picking a supplier
+       //     hides the "new supplier" detail fields since that data already
+       //     exists on the picked record ---
        function hideSuggestions() {
          produtorList.hidden = true;
          produtorList.innerHTML = "";
@@ -4533,6 +4595,7 @@
          selectedSupplierId = supplier.id;
          produtorInput.hidden = true;
          produtorPicked.hidden = false;
+         sellerDetails.hidden = true;
          produtorPickedName.textContent = supplier.name;
          const docInfo = supplier.docType === "cnpj" && supplier.cnpj
            ? `CNPJ ${supplier.cnpj}`
@@ -4546,6 +4609,7 @@
          selectedSupplierId = null;
          produtorInput.hidden = false;
          produtorPicked.hidden = true;
+         sellerDetails.hidden = false;
          produtorInput.value = "";
          produtorInput.focus();
        }
@@ -4584,88 +4648,90 @@
          if (!e.target.closest(".autocomplete")) hideSuggestions();
        });
 
-       // --- Weight: "Peso médio" vs. "Peso total" (→ avgWeightKg derived) ---
-       function weightModeValue() {
-         return form.querySelector('input[name="nl-weightmode"]:checked').value;
+       // --- Seller document type (none/CNPJ/CPF), same masks as the produtor sheet ---
+       function sellerDocTypeValue() {
+         return form.querySelector('input[name="nl-seller-doctype"]:checked').value;
        }
-       function currentAvgWeightKg() {
-         const headcount = parseInt(headcountInput.value, 10);
-         if (weightModeValue() === "avg") {
-           const v = parseFloat(avgWeightInput.value);
-           return Number.isFinite(v) ? v : null;
-         }
-         const total = parseFloat(totalWeightInput.value);
-         if (!Number.isFinite(total) || !Number.isInteger(headcount) || headcount <= 0) return null;
-         return Math.round(total / headcount);
+       function sellerCnpjFormatValue() {
+         return form.querySelector('input[name="nl-seller-cnpj-format"]:checked').value;
        }
-       function syncWeightMode() {
-         const mode = weightModeValue();
-         avgWeightField.hidden = mode !== "avg";
-         totalWeightField.hidden = mode !== "total";
-         recomputeAll();
+       function syncSellerDocType() {
+         const docType = sellerDocTypeValue();
+         sellerCnpjFields.hidden = docType !== "cnpj";
+         sellerCpfField.hidden = docType !== "cpf";
        }
-       form.querySelectorAll('input[name="nl-weightmode"]').forEach((r) => r.addEventListener("change", syncWeightMode));
+       form.querySelectorAll('input[name="nl-seller-doctype"]').forEach((r) => r.addEventListener("change", syncSellerDocType));
+       syncSellerDocType();
 
-       // --- Live @ estimate (per head × headcount) ---
-       function recomputeArrobas() {
-         const headcount = parseInt(headcountInput.value, 10);
-         const avgWeightKg = currentAvgWeightKg();
-         const yieldPct = parseFloat(carcassYieldInput.value) / 100;
-         if (!Number.isFinite(avgWeightKg) || !Number.isFinite(yieldPct)) {
-           calcPerHeadEl.textContent = "—";
-           calcTotalEl.textContent = "—";
-           return;
-         }
-         const perHead = (avgWeightKg * yieldPct) / KG_PER_ARROBA;
-         calcPerHeadEl.textContent = `${formatArrobas(perHead)} @`;
-         calcTotalEl.textContent = Number.isInteger(headcount) && headcount > 0
-           ? `${formatArrobas(headcount * perHead)} @`
-           : "—";
+       function applySellerCnpjMask() {
+         if (sellerCnpjFormatValue() === "alnum") formatCNPJAlnumInput(sellerCnpjInput);
+         else formatCNPJNumericInput(sellerCnpjInput);
        }
+       form.querySelectorAll('input[name="nl-seller-cnpj-format"]').forEach((r) => r.addEventListener("change", () => {
+         sellerCnpjInput.value = "";
+         sellerCnpjInput.focus();
+       }));
+       sellerCnpjInput.addEventListener("input", applySellerCnpjMask);
+       sellerCpfInput.addEventListener("input", () => formatCPFInput(sellerCpfInput));
+       sellerEstadoInput.addEventListener("input", () => formatUFInput(sellerEstadoInput));
 
-       // --- Price mode: per_head | per_kg | lump_sum → live purchase total ---
+       // --- Preço: unit ⇄ total, bidirectionally driven by Quantidade
+       //     (and, for "por kg", also by Peso na entrada). "Valor total" is
+       //     the one field common to all 3 modes; "lump_sum" uses it alone. ---
        function priceModeValue() {
          return form.querySelector('input[name="nl-pricemode"]:checked').value;
        }
+       function qtyValue() {
+         const q = parseInt(headcountInput.value, 10);
+         return Number.isInteger(q) && q > 0 ? q : null;
+       }
+       function weightValue() {
+         const w = parseFloat(avgWeightInput.value);
+         return Number.isFinite(w) && w > 0 ? w : null;
+       }
        function syncPriceMode() {
          const mode = priceModeValue();
-         priceHeadField.hidden = mode !== "per_head";
-         priceKgField.hidden = mode !== "per_kg";
-         priceLumpField.hidden = mode !== "lump_sum";
-         recomputeAll();
+         const isLump = mode === "lump_sum";
+         priceUnitField.hidden = isLump;
+         priceHintEl.hidden = isLump;
+         priceUnitLabel.textContent = mode === "per_head" ? "Preço por cabeça (R$)" : "Preço por kg (R$)";
        }
-       form.querySelectorAll('input[name="nl-pricemode"]').forEach((r) => r.addEventListener("change", syncPriceMode));
+       form.querySelectorAll('input[name="nl-pricemode"]').forEach((r) => r.addEventListener("change", () => {
+         priceUnitInput.value = "";
+         priceTotalInput.value = "";
+         syncPriceMode();
+       }));
 
-       function recomputePurchaseTotal() {
-         const headcount = parseInt(headcountInput.value, 10) || 0;
-         const avgWeightKg = currentAvgWeightKg();
+       function unitToTotal() {
          const mode = priceModeValue();
-         let total = 0;
+         if (mode === "lump_sum") return;
+         const qty = qtyValue();
+         const unit = parseBRLToNumber(priceUnitInput.value);
+         if (!qty || !Number.isFinite(unit)) return;
          if (mode === "per_head") {
-           const price = parseBRLToNumber(pricePerHeadInput.value);
-           total = Number.isFinite(price) ? headcount * price : 0;
-         } else if (mode === "per_kg") {
-           const price = parseBRLToNumber(pricePerKgInput.value);
-           total = Number.isFinite(price) && Number.isFinite(avgWeightKg) ? price * avgWeightKg * headcount : 0;
+           priceTotalInput.value = formatBRL(unit * qty);
          } else {
-           const lump = parseBRLToNumber(priceLumpInput.value);
-           total = Number.isFinite(lump) ? lump : 0;
+           const weight = weightValue();
+           if (weight) priceTotalInput.value = formatBRL(unit * weight * qty);
          }
-         purchaseTotalEl.textContent = formatBRL(total);
        }
-
-       function recomputeAll() {
-         recomputeArrobas();
-         recomputePurchaseTotal();
+       function totalToUnit() {
+         const mode = priceModeValue();
+         if (mode === "lump_sum") return;
+         const qty = qtyValue();
+         const total = parseBRLToNumber(priceTotalInput.value);
+         if (!qty || !Number.isFinite(total)) return;
+         if (mode === "per_head") {
+           priceUnitInput.value = formatBRL(total / qty);
+         } else {
+           const weight = weightValue();
+           if (weight) priceUnitInput.value = formatBRL(total / (weight * qty));
+         }
        }
-
-       headcountInput.addEventListener("input", recomputeAll);
-       avgWeightInput.addEventListener("input", recomputeAll);
-       totalWeightInput.addEventListener("input", recomputeAll);
-       carcassYieldInput.addEventListener("input", recomputeAll);
-       pricePerHeadInput.addEventListener("input", () => { formatCurrencyInput(pricePerHeadInput); recomputeAll(); });
-       pricePerKgInput.addEventListener("input", () => { formatCurrencyInput(pricePerKgInput); recomputeAll(); });
-       priceLumpInput.addEventListener("input", () => { formatCurrencyInput(priceLumpInput); recomputeAll(); });
+       priceUnitInput.addEventListener("input", () => { formatCurrencyInput(priceUnitInput); unitToTotal(); });
+       priceTotalInput.addEventListener("input", () => { formatCurrencyInput(priceTotalInput); totalToUnit(); });
+       headcountInput.addEventListener("input", unitToTotal);
+       avgWeightInput.addEventListener("input", unitToTotal);
 
        // --- Frete: R$ 0,00 unlocks the "Gerar despesa do frete" opt-out ---
        freightInput.addEventListener("input", () => {
@@ -4674,9 +4740,7 @@
          genFreightExpenseField.hidden = !(Number.isFinite(freight) && freight > 0);
        });
 
-       syncWeightMode();
        syncPriceMode();
-       recomputeAll();
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
@@ -4691,84 +4755,90 @@
          const name = document.getElementById("nl-name").value.trim();
          if (!name) fail("nl-name", "Informe o nome do lote.");
 
-         const category = document.getElementById("nl-category").value;
-         if (!category) fail("nl-category", "Selecione a categoria.");
+         const origin = originValue();
 
          let propertyId = propertySelect.value || null;
          let newPropertyName = "";
          if (propertyId === "__new__") {
            newPropertyName = document.getElementById("nl-newproperty-name").value.trim();
            if (!newPropertyName) fail("nl-newproperty-name", "Informe o nome da propriedade.");
+         } else if (!propertyId) {
+           fail("nl-property", "Selecione a propriedade.");
          }
 
-         const produtorText = (produtorPicked.hidden ? produtorInput.value : produtorPickedName.textContent).trim();
+         const sex = sexSelect.value;
+         if (!sex) fail("nl-sex", "Selecione o sexo.");
 
-         const acquisitionDateStr = document.getElementById("nl-acquisitionDate").value;
-         if (!acquisitionDateStr) fail("nl-acquisitionDate", "Informe a data da aquisição.");
+         const category = categorySelect.value;
+         if (!category) fail("nl-category", "Selecione a categoria.");
+
+         const acquisitionDateStr = document.getElementById("nl-acquisitionDate").value || toDateInputValue(new Date());
 
          const headcount = parseInt(headcountInput.value, 10);
          if (!Number.isInteger(headcount) || headcount <= 0) fail("nl-headcount", "Informe a quantidade de cabeças.");
 
-         const weightMode = weightModeValue();
+         const avgWeightKgRaw = parseFloat(avgWeightInput.value);
          let avgWeightKg = null;
-         if (weightMode === "avg") {
-           const v = parseFloat(avgWeightInput.value);
-           if (!Number.isFinite(v) || v <= 0) fail("nl-avgWeightKg", "Informe o peso médio.");
-           else avgWeightKg = Math.round(v);
+         if (!Number.isFinite(avgWeightKgRaw) || avgWeightKgRaw <= 0) {
+           fail("nl-avgWeightKg", "Informe o peso na entrada.");
          } else {
-           const total = parseFloat(totalWeightInput.value);
-           if (!Number.isFinite(total) || total <= 0) {
-             fail("nl-totalWeightKg", "Informe o peso total.");
-           } else if (Number.isInteger(headcount) && headcount > 0) {
-             avgWeightKg = Math.round(total / headcount);
-           }
+           avgWeightKg = Math.round(avgWeightKgRaw);
          }
 
-         const carcassYieldRaw = parseFloat(carcassYieldInput.value);
-         if (!Number.isFinite(carcassYieldRaw) || carcassYieldRaw <= 0 || carcassYieldRaw > 100) {
-           fail("nl-carcassYield", "Informe o aproveitamento de carcaça.");
+         const birthDateRefStr = birthDateRefInput.value;
+         const birthDateRefIsEstimated = !birthDateRefEstimatedField.hidden && birthDateRefEstimatedCheckbox.checked;
+
+         const tagInputs = Array.from(tagsList.querySelectorAll("[data-tag-row] input"));
+         const earTags = tagInputs.map((inp) => inp.value.trim()).filter(Boolean);
+         if (Number.isInteger(headcount) && earTags.length > headcount) {
+           fail("nl-headcount", "A quantidade de brincos não pode exceder a quantidade de cabeças.");
          }
-         const carcassYieldPct = carcassYieldRaw / 100;
+
+         const produtorText = origin === "purchased"
+           ? (produtorPicked.hidden ? produtorInput.value : produtorPickedName.textContent).trim()
+           : "";
 
          const priceMode = priceModeValue();
          let avgPurchaseCostBRL = null;
          let totalPurchaseCostBRL = null;
+         let freightBRL = null;
+         let genPurchaseExpense = false;
+         let genFreightExpense = false;
 
-         if (priceMode === "per_head") {
-           const price = parseBRLToNumber(pricePerHeadInput.value);
-           if (!Number.isFinite(price) || price <= 0) {
-             fail("nl-pricePerHead", "Informe o preço por cabeça.");
-           } else if (Number.isInteger(headcount) && headcount > 0) {
-             avgPurchaseCostBRL = price;
-             totalPurchaseCostBRL = price * headcount;
+         if (origin === "purchased") {
+           const qty = Number.isInteger(headcount) && headcount > 0 ? headcount : null;
+           if (priceMode === "lump_sum") {
+             const total = parseBRLToNumber(priceTotalInput.value);
+             if (!Number.isFinite(total) || total <= 0) {
+               fail("nl-priceTotal", "Informe o valor total.");
+             } else if (qty) {
+               totalPurchaseCostBRL = total;
+               avgPurchaseCostBRL = total / qty;
+             }
+           } else {
+             const unit = parseBRLToNumber(priceUnitInput.value);
+             const total = parseBRLToNumber(priceTotalInput.value);
+             if (!Number.isFinite(unit) && !Number.isFinite(total)) {
+               fail("nl-priceUnit", priceMode === "per_head" ? "Informe o preço por cabeça ou o valor total." : "Informe o preço por kg ou o valor total.");
+             } else if (priceMode === "per_head" && qty) {
+               if (Number.isFinite(unit)) { avgPurchaseCostBRL = unit; totalPurchaseCostBRL = unit * qty; }
+               else { totalPurchaseCostBRL = total; avgPurchaseCostBRL = total / qty; }
+             } else if (priceMode === "per_kg" && qty && avgWeightKg) {
+               if (Number.isFinite(unit)) { avgPurchaseCostBRL = unit * avgWeightKg; totalPurchaseCostBRL = unit * avgWeightKg * qty; }
+               else { totalPurchaseCostBRL = total; avgPurchaseCostBRL = total / qty; }
+             }
            }
-         } else if (priceMode === "per_kg") {
-           const price = parseBRLToNumber(pricePerKgInput.value);
-           if (!Number.isFinite(price) || price <= 0) {
-             fail("nl-pricePerKg", "Informe o preço por kg.");
-           } else if (avgWeightKg != null && Number.isInteger(headcount) && headcount > 0) {
-             totalPurchaseCostBRL = price * avgWeightKg * headcount;
-             avgPurchaseCostBRL = price * avgWeightKg;
-           }
-         } else {
-           const lump = parseBRLToNumber(priceLumpInput.value);
-           if (!Number.isFinite(lump) || lump <= 0) {
-             fail("nl-priceLump", "Informe o valor total.");
-           } else if (Number.isInteger(headcount) && headcount > 0) {
-             totalPurchaseCostBRL = lump;
-             avgPurchaseCostBRL = lump / headcount;
-           }
+
+           const freightRaw = parseBRLToNumber(freightInput.value);
+           freightBRL = Number.isFinite(freightRaw) && freightRaw > 0 ? freightRaw : null;
+           genPurchaseExpense = genPurchaseExpenseCheckbox.checked;
+           genFreightExpense = !genFreightExpenseField.hidden && genFreightExpenseCheckbox.checked;
          }
-
-         const freightRaw = parseBRLToNumber(freightInput.value);
-         const freightBRL = Number.isFinite(freightRaw) && freightRaw > 0 ? freightRaw : null;
-
-         const genPurchaseExpense = genPurchaseExpenseCheckbox.checked;
-         const genFreightExpense = !genFreightExpenseField.hidden && genFreightExpenseCheckbox.checked;
 
          if (!valid) return;
 
          const acquisitionDate = new Date(`${acquisitionDateStr}T00:00:00`);
+         const birthDateRef = birthDateRefStr ? new Date(`${birthDateRefStr}T00:00:00`) : null;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
@@ -4787,26 +4857,41 @@
            }
 
            // Reuse an existing supplier on an exact name match; otherwise
-           // persist a new one and link its id (spec: never duplicate).
+           // persist a new one (with whatever seller details were filled in)
+           // and link its id — spec: never duplicate.
            let supplierId = selectedSupplierId;
-           if (!supplierId && produtorText) {
+           if (origin === "purchased" && !supplierId && produtorText) {
              const nameLower = produtorText.toLowerCase();
              const existing = suppliersCache.find((s) => s.nameLower === nameLower);
              if (existing) {
                supplierId = existing.id;
              } else {
+               const sellerDocType = sellerDocTypeValue();
+               const fazenda = sellerFazendaInput.value.trim() || null;
+               const municipio = sellerMunicipioInput.value.trim() || null;
+               const estado = sellerEstadoInput.value.trim() || null;
+               let cnpj = null, cnpjKey = null, cpf = null, cpfDigits = null;
+               if (sellerDocType === "cnpj" && sellerCnpjInput.value.trim()) {
+                 cnpj = sellerCnpjInput.value.trim();
+                 cnpjKey = cnpj.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+               } else if (sellerDocType === "cpf" && sellerCpfInput.value.trim()) {
+                 cpf = sellerCpfInput.value.trim();
+                 cpfDigits = cpf.replace(/\D/g, "");
+               }
                const supplierRef = await addDoc(collection(db, "suppliers"), {
                  ownerId: currentUid,
                  name: produtorText,
                  nameLower,
-                 fazenda: null,
-                 docType: null,
-                 cnpj: null,
-                 cnpjKey: null,
-                 cpf: null,
-                 cpfDigits: null,
+                 fazenda,
+                 docType: cnpj ? "cnpj" : cpf ? "cpf" : null,
+                 cnpj,
+                 cnpjKey,
+                 cpf,
+                 cpfDigits,
                  phone: null,
                  phoneDigits: null,
+                 municipio,
+                 estado,
                  notes: null,
                  createdAt: serverTimestamp(),
                  updatedAt: serverTimestamp(),
@@ -4815,22 +4900,30 @@
              }
            }
 
+           const trackingMode = earTags.length > 0 && earTags.length === headcount ? "individual" : "aggregate";
+
            const lotRef = await addDoc(collection(db, "lots"), {
              ownerId: currentUid,
              name,
-             category,
+             category: LOT_CATEGORY_BUCKET[category] || "outro",
+             entryCategory: category,
+             sex,
+             origin,
              areaHa: null,
-             trackingMode: "aggregate",
+             trackingMode,
              headcount,
              avgWeightKg,
-             carcassYieldPct,
-             propertyId: propertyId || null,
-             supplierId: supplierId || null,
+             propertyId,
+             supplierId: origin === "purchased" ? (supplierId || null) : null,
              acquisitionDate,
-             avgPurchaseCostBRL,
-             totalPurchaseCostBRL,
+             birthDateRef,
+             birthDateRefIsEstimated: birthDateRef ? birthDateRefIsEstimated : false,
+             weaningDate: null,
+             finishingStartDate: null,
+             avgPurchaseCostBRL: origin === "purchased" ? avgPurchaseCostBRL : null,
+             totalPurchaseCostBRL: origin === "purchased" ? totalPurchaseCostBRL : null,
              freightBRL,
-             priceMode,
+             priceMode: origin === "purchased" ? priceMode : null,
              createdAt: serverTimestamp(),
              updatedAt: serverTimestamp(),
            });
@@ -4865,6 +4958,44 @@
                createdAt: serverTimestamp(),
              });
            }
+
+           let animalBirthDate = null;
+           let animalBirthDateIsEstimated = false;
+           if (birthDateRef) {
+             animalBirthDate = birthDateRef;
+             animalBirthDateIsEstimated = birthDateRefIsEstimated;
+           } else if (origin === "born") {
+             animalBirthDate = acquisitionDate;
+             animalBirthDateIsEstimated = true;
+           }
+
+           await Promise.all(earTags.map((earTag) => addDoc(collection(db, "animals"), {
+             ownerId: currentUid,
+             earTag,
+             sex,
+             breed: null,
+             category,
+             lotId: lotRef.id,
+             propertyId,
+             birthDate: animalBirthDate,
+             birthDateIsEstimated: animalBirthDateIsEstimated,
+             damAnimalId: null,
+             acquisitionType: origin,
+             purchaseDate: origin === "purchased" ? acquisitionDate : null,
+             purchaseWeightKg: origin === "purchased" ? avgWeightKg : null,
+             purchaseCostBRL: origin === "purchased" ? avgPurchaseCostBRL : null,
+             currentWeightKg: avgWeightKg,
+             notes: null,
+             status: "active",
+             saleDate: null,
+             saleArrobas: null,
+             salePricePerArrobaBRL: null,
+             saleRevenueBRL: null,
+             deathDate: null,
+             deathCause: null,
+             createdAt: serverTimestamp(),
+             updatedAt: serverTimestamp(),
+           })));
 
            showToast("Lote criado com sucesso.");
            Sheet.close();
