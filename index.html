@@ -3040,10 +3040,25 @@
      // no-op because the change is off-screen. Called from the relevant
      // "change" handlers, never from the initial sync (nothing to reveal
      // when the sheet has just opened).
+     //
+     // Scrolls only #sheet-body — never Element.scrollIntoView, which walks
+     // every scrollable ancestor up to the viewport. .sheet is fixed +
+     // transform-centered and <body> is position:fixed while the sheet is
+     // open (scroll lock), so a viewport-level scroll has nowhere sane to
+     // land: it knocks the centered dialog off-center with no way back.
      function scrollRevealIntoView(el) {
        if (!el || el.hidden) return;
+       const body = document.getElementById("sheet-body");
+       if (!body || !body.contains(el)) return;
        const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-       requestAnimationFrame(() => el.scrollIntoView({ block: "nearest", behavior }));
+       requestAnimationFrame(() => {
+         const b = body.getBoundingClientRect();
+         const e = el.getBoundingClientRect();
+         let delta = 0;
+         if (e.bottom > b.bottom) delta = e.bottom - b.bottom + 8;
+         else if (e.top < b.top) delta = e.top - b.top - 8;
+         if (delta) body.scrollBy({ top: delta, behavior });
+       });
      }
 
      function clearFieldError(inputId) {
@@ -5014,7 +5029,7 @@
          `;
          tagsList.appendChild(li);
          syncTagsAddState();
-         li.querySelector("input").focus();
+         li.querySelector("input").focus({ preventScroll: true });
        }
        tagsToggle.addEventListener("click", () => {
          const willShow = tagsContainer.hidden;
@@ -5059,7 +5074,7 @@
          produtorPicked.hidden = true;
          sellerDetails.hidden = false;
          produtorInput.value = "";
-         produtorInput.focus();
+         produtorInput.focus({ preventScroll: true });
        }
        produtorClearBtn.addEventListener("click", clearPicked);
 
@@ -5121,7 +5136,7 @@
        }
        form.querySelectorAll('input[name="nl-seller-cnpj-format"]').forEach((r) => r.addEventListener("change", () => {
          sellerCnpjInput.value = "";
-         sellerCnpjInput.focus();
+         sellerCnpjInput.focus({ preventScroll: true });
        }));
        sellerCnpjInput.addEventListener("input", applySellerCnpjMask);
        sellerCpfInput.addEventListener("input", () => formatCPFInput(sellerCpfInput));
@@ -6538,7 +6553,7 @@
        // interchangeable character-by-character (letters vs. digits-only).
        form.querySelectorAll('input[name="supplier-cnpj-format"]').forEach((r) => r.addEventListener("change", () => {
          cnpjInput.value = "";
-         cnpjInput.focus();
+         cnpjInput.focus({ preventScroll: true });
        }));
        cnpjInput.addEventListener("input", applyCnpjMask);
 
