@@ -5690,6 +5690,18 @@
              <input class="input" id="mv-avgWeightKg" type="number" min="0" step="1" placeholder="Opcional" />
            </div>
 
+           <div class="field field--half" id="mv-arroba-price-field" hidden>
+             <label class="field-label" for="mv-arroba-price">Valor da @ (R$)</label>
+             <input class="input" id="mv-arroba-price" type="text" inputmode="decimal" placeholder="Ex: R$ 300,00" autocomplete="off" />
+           </div>
+
+           <div class="field field--half" id="mv-yield-pct-field" hidden>
+             <label class="field-label" for="mv-yield-pct">Aproveitamento (%)</label>
+             <input class="input" id="mv-yield-pct" type="number" min="1" max="100" step="0.5" placeholder="Ex: 53" />
+           </div>
+
+           <p class="field-hint" id="mv-arroba-hint" hidden></p>
+
            <div class="field field--half">
              <label class="field-label" for="mv-amount">Valor (R$)</label>
              <input class="input" id="mv-amount" type="text" inputmode="decimal" placeholder="R$ 0,00 (opcional)" autocomplete="off" />
@@ -5714,7 +5726,14 @@
      function wireMovementForm(lot) {
        const form = document.getElementById("mv-form");
        const typeSelect = document.getElementById("mv-type");
+       const qtyInput = document.getElementById("mv-qty");
+       const avgWeightInput = document.getElementById("mv-avgWeightKg");
        const amountInput = document.getElementById("mv-amount");
+       const arrobaPriceField = document.getElementById("mv-arroba-price-field");
+       const arrobaPriceInput = document.getElementById("mv-arroba-price");
+       const yieldPctField = document.getElementById("mv-yield-pct-field");
+       const yieldPctInput = document.getElementById("mv-yield-pct");
+       const arrobaHint = document.getElementById("mv-arroba-hint");
        const genFinanceField = document.getElementById("mv-gen-finance-field");
        const genFinanceCheckbox = document.getElementById("mv-gen-finance");
        const genFinanceLabel = document.getElementById("mv-gen-finance-label");
@@ -5746,15 +5765,69 @@
          syncFinanceLabel();
        }
 
+       // --- Venda/Embarque: valor da @ × aproveitamento derivam o Valor
+       //     automaticamente, até o usuário editar o campo Valor manualmente. ---
+       function isArrobaSaleType() {
+         return typeSelect.value === "sale" || typeSelect.value === "shipment";
+       }
+
+       let amountManuallyEdited = false;
+
+       function syncArrobaCalc() {
+         if (!isArrobaSaleType()) { arrobaHint.hidden = true; return; }
+
+         const qty = parseInt(qtyInput.value, 10);
+         const avgWeightKg = parseFloat(avgWeightInput.value);
+         const arrobaPrice = parseBRLToNumber(arrobaPriceInput.value);
+         const yieldPct = parseFloat(yieldPctInput.value);
+
+         const hasQty = Number.isInteger(qty) && qty > 0;
+         const hasWeight = Number.isFinite(avgWeightKg) && avgWeightKg > 0;
+         const hasPrice = Number.isFinite(arrobaPrice) && arrobaPrice > 0;
+         const hasYield = Number.isFinite(yieldPct) && yieldPct > 0;
+         const arrobaFieldsTouched = arrobaPriceInput.value.trim() !== "" || yieldPctInput.value.trim() !== "";
+
+         if (hasQty && hasWeight && hasPrice && hasYield) {
+           const arrobasPerHead = (avgWeightKg * (yieldPct / 100)) / 15;
+           const totalArrobas = arrobasPerHead * qty;
+           const derivedAmount = totalArrobas * arrobaPrice;
+
+           arrobaHint.hidden = false;
+           arrobaHint.textContent =
+             `${fmtNum(arrobasPerHead, 2)} @/cab · ${fmtNum(totalArrobas, 2)} @ no total · ${formatBRL(arrobasPerHead * arrobaPrice)}/cabeça`;
+
+           if (!amountManuallyEdited) {
+             amountInput.value = formatBRL(Math.round(derivedAmount * 100) / 100);
+             syncFinanceVisibility();
+           }
+         } else if (arrobaFieldsTouched) {
+           arrobaHint.hidden = false;
+           arrobaHint.textContent = "Preencha peso médio, @ e aproveitamento para calcular o valor";
+         } else {
+           arrobaHint.hidden = true;
+         }
+       }
+
        function syncType() {
          const meta = MOVEMENT_TYPE_BY_VALUE[typeSelect.value];
          document.getElementById(meta?.defaultSign === "-" ? "mv-sign-minus" : "mv-sign-plus").checked = true;
          genFinanceCheckbox.checked = meta ? meta.defaultFinance : false;
+         arrobaPriceField.hidden = !isArrobaSaleType();
+         yieldPctField.hidden = !isArrobaSaleType();
+         syncArrobaCalc();
          syncFinanceVisibility();
        }
        typeSelect.addEventListener("change", syncType);
        form.querySelectorAll('input[name="mv-sign"]').forEach((r) => r.addEventListener("change", syncFinanceLabel));
-       amountInput.addEventListener("input", () => { formatCurrencyInput(amountInput); syncFinanceVisibility(); });
+       amountInput.addEventListener("input", () => {
+         formatCurrencyInput(amountInput);
+         amountManuallyEdited = amountInput.value.trim() !== "";
+         syncFinanceVisibility();
+       });
+       qtyInput.addEventListener("input", syncArrobaCalc);
+       avgWeightInput.addEventListener("input", syncArrobaCalc);
+       arrobaPriceInput.addEventListener("input", () => { formatCurrencyInput(arrobaPriceInput); syncArrobaCalc(); });
+       yieldPctInput.addEventListener("input", syncArrobaCalc);
 
        syncType();
 
@@ -5788,6 +5861,11 @@
 
          const amountRaw = parseBRLToNumber(amountInput.value);
          const amountBRL = Number.isFinite(amountRaw) && amountRaw > 0 ? amountRaw : null;
+
+         const arrobaPriceRaw = parseBRLToNumber(arrobaPriceInput.value);
+         const yieldPctRaw = parseFloat(yieldPctInput.value);
+         const arrobaPriceBRL = isArrobaSaleType() && Number.isFinite(arrobaPriceRaw) && arrobaPriceRaw > 0 ? arrobaPriceRaw : null;
+         const carcassYieldPct = isArrobaSaleType() && Number.isFinite(yieldPctRaw) && yieldPctRaw > 0 ? yieldPctRaw : null;
 
          const description = document.getElementById("mv-description").value.trim() || null;
 
@@ -5830,6 +5908,8 @@
              qty,
              avgWeightKg,
              amountBRL,
+             arrobaPriceBRL,
+             carcassYieldPct,
              description,
              linkedTransactionId,
              createdAt: serverTimestamp(),
