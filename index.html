@@ -461,6 +461,10 @@
     color: var(--text-muted);
     margin-top: 2px;
   }
+  .mini-stat .mini-value.is-meta {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+  }
 
   .sale-result {
     margin-top: var(--space-3);
@@ -1990,44 +1994,73 @@
       return Math.max(0, months);
     }
 
-    // Chronological stage engine (derived, not stored). Age-only thresholds
-    // advance automatically; weaning/1st-calving/finishing are event-gated
-    // via their stamped dates — without the stamp, males stay at
-    // bezerro_lactente indefinitely and females ride age alone past 12mo.
+    // Chronological stage engine (derived, not stored). Age is the primary
+    // driver — a stage never stalls waiting on an event stamp — and events
+    // (weaning/1st-calving/finishing) only pull the stage forward EARLIER
+    // than the age thresholds would (e.g. an early-weaned 9mo calf, or a
+    // terminal finishing/calving flag). A null event date never holds an
+    // animal back below what its age already implies.
     // Returns null when there's no birthDate to compute from — callers must
     // fall back to the stored entry category (no auto-advance) in that case.
     function deriveStage({ sex, birthDate, weaningDate, firstCalvingDate, finishingStartDate, now = new Date() }) {
       const age = ageMonthsBetween(birthDate, now);
       if (age == null) return null;
 
+      const nowDate = toDateSafe(now) || now;
+      const weanedEarly = !!(weaningDate && toDateSafe(weaningDate) && toDateSafe(weaningDate) <= nowDate);
+
       if (sex === "F") {
-        if (age < 12 && !weaningDate) return "bezerra_lactente";
-        if (weaningDate && age < 12) return "bezerra_desmamada";
-        if (age >= 12 && !firstCalvingDate) return "novilha";
-        return "vaca";
+        if (firstCalvingDate) return "vaca";
+        if (age >= 12) return "novilha";
+        if (age >= 8 || weanedEarly) return "bezerra_desmamada";
+        return "bezerra_lactente";
       }
 
       // Male
-      if (age < 8 || !weaningDate) return "bezerro_lactente";
-      if (weaningDate && age < 12) return "bezerro_desmamado";
-      if (age >= 12 && age < 24) return "garrote";
-      if (age >= 24 && !finishingStartDate) return "boi_magro";
-      return "boi_gordo";
+      if (finishingStartDate) return "boi_gordo";
+      if (age >= 24) return "boi_magro";
+      if (age >= 12) return "garrote";
+      if (age >= 8 || weanedEarly) return "bezerro_desmamado";
+      return "bezerro_lactente";
+    }
+
+    // Chronological rank per sex — later stage = higher index. Used to floor
+    // the derived stage at the stored/entry category so a lot or animal
+    // registered mid-life (e.g. bought in as bezerro_desmamado) can only ever
+    // move forward, never regress to an earlier stage the derivation might
+    // otherwise imply (e.g. missing birthDateRef precision).
+    const STAGE_RANK = {
+      M: ["bezerro_lactente", "bezerro_desmamado", "garrote", "boi_magro", "boi_gordo"],
+      F: ["bezerra_lactente", "bezerra_desmamada", "novilha", "vaca"],
+    };
+    function stageRank(key, sex) {
+      const order = STAGE_RANK[sex];
+      return order ? order.indexOf(key) : -1;
+    }
+    // Never lets `derivedKey` rank below `floorKey` (the stored/entry
+    // category) — a floor, not a ceiling, so later stages still win.
+    function clampStageFloor(derivedKey, floorKey, sex) {
+      const derivedRank = stageRank(derivedKey, sex);
+      const floorRank = stageRank(floorKey, sex);
+      if (derivedRank === -1 || floorRank === -1) return derivedKey;
+      return derivedRank < floorRank ? floorKey : derivedKey;
     }
 
     // animal.birthDate falls back to its lot's birthDateRef (untagged/aggregate
     // reference age); with neither, the stored entry category wins as-is.
     function displayCategoryKeyForAnimal(animal, lot) {
       const birthDate = animal.birthDate || lot?.birthDateRef || null;
-      if (!birthDate) return resolveCategoryKey(animal.category, animal.sex);
-      const key = deriveStage({
+      const storedKey = resolveCategoryKey(animal.category, animal.sex);
+      if (!birthDate) return storedKey;
+      const derivedKey = deriveStage({
         sex: animal.sex,
         birthDate,
         weaningDate: animal.weaningDate,
         firstCalvingDate: animal.firstCalvingDate,
         finishingStartDate: animal.finishingStartDate,
       });
-      return key || resolveCategoryKey(animal.category, animal.sex);
+      if (!derivedKey) return storedKey;
+      return clampStageFloor(derivedKey, storedKey, animal.sex);
     }
 
     // lot.entryCategory-based lots (Phase 2+) derive their stage from
@@ -2035,15 +2068,17 @@
     // and the caller should fall back to the legacy coarse category display.
     function displayCategoryKeyForLot(lot) {
       if (!lot.entryCategory) return null;
-      if (!lot.birthDateRef) return resolveCategoryKey(lot.entryCategory, lot.sex);
-      const key = deriveStage({
+      const floorKey = resolveCategoryKey(lot.entryCategory, lot.sex);
+      if (!lot.birthDateRef) return floorKey;
+      const derivedKey = deriveStage({
         sex: lot.sex,
         birthDate: lot.birthDateRef,
         weaningDate: lot.weaningDate,
         firstCalvingDate: lot.firstCalvingDate,
         finishingStartDate: lot.finishingStartDate,
       });
-      return key || resolveCategoryKey(lot.entryCategory, lot.sex);
+      if (!derivedKey) return floorKey;
+      return clampStageFloor(derivedKey, floorKey, lot.sex);
     }
 
     // CATTLE_CATEGORIES key (lots.entryCategory) → legacy coarse lots.category
@@ -2275,6 +2310,37 @@
     }
     function formatArrobas(n) {
       return n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+
+    // pt-BR duration phrase for a whole month count: "X meses" under a year,
+    // "X anos" or "X anos e Y meses" at 12+.
+    function formatMonthsDuration(totalMonths) {
+      if (totalMonths == null || !Number.isFinite(totalMonths)) return null;
+      const months = Math.max(0, Math.round(totalMonths));
+      if (months < 12) return `${months} ${months === 1 ? "mês" : "meses"}`;
+      const years = Math.floor(months / 12);
+      const rem = months % 12;
+      const yearsLabel = `${years} ${years === 1 ? "ano" : "anos"}`;
+      return rem === 0 ? yearsLabel : `${yearsLabel} e ${rem} ${rem === 1 ? "mês" : "meses"}`;
+    }
+
+    // Lot card meta: reference age from birthDateRef, flagged "(est.)" when
+    // the stamped date is an estimate rather than a known birth date.
+    function lotAgeMetaLabel(lot) {
+      const months = ageMonthsBetween(lot.birthDateRef, new Date());
+      const duration = formatMonthsDuration(months);
+      if (!duration) return "—";
+      return lot.birthDateRefIsEstimated ? `${duration} (est.)` : duration;
+    }
+
+    // Lot card meta: time on the property since acquisitionDate, with the
+    // absolute date alongside since "1 ano e 4 meses" alone is hard to anchor.
+    function lotTenureMetaLabel(lot) {
+      const months = ageMonthsBetween(lot.acquisitionDate, new Date());
+      const duration = formatMonthsDuration(months);
+      if (!duration) return "—";
+      const d = toDateSafe(lot.acquisitionDate);
+      return d ? `${duration} (desde ${d.toLocaleDateString("pt-BR")})` : duration;
     }
 
     // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
@@ -2600,6 +2666,16 @@
                     <p class="mini-label">Custo médio/@</p>
                   </div>
                 </div>
+                <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+                  <div class="mini-stat">
+                    <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l))}</p>
+                    <p class="mini-label">Idade (ref.)</p>
+                  </div>
+                  <div class="mini-stat">
+                    <p class="mini-value is-meta">${escapeHtml(lotTenureMetaLabel(l))}</p>
+                    <p class="mini-label">Na fazenda</p>
+                  </div>
+                </div>
               </li>
             `;
           }
@@ -2622,6 +2698,16 @@
                 <div class="mini-stat">
                   <p class="mini-value">${l.areaHa != null ? `${l.areaHa.toLocaleString("pt-BR")} ha` : "—"}</p>
                   <p class="mini-label">Área</p>
+                </div>
+              </div>
+              <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="mini-stat">
+                  <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l))}</p>
+                  <p class="mini-label">Idade (ref.)</p>
+                </div>
+                <div class="mini-stat">
+                  <p class="mini-value is-meta">${escapeHtml(lotTenureMetaLabel(l))}</p>
+                  <p class="mini-label">Na fazenda</p>
                 </div>
               </div>
             </li>
