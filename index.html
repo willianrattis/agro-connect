@@ -249,7 +249,41 @@
     color: var(--text-muted);
   }
 
-  /* Financeiro: month chips + 3-up summary + amount coloring */
+  /* Financeiro: year stepper + month chips + 3-up summary + amount coloring */
+  .year-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .year-nav-btn {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--fs-lg);
+    line-height: 1;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .year-nav-btn:hover:not(:disabled) { background: rgba(30, 70, 32, 0.08); }
+  .year-nav-btn:disabled { color: var(--text-muted); opacity: 0.4; }
+
+  .year-label {
+    min-width: 4.5ch;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    color: var(--text);
+  }
+
   .month-selector {
     display: flex;
     gap: var(--space-2);
@@ -279,6 +313,11 @@
     background: var(--brand);
     border-color: var(--brand);
     color: var(--on-brand);
+  }
+  .month-chip.in-range {
+    background: var(--accent-tint);
+    border-color: var(--accent-tint);
+    color: var(--brand);
   }
 
   .summary-strip.fin-summary {
@@ -1654,7 +1693,13 @@
 
       <!-- Financeiro -->
       <section class="view" id="view-financeiro" aria-labelledby="tab-financeiro" hidden>
-        <div class="month-selector" id="month-selector" role="tablist" aria-label="Selecionar mês">
+        <div class="year-selector" id="year-selector">
+          <button type="button" class="year-nav-btn pressable" id="year-prev" aria-label="Ano anterior">‹</button>
+          <span class="year-label" id="year-label">—</span>
+          <button type="button" class="year-nav-btn pressable" id="year-next" aria-label="Próximo ano">›</button>
+        </div>
+
+        <div class="month-selector" id="month-selector" role="tablist" aria-label="Selecionar mês ou período">
           <!-- Month chips, rendered by JS -->
         </div>
 
@@ -2240,6 +2285,9 @@
     const tabs = Array.from(document.querySelectorAll(".tab"));
     const views = Array.from(document.querySelectorAll(".view"));
 
+    const yearPrevBtn = document.getElementById("year-prev");
+    const yearNextBtn = document.getElementById("year-next");
+    const yearLabelEl = document.getElementById("year-label");
     const monthSelectorEl = document.getElementById("month-selector");
     const finReceitasEl = document.getElementById("fin-receitas");
     const finDespesasEl = document.getElementById("fin-despesas");
@@ -2461,28 +2509,19 @@
       return keys;
     }
 
-    // Month keys spanning from the earliest transaction on record (or 11
-    // months ago, whichever is earlier) through the current month, oldest
-    // first — so retroactive entries always have a reachable chip. With an
-    // empty cache this matches buildRecentMonthKeys(12) exactly.
-    function buildMonthKeysFromData() {
-      const now = new Date();
-      const currentKey = monthKey(now);
-      let earliestKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 11, 1));
+    // Calendar years spanning from the earliest transaction on record through
+    // the current year, ascending — so retroactive entries always have a
+    // reachable year in the stepper.
+    function getAvailableYears() {
+      const cy = new Date().getFullYear();
+      let earliest = cy;
       for (const t of transactionsCache) {
         const d = toDateSafe(t.date);
-        if (!d) continue;
-        const k = monthKey(d);
-        if (k < earliestKey) earliestKey = k;
+        if (d && d.getFullYear() < earliest) earliest = d.getFullYear();
       }
-      const [startY, startM] = earliestKey.split("-").map(Number);
-      const keys = [];
-      const cursor = new Date(startY, startM - 1, 1);
-      while (monthKey(cursor) <= currentKey) {
-        keys.push(monthKey(cursor));
-        cursor.setMonth(cursor.getMonth() + 1);
-      }
-      return keys;
+      const years = [];
+      for (let y = earliest; y <= cy; y++) years.push(y);
+      return years;
     }
 
     function formatDayLabel(date) {
@@ -2748,39 +2787,82 @@
     // renderMonthChips() reads it during the module's initial synchronous
     // render, before the "Firestore listeners" section runs.
     let transactionsCache = [];
-    let selectedMonthKey = monthKey(new Date());
+    let selectedYear = new Date().getFullYear();
+    let monthRange = null; // null = whole year; else { start, end }, 1<=start<=end<=12
 
-    let lastMonthChipKeys = [];
-
-    function renderMonthChips() {
-      const keys = buildMonthKeysFromData();
-      const keysChanged =
-        keys.length !== lastMonthChipKeys.length || keys.some((k, i) => k !== lastMonthChipKeys[i]);
-      if (!keys.includes(selectedMonthKey)) selectedMonthKey = monthKey(new Date());
-      monthSelectorEl.innerHTML = keys
-        .map((key) => `<button type="button" class="month-chip pressable" role="tab" data-month="${key}">${monthChipLabel(key)}</button>`)
-        .join("");
-      syncMonthChipActive(keysChanged);
-      lastMonthChipKeys = keys;
+    // Rebuilds the year-stepper bounds/label from live data. Falls back to
+    // the current year (and clears any month range) if the previously
+    // selected year falls outside the data-derived range.
+    function renderYearStepper() {
+      const years = getAvailableYears();
+      if (!years.includes(selectedYear)) {
+        selectedYear = new Date().getFullYear();
+        monthRange = null;
+      }
+      yearPrevBtn.disabled = selectedYear <= years[0];
+      yearNextBtn.disabled = selectedYear >= years[years.length - 1];
+      yearLabelEl.textContent = String(selectedYear);
     }
 
-    // scrollIntoView only fires when explicitly requested (a user click, or
-    // the chip set itself changing) so a routine data refresh with the same
-    // month range doesn't yank a manually-scrolled strip back into place.
-    function syncMonthChipActive(scrollToActive = true) {
+    function renderMonthChips() {
+      renderYearStepper();
+      const chips = [`<button type="button" class="month-chip pressable" role="tab" data-scope="year">Ano</button>`];
+      for (let m = 1; m <= 12; m++) {
+        chips.push(`<button type="button" class="month-chip pressable" role="tab" data-month="${m}">${MONTH_ABBR[m - 1]}</button>`);
+      }
+      monthSelectorEl.innerHTML = chips.join("");
+      syncMonthChipActive();
+    }
+
+    function syncMonthChipActive() {
       monthSelectorEl.querySelectorAll(".month-chip").forEach((btn) => {
-        const active = btn.dataset.month === selectedMonthKey;
-        btn.classList.toggle("is-active", active);
-        btn.setAttribute("aria-selected", String(active));
-        if (active && scrollToActive) btn.scrollIntoView({ inline: "center", block: "nearest" });
+        if (btn.dataset.scope === "year") {
+          btn.classList.toggle("is-active", monthRange == null);
+          btn.classList.remove("in-range");
+          btn.setAttribute("aria-selected", String(monthRange == null));
+          return;
+        }
+        const m = Number(btn.dataset.month);
+        const isEndpoint = monthRange != null && (m === monthRange.start || m === monthRange.end);
+        const isInRange = monthRange != null && m > monthRange.start && m < monthRange.end;
+        btn.classList.toggle("is-active", isEndpoint);
+        btn.classList.toggle("in-range", isInRange);
+        btn.setAttribute("aria-selected", String(isEndpoint));
       });
     }
 
     monthSelectorEl.addEventListener("click", (e) => {
       const btn = e.target.closest(".month-chip");
       if (!btn) return;
-      selectedMonthKey = btn.dataset.month;
+      if (btn.dataset.scope === "year") {
+        monthRange = null;
+      } else {
+        const m = Number(btn.dataset.month);
+        if (!monthRange || monthRange.start !== monthRange.end) {
+          monthRange = { start: m, end: m };
+        } else {
+          monthRange = { start: Math.min(monthRange.start, m), end: Math.max(monthRange.start, m) };
+        }
+      }
       syncMonthChipActive();
+      renderFinanceiro();
+    });
+
+    yearPrevBtn.addEventListener("click", () => {
+      const years = getAvailableYears();
+      if (selectedYear <= years[0]) return;
+      selectedYear -= 1;
+      monthRange = null;
+      renderMonthChips();
+      renderFinanceiro();
+    });
+
+    yearNextBtn.addEventListener("click", () => {
+      const years = getAvailableYears();
+      if (selectedYear >= years[years.length - 1]) return;
+      selectedYear += 1;
+      monthRange = null;
+      renderMonthChips();
       renderFinanceiro();
     });
 
@@ -2843,7 +2925,7 @@
             <span class="icon" aria-hidden="true">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
             </span>
-            <h3>Nenhum lançamento neste mês</h3>
+            <h3>Nenhum lançamento neste período.</h3>
             <p>Toque em + para registrar uma receita ou despesa.</p>
           </div>
         </li>
@@ -2851,15 +2933,19 @@
     }
 
     // Reads transactionsCache directly (kept fresh by the transactions
-    // onSnapshot listener) and filters by selectedMonthKey client-side —
-    // the Firestore query itself only filters by ownerId + orders by date.
+    // onSnapshot listener) and filters by selectedYear + monthRange client-side
+    // — the Firestore query itself only filters by ownerId + orders by date.
     function renderFinanceiro() {
-      const monthTx = transactionsCache.filter((t) => {
+      const inScope = (t) => {
         const d = toDateSafe(t.date);
-        return d && monthKey(d) === selectedMonthKey;
-      });
+        if (!d || d.getFullYear() !== selectedYear) return false;
+        if (!monthRange) return true;
+        const m = d.getMonth() + 1;
+        return m >= monthRange.start && m <= monthRange.end;
+      };
+      const scopedTx = transactionsCache.filter(inScope);
 
-      const totals = monthTx.reduce(
+      const totals = scopedTx.reduce(
         (acc, t) => {
           if (t.kind === "receita") acc.receitas += t.amountBRL || 0;
           else if (t.kind === "despesa") acc.despesas += t.amountBRL || 0;
@@ -2874,18 +2960,18 @@
       finSaldoEl.textContent = formatBRL(saldo);
       finSaldoEl.classList.toggle("fin-positive", saldo > 0);
       finSaldoEl.classList.toggle("fin-negative", saldo < 0);
-      finCountEl.textContent = `${monthTx.length} lançamento${monthTx.length === 1 ? "" : "s"}`;
+      finCountEl.textContent = `${scopedTx.length} lançamento${scopedTx.length === 1 ? "" : "s"}`;
 
-      if (monthTx.length === 0) {
+      if (scopedTx.length === 0) {
         renderFinEmpty();
         return;
       }
 
-      // monthTx preserves the query's date-desc order, so a day boundary is
+      // scopedTx preserves the query's date-desc order, so a day boundary is
       // just a change in toDateSafe(date).toDateString() between neighbors.
       const groups = [];
       let lastDayKey = null;
-      for (const t of monthTx) {
+      for (const t of scopedTx) {
         const d = toDateSafe(t.date);
         const dayKey = d ? d.toDateString() : "—";
         if (dayKey !== lastDayKey) {
