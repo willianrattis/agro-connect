@@ -1,5 +1,17 @@
 rules_version = '2';
 
+// Owner-based ruleset: every collection below is scoped by an `ownerId`
+// field (or, for /users and /settings, by the document id itself) that
+// must match the signed-in uid on every read/write. `ownerImmutable()`
+// blocks an update from ever reassigning a document to a different owner,
+// so cross-owner access is denied both at creation and thereafter.
+//
+// Deliberately deferred / out of scope for these rules:
+//   - serverTimestamp enforcement (createdAt/updatedAt aren't checked
+//     against request.time) — trusted client input for now.
+//   - earTag uniqueness — cross-document uniqueness isn't cheap to check
+//     in rules; if/when it matters, enforce it at the app layer (e.g. a
+//     lookup query before insert, or a dedicated index collection).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -8,7 +20,8 @@ service cloud.firestore {
     function ownsNew()  { return signedIn() && request.resource.data.ownerId == request.auth.uid; }
     function ownerImmutable() { return request.resource.data.ownerId == resource.data.ownerId; }
 
-    // Profile & per-user settings: keyed by uid
+    // Profile & per-user settings: keyed by uid (no ownerId field — the
+    // document id itself is the ownership boundary).
     match /users/{userId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
@@ -16,27 +29,37 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
-    // Animals
+    // Animals — always created as an optional tagged subset of a lot (the
+    // lot-centric "Novo lote" flow), so sex/category/lotId/propertyId are
+    // as required on create as earTag.
     match /animals/{id} {
       allow read:   if owns(resource);
       allow create: if ownsNew()
                     && request.resource.data.earTag is string
                     && request.resource.data.earTag.size() > 0
-                    && request.resource.data.category is string;
+                    && request.resource.data.sex in ["M", "F"]
+                    && request.resource.data.category is string
+                    && request.resource.data.category.size() > 0
+                    && request.resource.data.lotId is string
+                    && request.resource.data.propertyId is string;
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
     }
 
-    // Lots — every lot is now created through the unified lot-centric flow,
-    // so it always carries a property, an origin and a positive headcount
-    // (the source of truth for lot size; tagged animals are an optional
-    // subset and never affect it).
+    // Lots — every lot is created through the unified lot-centric flow, so
+    // it always carries a property, sex, a taxonomy entry category, an
+    // origin and a positive headcount (the source of truth for lot size;
+    // tagged animals are an optional subset and never affect it).
     match /lots/{id} {
       allow read:   if owns(resource);
-      allow create: if ownsNew() && request.resource.data.name is string
+      allow create: if ownsNew()
+                    && request.resource.data.name is string
                     && request.resource.data.name.size() > 0
                     && request.resource.data.propertyId is string
                     && request.resource.data.propertyId.size() > 0
+                    && request.resource.data.sex in ["M", "F"]
+                    && request.resource.data.entryCategory is string
+                    && request.resource.data.entryCategory.size() > 0
                     && request.resource.data.origin in ["purchased", "born"]
                     && request.resource.data.headcount is int
                     && request.resource.data.headcount > 0;
@@ -74,7 +97,8 @@ service cloud.firestore {
     // Properties
     match /properties/{id} {
       allow read:   if owns(resource);
-      allow create: if ownsNew() && request.resource.data.name is string
+      allow create: if ownsNew()
+                    && request.resource.data.name is string
                     && request.resource.data.name.size() > 0;
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
@@ -84,7 +108,8 @@ service cloud.firestore {
     // when a supplier is created from the lot-purchase seller block.
     match /suppliers/{id} {
       allow read:   if owns(resource);
-      allow create: if ownsNew() && request.resource.data.name is string
+      allow create: if ownsNew()
+                    && request.resource.data.name is string
                     && request.resource.data.name.size() > 0
                     && (!("municipio" in request.resource.data)
                         || request.resource.data.municipio == null
@@ -100,12 +125,19 @@ service cloud.firestore {
     // also property-transfer log entries)
     match /movements/{id} {
       allow read:   if owns(resource);
-      allow create: if ownsNew() && request.resource.data.type is string
+      allow create: if ownsNew()
+                    && request.resource.data.type is string
                     && request.resource.data.lotId is string
                     && request.resource.data.date is timestamp
                     && request.resource.data.qty is number;
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
+    }
+
+    // Everything else is denied by default (Firestore has no implicit
+    // grants), stated explicitly here for auditability.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

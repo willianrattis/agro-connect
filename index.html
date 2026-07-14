@@ -171,21 +171,6 @@
     box-shadow: var(--shadow-sm);
   }
 
-  .btn-session {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: 44px;
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-full);
-    background: var(--brand);
-    color: var(--on-brand);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    box-shadow: var(--shadow-sm);
-  }
-  .btn-session:hover { background: var(--brand-strong); }
-
   /* =====================================================
      4. Main / views
      ===================================================== */
@@ -1221,14 +1206,14 @@
   /* Checkbox rows (auto-expense opt-out) */
   .checkbox-field {
     flex-direction: row !important;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--space-2) !important;
+    min-height: 44px;
   }
   .checkbox-field input[type="checkbox"] {
     width: 20px;
     height: 20px;
     flex: none;
-    margin-top: 2px;
     accent-color: var(--accent);
   }
   .checkbox-field .field-label { font-weight: 500; }
@@ -4745,7 +4730,7 @@
            </label>
 
            <div class="field">
-             <button type="button" class="btn-inline pressable" id="nl-tags-toggle">+ Adicionar brincos (opcional)</button>
+             <button type="button" class="btn-secondary pressable" id="nl-tags-toggle">+ Adicionar brincos (opcional)</button>
            </div>
            <div class="form-grid" id="nl-tags-container" hidden>
              <p class="field-hint">Brincos são opcionais — identificam um subconjunto do lote e nunca alteram a quantidade de cabeças.</p>
