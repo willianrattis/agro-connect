@@ -1626,23 +1626,40 @@
       <section class="view" id="view-indicadores" aria-labelledby="tab-indicadores" hidden>
         <div class="view-header"><h2 class="view-title">Indicadores</h2></div>
 
-        <div class="period-selector" id="period-selector" role="tablist" aria-label="Selecionar período">
-          <button type="button" class="period-chip pressable" role="tab" data-period="12m">Últimos 12 meses</button>
-          <button type="button" class="period-chip pressable" role="tab" data-period="ytd">Ano corrente</button>
-          <button type="button" class="period-chip pressable" role="tab" data-period="custom">Personalizado</button>
-        </div>
-        <div class="period-custom-range" id="period-custom-range" hidden>
-          <div class="field">
-            <label class="field-label" for="period-start">De</label>
-            <input class="input" id="period-start" type="date" />
-          </div>
-          <div class="field">
-            <label class="field-label" for="period-end">Até</label>
-            <input class="input" id="period-end" type="date" />
-          </div>
+        <div class="segmented" role="radiogroup" aria-label="Seção de indicadores" style="margin-bottom: var(--space-4);">
+          <input type="radio" id="ind-section-kpis" name="ind-section" value="kpis" checked />
+          <label for="ind-section-kpis">Indicadores</label>
+          <input type="radio" id="ind-section-estoque" name="ind-section" value="estoque" />
+          <label for="ind-section-estoque">Estoque</label>
         </div>
 
-        <div id="indicadores-root" aria-live="polite"></div>
+        <div id="indicadores-kpis-section">
+          <div class="period-selector" id="period-selector" role="tablist" aria-label="Selecionar período">
+            <button type="button" class="period-chip pressable" role="tab" data-period="12m">Últimos 12 meses</button>
+            <button type="button" class="period-chip pressable" role="tab" data-period="ytd">Ano corrente</button>
+            <button type="button" class="period-chip pressable" role="tab" data-period="custom">Personalizado</button>
+          </div>
+          <div class="period-custom-range" id="period-custom-range" hidden>
+            <div class="field">
+              <label class="field-label" for="period-start">De</label>
+              <input class="input" id="period-start" type="date" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="period-end">Até</label>
+              <input class="input" id="period-end" type="date" />
+            </div>
+          </div>
+
+          <div id="indicadores-root" aria-live="polite"></div>
+        </div>
+
+        <div id="estoque-section" hidden>
+          <div class="field">
+            <label class="field-label" for="estoque-property">Propriedade</label>
+            <select class="select" id="estoque-property"></select>
+          </div>
+          <div id="estoque-root" aria-live="polite"></div>
+        </div>
       </section>
 
       <!-- Perfil -->
@@ -2075,6 +2092,7 @@
       movement: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v18"/><path d="m3 7 4-4 4 4"/><path d="M17 21V3"/><path d="m21 17-4 4-4-4"/></svg>`,
       calving: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>`,
       finishing: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>`,
+      transfer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>`,
     };
 
     // lots.category (SPEC 6.3) — distinct plural vocabulary from animals.category,
@@ -4344,6 +4362,10 @@
                Iniciar terminação
              </button>
            ` : ""}
+           <button type="button" class="action-item pressable" data-menu-action="transfer">
+             <span class="action-icon" aria-hidden="true">${ICONS.transfer}</span>
+             Transferir propriedade
+           </button>
            <button type="button" class="action-item pressable" data-menu-action="edit">
              <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
              Editar
@@ -4366,9 +4388,103 @@
            else if (btn.dataset.menuAction === "wean") openLotWeaningSheet(lot);
            else if (btn.dataset.menuAction === "calving") openLotCalvingSheet(lot);
            else if (btn.dataset.menuAction === "finishing") openLotFinishingSheet(lot);
+           else if (btn.dataset.menuAction === "transfer") openTransferSheet(lot);
            else Sheet.close();
          });
        });
+     }
+
+     // --- Transferir propriedade: moves the lot's whole headcount to
+     //     another property and logs a "transfer" movement for the ledger. ---
+     function buildTransferFormHTML(lot) {
+       const propertyOptions = propertiesCache
+         .filter((p) => p.id !== lot.propertyId)
+         .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
+         .join("");
+       const noTargets = propertyOptions === "";
+       return `
+         <form id="transfer-form" class="form-grid" novalidate>
+           ${noTargets ? `
+             <p class="field-hint">Nenhuma outra propriedade disponível. Cadastre uma nova propriedade antes de transferir este lote.</p>
+           ` : `
+             <div class="field">
+               <label class="field-label" for="transfer-property">Nova propriedade *</label>
+               <select class="select" id="transfer-property">
+                 <option value="" selected>Selecione</option>
+                 ${propertyOptions}
+               </select>
+               <p class="field-error" id="transfer-property-error"></p>
+             </div>
+             <div class="field">
+               <label class="field-label" for="transfer-date">Data da transferência *</label>
+               <input class="input" id="transfer-date" type="date" value="${toDateInputValue(new Date())}" />
+               <p class="field-error" id="transfer-date-error"></p>
+             </div>
+           `}
+           <p class="field-error" id="transfer-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="transfer-submit" ${noTargets ? "disabled" : ""}>Transferir</button>
+         </form>
+       `;
+     }
+
+     function wireTransferForm(lot) {
+       const form = document.getElementById("transfer-form");
+       const submitBtn = document.getElementById("transfer-submit");
+       const formError = document.getElementById("transfer-form-error");
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         ["transfer-property", "transfer-date"].forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const toPropertyId = document.getElementById("transfer-property")?.value || "";
+         if (!toPropertyId) fail("transfer-property", "Selecione a propriedade de destino.");
+
+         const dateStr = document.getElementById("transfer-date")?.value || "";
+         if (!dateStr) fail("transfer-date", "Informe a data da transferência.");
+
+         if (!valid) return;
+
+         const date = new Date(`${dateStr}T00:00:00`);
+         const fromPropertyId = lot.propertyId || null;
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await addDoc(collection(db, "movements"), {
+             ownerId: currentUid,
+             type: "transfer",
+             lotId: lot.id,
+             fromPropertyId,
+             toPropertyId,
+             qty: lot.headcount ?? 0,
+             date,
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "lots", lot.id), { propertyId: toPropertyId, updatedAt: serverTimestamp() });
+           showToast("Lote transferido.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao transferir lote:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Transferir";
+         }
+       });
+     }
+
+     function openTransferSheet(lot) {
+       Sheet.open({ title: `Transferir · ${escapeHtml(lot.name)}`, content: buildTransferFormHTML(lot) });
+       wireTransferForm(lot);
      }
 
      // Tapping an aggregate lot's card opens its detail sheet (movement
@@ -7109,6 +7225,113 @@
      renderIndicadoresLoading();
 
      // =====================================================
+     // 7f2. Estoque — per-property + consolidated inventory by chronological
+     //      stage (Phase 4). Counts LOTS, not animals: each active lot's
+     //      headcount (the source of truth) lands in exactly one
+     //      CATTLE_CATEGORIES bucket, so tagged animals — already part of
+     //      their lot's headcount — never double count.
+     // =====================================================
+     const indSectionKpisEl = document.getElementById("indicadores-kpis-section");
+     const estoqueSectionEl = document.getElementById("estoque-section");
+     const estoquePropertySelect = document.getElementById("estoque-property");
+     const estoqueRootEl = document.getElementById("estoque-root");
+
+     document.querySelectorAll('input[name="ind-section"]').forEach((r) => r.addEventListener("change", () => {
+       const isEstoque = document.querySelector('input[name="ind-section"]:checked').value === "estoque";
+       indSectionKpisEl.hidden = isEstoque;
+       estoqueSectionEl.hidden = !isEstoque;
+       if (isEstoque) renderEstoque();
+     }));
+
+     // { buckets: { [CATTLE_CATEGORIES key or "sem_categoria"]: headcount }, total }
+     function computeInventoryBuckets(lots) {
+       const buckets = {};
+       for (const key of Object.keys(CATTLE_CATEGORIES)) buckets[key] = 0;
+       buckets.sem_categoria = 0;
+       let total = 0;
+       for (const lot of lots) {
+         const headcount = lot.headcount ?? 0;
+         const key = displayCategoryKeyForLot(lot) || "sem_categoria";
+         buckets[key] = (buckets[key] || 0) + headcount;
+         total += headcount;
+       }
+       return { buckets, total };
+     }
+
+     function inventoryCardsHTML(buckets, total) {
+       const categoryCards = Object.entries(CATTLE_CATEGORIES)
+         .map(([key, c]) => kpiOk(c.label, fmtNum(buckets[key] || 0), "cabeças"))
+         .map(kpiCardHTML)
+         .join("");
+       const outroCard = buckets.sem_categoria > 0
+         ? kpiCardHTML(kpiOk("Sem categoria", fmtNum(buckets.sem_categoria), "cabeças", "Lotes anteriores à taxonomia atual"))
+         : "";
+       const totalCard = kpiCardHTML(kpiOk("Total", fmtNum(total), "cabeças"));
+       return categoryCards + outroCard + totalCard;
+     }
+
+     let estoqueSelectedPropertyId = null; // null = not yet initialized for this session
+
+     function estoquePropertyOptionsHTML() {
+       const hasOrphanLots = lotsCache.some((l) => !l.propertyId);
+       const propertyOptions = propertiesCache
+         .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
+         .join("");
+       const orphanOption = hasOrphanLots ? `<option value="">Sem propriedade</option>` : "";
+       return propertyOptions + orphanOption;
+     }
+
+     function renderEstoqueLoading() {
+       estoqueRootEl.innerHTML = [
+         kpiSectionHTML("Estoque", "", Array.from({ length: 6 }).map(kpiSkeletonCardHTML).join("")),
+         kpiSectionHTML("Consolidado", "", Array.from({ length: 6 }).map(kpiSkeletonCardHTML).join("")),
+       ].join("");
+     }
+
+     function renderEstoque() {
+       if (!loadedFlags.lots || !loadedFlags.properties) {
+         renderEstoqueLoading();
+         return;
+       }
+
+       if (estoqueSelectedPropertyId == null) {
+         estoqueSelectedPropertyId = propertiesCache[0]?.id ?? "";
+       }
+
+       estoquePropertySelect.innerHTML = estoquePropertyOptionsHTML();
+       if (!estoquePropertySelect.innerHTML) {
+         estoqueRootEl.innerHTML = `<p class="field-hint">Nenhuma propriedade ou lote cadastrado ainda.</p>`;
+         return;
+       }
+       estoquePropertySelect.value = estoqueSelectedPropertyId;
+       // Selected property may have been deleted since — fall back to the
+       // first still-valid option rather than showing a blank select.
+       if (estoquePropertySelect.value !== estoqueSelectedPropertyId) {
+         estoqueSelectedPropertyId = estoquePropertySelect.options[0]?.value ?? "";
+         estoquePropertySelect.value = estoqueSelectedPropertyId;
+       }
+
+       const propertyName = estoqueSelectedPropertyId
+         ? (propertiesCache.find((p) => p.id === estoqueSelectedPropertyId)?.name || "—")
+         : "Sem propriedade";
+       const propertyLots = lotsCache.filter((l) => (l.propertyId || "") === estoqueSelectedPropertyId);
+       const perProperty = computeInventoryBuckets(propertyLots);
+       const consolidated = computeInventoryBuckets(lotsCache);
+
+       estoqueRootEl.innerHTML = [
+         kpiSectionHTML(`Estoque — ${propertyName}`, `${propertyLots.length} lote(s) ativo(s)`, inventoryCardsHTML(perProperty.buckets, perProperty.total)),
+         kpiSectionHTML("Consolidado", `${lotsCache.length} lote(s) em todas as propriedades`, inventoryCardsHTML(consolidated.buckets, consolidated.total)),
+       ].join("");
+     }
+
+     estoquePropertySelect.addEventListener("change", () => {
+       estoqueSelectedPropertyId = estoquePropertySelect.value;
+       renderEstoque();
+     });
+
+     renderEstoqueLoading();
+
+     // =====================================================
      // 7g. Animal detail sheet — weighing history + "Resultado" (sold animals)
      // =====================================================
      function computeAnimalWeighingRows(animal) {
@@ -7233,7 +7456,7 @@
 
     // Indicadores needs all four caches to have resolved at least once before
     // it can tell "no data yet" apart from "still loading" (skeleton vs. hint).
-    let loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false };
+    let loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
 
     // Guards the one-time settings.propertyAreaHa → properties/{id} migration
     // (see maybeMigratePropertyArea) so it fires at most once per session.
@@ -7243,7 +7466,7 @@
       currentUid = uid;
       renderSkeletons(4);
       herdCountEl.textContent = "Carregando…";
-      loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false };
+      loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
       propertyMigrationAttempted = false;
 
       const animalsQuery = query(
@@ -7281,11 +7504,15 @@
           renderLots();
           renderFinanceiro();
           refreshLotDetailSheetIfOpen();
+          loadedFlags.lots = true;
+          renderEstoque();
         },
         (err) => {
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
           lotsCache = [];
           renderLotsError();
+          loadedFlags.lots = true;
+          renderEstoque();
         }
       );
 
@@ -7387,12 +7614,14 @@
           loadedFlags.properties = true;
           maybeMigratePropertyArea();
           renderIndicadores();
+          renderEstoque();
         },
         (err) => {
           console.warn("[Agro Connect] properties onSnapshot error:", err?.code ?? err);
           propertiesCache = [];
           loadedFlags.properties = true;
           renderIndicadores();
+          renderEstoque();
         }
       );
 
@@ -7463,7 +7692,8 @@
       suppliersCache = [];
       movementsCache = [];
       openLotDetailLotId = null;
-      loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false };
+      estoqueSelectedPropertyId = null;
+      loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
       propertyMigrationAttempted = false;
       herdListEl.innerHTML = "";
       statHeadEl.textContent = "—";
