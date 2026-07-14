@@ -1906,11 +1906,72 @@
       return (key && CATEGORY_CHIP_CLASS[key]) || "chip-recria";
     }
 
-    // Nursing → weaned promotion used by the "Registrar desmama" flow.
-    const WEANED_CATEGORY = {
-      bezerro_lactente: "bezerro_desmamado",
-      bezerra_lactente: "bezerra_desmamada",
-    };
+    // Whole months between two dates, floored (a day short of the month
+    // anniversary doesn't count yet). Used only for stage derivation below.
+    function ageMonthsBetween(birthDate, now) {
+      const b = toDateSafe(birthDate);
+      const n = toDateSafe(now) || now;
+      if (!b || !n) return null;
+      let months = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
+      if (n.getDate() < b.getDate()) months -= 1;
+      return Math.max(0, months);
+    }
+
+    // Chronological stage engine (derived, not stored). Age-only thresholds
+    // advance automatically; weaning/1st-calving/finishing are event-gated
+    // via their stamped dates — without the stamp, males stay at
+    // bezerro_lactente indefinitely and females ride age alone past 12mo.
+    // Returns null when there's no birthDate to compute from — callers must
+    // fall back to the stored entry category (no auto-advance) in that case.
+    function deriveStage({ sex, birthDate, weaningDate, firstCalvingDate, finishingStartDate, now = new Date() }) {
+      const age = ageMonthsBetween(birthDate, now);
+      if (age == null) return null;
+
+      if (sex === "F") {
+        if (age < 12 && !weaningDate) return "bezerra_lactente";
+        if (weaningDate && age < 12) return "bezerra_desmamada";
+        if (age >= 12 && !firstCalvingDate) return "novilha";
+        return "vaca";
+      }
+
+      // Male
+      if (age < 8 || !weaningDate) return "bezerro_lactente";
+      if (weaningDate && age < 12) return "bezerro_desmamado";
+      if (age >= 12 && age < 24) return "garrote";
+      if (age >= 24 && !finishingStartDate) return "boi_magro";
+      return "boi_gordo";
+    }
+
+    // animal.birthDate falls back to its lot's birthDateRef (untagged/aggregate
+    // reference age); with neither, the stored entry category wins as-is.
+    function displayCategoryKeyForAnimal(animal, lot) {
+      const birthDate = animal.birthDate || lot?.birthDateRef || null;
+      if (!birthDate) return resolveCategoryKey(animal.category, animal.sex);
+      const key = deriveStage({
+        sex: animal.sex,
+        birthDate,
+        weaningDate: animal.weaningDate,
+        firstCalvingDate: animal.firstCalvingDate,
+        finishingStartDate: animal.finishingStartDate,
+      });
+      return key || resolveCategoryKey(animal.category, animal.sex);
+    }
+
+    // lot.entryCategory-based lots (Phase 2+) derive their stage from
+    // birthDateRef; lots predating that field simply have no entryCategory
+    // and the caller should fall back to the legacy coarse category display.
+    function displayCategoryKeyForLot(lot) {
+      if (!lot.entryCategory) return null;
+      if (!lot.birthDateRef) return resolveCategoryKey(lot.entryCategory, lot.sex);
+      const key = deriveStage({
+        sex: lot.sex,
+        birthDate: lot.birthDateRef,
+        weaningDate: lot.weaningDate,
+        firstCalvingDate: lot.firstCalvingDate,
+        finishingStartDate: lot.finishingStartDate,
+      });
+      return key || resolveCategoryKey(lot.entryCategory, lot.sex);
+    }
 
     // CATTLE_CATEGORIES key (lots.entryCategory) → legacy coarse lots.category
     // bucket, kept alongside entryCategory on every new lot so the existing
@@ -1941,6 +2002,7 @@
       "birthDateRef",            // Date | null
       "birthDateRefIsEstimated", // bool
       "weaningDate",             // Date | null
+      "firstCalvingDate",        // Date | null — stamped at lot level for homogeneous female lots
       "finishingStartDate",      // Date | null
       // propertyId already exists on lots; becomes REQUIRED starting Phase 2.
     ];
@@ -2011,6 +2073,8 @@
       delete: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`,
       warning: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
       movement: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v18"/><path d="m3 7 4-4 4 4"/><path d="M17 21V3"/><path d="m21 17-4 4-4-4"/></svg>`,
+      calving: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>`,
+      finishing: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>`,
     };
 
     // lots.category (SPEC 6.3) — distinct plural vocabulary from animals.category,
@@ -2029,6 +2093,30 @@
       bezerros: "chip-bezerro",
       outro: "chip-recria",
     };
+
+    // Chip label/class for an animal card: the chronologically DERIVED stage
+    // when there's enough data to compute one, falling back to the stored
+    // (possibly legacy) category otherwise. Never writes back.
+    function animalStageLabel(animal, lot) {
+      const key = displayCategoryKeyForAnimal(animal, lot);
+      return key ? CATTLE_CATEGORIES[key].label : categoryLabelFor(animal.category, animal.sex);
+    }
+    function animalStageChipClass(animal, lot) {
+      const key = displayCategoryKeyForAnimal(animal, lot);
+      return key ? (CATEGORY_CHIP_CLASS[key] || "chip-recria") : categoryChipClassFor(animal.category, animal.sex);
+    }
+
+    // Same idea for a lot card: derived stage when the lot has entryCategory
+    // (Phase 2+) and enough data to compute one; legacy lots (no
+    // entryCategory) fall back to the old coarse lots.category chip as before.
+    function lotStageLabel(lot) {
+      const key = displayCategoryKeyForLot(lot);
+      return key ? CATTLE_CATEGORIES[key].label : (lotCategoryLabel[lot.category] || lot.category || "—");
+    }
+    function lotStageChipClass(lot) {
+      const key = displayCategoryKeyForLot(lot);
+      return key ? (CATEGORY_CHIP_CLASS[key] || "chip-recria") : (LOT_CHIP_CLASS[lot.category] || "chip-recria");
+    }
 
     // =====================================================
     // 2. DOM references
@@ -2269,14 +2357,15 @@
         .map((a, i) => {
           const days = daysOnFarm(a);
           const weight = a.currentWeightKg != null ? `${formatKg(a.currentWeightKg)} kg` : "—";
-          const chipClass = categoryChipClassFor(a.category, a.sex);
+          const lot = a.lotId ? lotsCache.find((l) => l.id === a.lotId) : null;
+          const chipClass = animalStageChipClass(a, lot);
           const saleResult = computeSaleResult(a, transactionsCache);
           return `
             <li class="card enter pressable" style="--i: ${i}" data-animal-id="${escapeHtml(a.id)}" tabindex="0" role="button" aria-label="Ver detalhes do animal #${escapeHtml(a.earTag)}">
               <div class="card-top">
                 <span class="ear-tag"><span class="hash">#</span>${escapeHtml(a.earTag)}</span>
                 <div class="card-top-right">
-                  <span class="chip ${chipClass}">${escapeHtml(categoryLabelFor(a.category, a.sex))}</span>
+                  <span class="chip ${chipClass}">${escapeHtml(animalStageLabel(a, lot))}</span>
                   <button type="button" class="card-menu-btn pressable" data-action="animal-menu" data-id="${escapeHtml(a.id)}" aria-label="Ações do animal #${escapeHtml(a.earTag)}">
                     ${ICONS.menu}
                   </button>
@@ -2389,8 +2478,8 @@
 
       lotListEl.innerHTML = lotsCache
         .map((l, i) => {
-          const chipClass = LOT_CHIP_CLASS[l.category] || "chip-recria";
-          const categoryChip = `<span class="chip ${chipClass}">${lotCategoryLabel[l.category] || escapeHtml(l.category)}</span>`;
+          const chipClass = lotStageChipClass(l);
+          const categoryChip = `<span class="chip ${chipClass}">${escapeHtml(lotStageLabel(l))}</span>`;
           const menuBtn = `
             <button type="button" class="card-menu-btn pressable" data-action="lot-menu" data-id="${escapeHtml(l.id)}" aria-label="Ações do lote ${escapeHtml(l.name)}">
               ${ICONS.menu}
@@ -3086,6 +3175,18 @@
              <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
              Desmamar
            </button>
+           ${animal.sex === "F" ? `
+             <button type="button" class="action-item pressable" data-menu-action="calving">
+               <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
+               Registrar 1º parto
+             </button>
+           ` : ""}
+           ${animal.sex === "M" ? `
+             <button type="button" class="action-item pressable" data-menu-action="finishing">
+               <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
+               Iniciar terminação
+             </button>
+           ` : ""}
            <button type="button" class="action-item danger pressable" data-menu-action="death">
              <span class="action-icon" aria-hidden="true">${ICONS.death}</span>
              Registrar morte
@@ -3118,6 +3219,8 @@
              case "sell": openSaleSheet(animal); break;
              case "weigh": openWeighingSheet(animal); break;
              case "wean": openWeaningSheet(animal); break;
+             case "calving": openCalvingSheet(animal); break;
+             case "finishing": openFinishingSheet(animal); break;
              case "death": openDeathSheet(animal); break;
              case "edit": openEditAnimalSheet(animal); break;
              case "delete": openDeleteAnimalSheet(animal); break;
@@ -3490,13 +3593,12 @@
              payload: { weightKg, damAnimalId: animal.damAnimalId || null },
              createdAt: serverTimestamp(),
            });
-           const weanedCategory = WEANED_CATEGORY[resolveCategoryKey(animal.category, animal.sex)];
-           if (weanedCategory) {
-             await updateDoc(doc(db, "animals", animal.id), {
-               category: weanedCategory,
-               updatedAt: serverTimestamp(),
-             });
-           }
+           // Stamp the date only — the displayed category is derived from it
+           // (deriveStage), never written back to the stored category.
+           await updateDoc(doc(db, "animals", animal.id), {
+             weaningDate: date,
+             updatedAt: serverTimestamp(),
+           });
            showToast("Desmama registrada.");
            Sheet.close();
          } catch (err) {
@@ -3517,6 +3619,173 @@
          content: buildWeaningFormHTML(),
        });
        wireWeaningForm(animal);
+     }
+
+     // --- Shared "stamp a date" sheet: backs "Registrar 1º parto",
+     //     "Iniciar terminação" and the lot-level "Registrar desmama" — each
+     //     is just a date input that (a) appends an events doc and (b)
+     //     stamps one field on the animal/lot doc. The displayed category
+     //     is derived from that stamp (deriveStage), never written directly.
+     function buildStampFormHTML(dateLabel, submitLabel) {
+       return `
+         <form id="stamp-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="stamp-date">${dateLabel} *</label>
+             <input class="input" id="stamp-date" type="date" value="${toDateInputValue(new Date())}" />
+             <p class="field-error" id="stamp-date-error"></p>
+           </div>
+           <p class="field-error" id="stamp-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="stamp-submit">${submitLabel}</button>
+         </form>
+       `;
+     }
+
+     function wireStampForm({ submitLabel, onSubmit }) {
+       const form = document.getElementById("stamp-form");
+       const submitBtn = document.getElementById("stamp-submit");
+       const formError = document.getElementById("stamp-form-error");
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         clearFieldError("stamp-date");
+
+         const dateStr = document.getElementById("stamp-date").value;
+         if (!dateStr) { setFieldError("stamp-date", "Informe a data."); return; }
+
+         const date = new Date(`${dateStr}T00:00:00`);
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await onSubmit(date);
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao registrar:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = submitLabel;
+         }
+       });
+     }
+
+     function openStampSheet({ title, dateLabel, submitLabel, onSubmit }) {
+       Sheet.open({ title, content: buildStampFormHTML(dateLabel, submitLabel) });
+       wireStampForm({ submitLabel, onSubmit });
+     }
+
+     // --- Registrar 1º parto (fêmeas) ---
+     function openCalvingSheet(animal) {
+       openStampSheet({
+         title: `Registrar 1º parto · #${escapeHtml(animal.earTag)}`,
+         dateLabel: "Data do 1º parto",
+         submitLabel: "Registrar 1º parto",
+         onSubmit: async (date) => {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "calving",
+             animalId: animal.id,
+             lotId: animal.lotId || null,
+             date,
+             payload: {},
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "animals", animal.id), { firstCalvingDate: date, updatedAt: serverTimestamp() });
+           showToast("1º parto registrado.");
+         },
+       });
+     }
+
+     function openLotCalvingSheet(lot) {
+       openStampSheet({
+         title: `Registrar 1º parto · ${escapeHtml(lot.name)}`,
+         dateLabel: "Data do 1º parto",
+         submitLabel: "Registrar 1º parto",
+         onSubmit: async (date) => {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "calving",
+             animalId: null,
+             lotId: lot.id,
+             date,
+             payload: {},
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "lots", lot.id), { firstCalvingDate: date, updatedAt: serverTimestamp() });
+           showToast("1º parto registrado para o lote.");
+         },
+       });
+     }
+
+     // --- Iniciar terminação (machos) ---
+     function openFinishingSheet(animal) {
+       openStampSheet({
+         title: `Iniciar terminação · #${escapeHtml(animal.earTag)}`,
+         dateLabel: "Data de início da terminação",
+         submitLabel: "Iniciar terminação",
+         onSubmit: async (date) => {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "finishing",
+             animalId: animal.id,
+             lotId: animal.lotId || null,
+             date,
+             payload: {},
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "animals", animal.id), { finishingStartDate: date, updatedAt: serverTimestamp() });
+           showToast("Terminação iniciada.");
+         },
+       });
+     }
+
+     function openLotFinishingSheet(lot) {
+       openStampSheet({
+         title: `Iniciar terminação · ${escapeHtml(lot.name)}`,
+         dateLabel: "Data de início da terminação",
+         submitLabel: "Iniciar terminação",
+         onSubmit: async (date) => {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "finishing",
+             animalId: null,
+             lotId: lot.id,
+             date,
+             payload: {},
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "lots", lot.id), { finishingStartDate: date, updatedAt: serverTimestamp() });
+           showToast("Terminação iniciada para o lote.");
+         },
+       });
+     }
+
+     // --- Registrar desmama (lote) ---
+     function openLotWeaningSheet(lot) {
+       openStampSheet({
+         title: `Registrar desmama · ${escapeHtml(lot.name)}`,
+         dateLabel: "Data da desmama",
+         submitLabel: "Registrar desmama",
+         onSubmit: async (date) => {
+           await addDoc(collection(db, "events"), {
+             ownerId: currentUid,
+             type: "weaning",
+             animalId: null,
+             lotId: lot.id,
+             date,
+             payload: {},
+             createdAt: serverTimestamp(),
+           });
+           await updateDoc(doc(db, "lots", lot.id), { weaningDate: date, updatedAt: serverTimestamp() });
+           showToast("Desmama registrada para o lote.");
+         },
+       });
      }
 
      // --- Registrar morte ---
@@ -4046,12 +4315,33 @@
      // =====================================================
      function buildLotActionMenuHTML(lot) {
        const isAggregate = (lot.trackingMode || "individual") === "aggregate";
+       // Chronological stamps only make sense for Phase 2+ lots that carry
+       // a sex + taxonomy category — legacy lots keep their old action set.
+       const hasStages = !!lot.sex;
        return `
          <div class="action-list">
            ${isAggregate ? `
              <button type="button" class="action-item pressable" data-menu-action="movement">
                <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
                Nova movimentação
+             </button>
+           ` : ""}
+           ${hasStages ? `
+             <button type="button" class="action-item pressable" data-menu-action="wean">
+               <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
+               Registrar desmama
+             </button>
+           ` : ""}
+           ${hasStages && lot.sex === "F" ? `
+             <button type="button" class="action-item pressable" data-menu-action="calving">
+               <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
+               Registrar 1º parto
+             </button>
+           ` : ""}
+           ${hasStages && lot.sex === "M" ? `
+             <button type="button" class="action-item pressable" data-menu-action="finishing">
+               <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
+               Iniciar terminação
              </button>
            ` : ""}
            <button type="button" class="action-item pressable" data-menu-action="edit">
@@ -4073,6 +4363,9 @@
            if (btn.dataset.menuAction === "edit") openEditLotSheet(lot);
            else if (btn.dataset.menuAction === "delete") openDeleteLotSheet(lot);
            else if (btn.dataset.menuAction === "movement") openLotMovementSheet(lot);
+           else if (btn.dataset.menuAction === "wean") openLotWeaningSheet(lot);
+           else if (btn.dataset.menuAction === "calving") openLotCalvingSheet(lot);
+           else if (btn.dataset.menuAction === "finishing") openLotFinishingSheet(lot);
            else Sheet.close();
          });
        });
@@ -6421,7 +6714,8 @@
 
        const byCategory = {};
        for (const p of perAnimal) {
-         const key = resolveCategoryKey(p.animal.category, p.animal.sex) || "outro";
+         const lot = p.animal.lotId ? lotsCache.find((l) => l.id === p.animal.lotId) : null;
+         const key = displayCategoryKeyForAnimal(p.animal, lot) || "outro";
          (byCategory[key] ||= []).push(p.gDia);
        }
        for (const [key, arr] of Object.entries(byCategory)) {

@@ -44,11 +44,16 @@ service cloud.firestore {
       allow delete: if owns(resource);
     }
 
-    // Lifecycle events
+    // Lifecycle events — type is a closed set so a typo can't silently
+    // create an event no KPI/history query will ever match.
     match /events/{id} {
       allow read:   if owns(resource);
       allow create: if ownsNew()
-                    && request.resource.data.type is string
+                    && request.resource.data.type in [
+                         "purchase", "sale", "weighing", "death",
+                         "weaning", "calving", "finishing",
+                         "birth", "breeding", "pregnancy_check"
+                       ]
                     && request.resource.data.date is timestamp;
       allow update: if owns(resource) && ownsNew() && ownerImmutable();
       allow delete: if owns(resource);
