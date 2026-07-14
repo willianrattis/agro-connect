@@ -2461,6 +2461,30 @@
       return keys;
     }
 
+    // Month keys spanning from the earliest transaction on record (or 11
+    // months ago, whichever is earlier) through the current month, oldest
+    // first — so retroactive entries always have a reachable chip. With an
+    // empty cache this matches buildRecentMonthKeys(12) exactly.
+    function buildMonthKeysFromData() {
+      const now = new Date();
+      const currentKey = monthKey(now);
+      let earliestKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 11, 1));
+      for (const t of transactionsCache) {
+        const d = toDateSafe(t.date);
+        if (!d) continue;
+        const k = monthKey(d);
+        if (k < earliestKey) earliestKey = k;
+      }
+      const [startY, startM] = earliestKey.split("-").map(Number);
+      const keys = [];
+      const cursor = new Date(startY, startM - 1, 1);
+      while (monthKey(cursor) <= currentKey) {
+        keys.push(monthKey(cursor));
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      return keys;
+    }
+
     function formatDayLabel(date) {
       return `${WEEKDAY_ABBR[date.getDay()]}, ${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
     }
@@ -2720,21 +2744,35 @@
     // =====================================================
     // 4b. Render: Financeiro (month-filtered ledger)
     // =====================================================
+    // Declared early (ahead of the other Firestore caches below) because
+    // renderMonthChips() reads it during the module's initial synchronous
+    // render, before the "Firestore listeners" section runs.
+    let transactionsCache = [];
     let selectedMonthKey = monthKey(new Date());
 
+    let lastMonthChipKeys = [];
+
     function renderMonthChips() {
-      monthSelectorEl.innerHTML = buildRecentMonthKeys(12)
+      const keys = buildMonthKeysFromData();
+      const keysChanged =
+        keys.length !== lastMonthChipKeys.length || keys.some((k, i) => k !== lastMonthChipKeys[i]);
+      if (!keys.includes(selectedMonthKey)) selectedMonthKey = monthKey(new Date());
+      monthSelectorEl.innerHTML = keys
         .map((key) => `<button type="button" class="month-chip pressable" role="tab" data-month="${key}">${monthChipLabel(key)}</button>`)
         .join("");
-      syncMonthChipActive();
+      syncMonthChipActive(keysChanged);
+      lastMonthChipKeys = keys;
     }
 
-    function syncMonthChipActive() {
+    // scrollIntoView only fires when explicitly requested (a user click, or
+    // the chip set itself changing) so a routine data refresh with the same
+    // month range doesn't yank a manually-scrolled strip back into place.
+    function syncMonthChipActive(scrollToActive = true) {
       monthSelectorEl.querySelectorAll(".month-chip").forEach((btn) => {
         const active = btn.dataset.month === selectedMonthKey;
         btn.classList.toggle("is-active", active);
         btn.setAttribute("aria-selected", String(active));
-        if (active) btn.scrollIntoView({ inline: "center", block: "nearest" });
+        if (active && scrollToActive) btn.scrollIntoView({ inline: "center", block: "nearest" });
       });
     }
 
@@ -7506,7 +7544,8 @@
     let currentUid = null;
     let lotsCache = [];
     let animalsCache = [];
-    let transactionsCache = [];
+    // transactionsCache is declared earlier (near renderMonthChips) — see
+    // note there.
     let eventsCache = [];
     let settingsCache = {};
     let propertiesCache = [];
@@ -7614,6 +7653,7 @@
         (snap) => {
           transactionsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           if (animalsCache.length) renderHerd(animalsCache);
+          renderMonthChips();
           renderFinanceiro();
           loadedFlags.transactions = true;
           renderIndicadores();
