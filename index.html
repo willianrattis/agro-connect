@@ -914,7 +914,7 @@
        top: 50%;
        left: 50%;
        bottom: auto;
-       width: min(92vw, 520px);
+       width: min(94vw, 720px);
        max-height: 85vh;
        border-radius: var(--radius-lg);
        transform: translate(-50%, -50%) scale(0.95);
@@ -949,6 +949,37 @@
   /* Author display:flex above otherwise beats the UA [hidden] rule, so a
      conditionally-hidden .form-grid/.field would stay visible. */
   .form-grid[hidden], .field[hidden] { display: none; }
+
+  /* Desktop ≥768px: top-level sheet forms go two-column to use the wider
+     dialog and cut vertical scroll. Scoped to `form.form-grid` (plus any
+     `.form-grid` nested inside one, e.g. conditionally-revealed groups) so
+     the non-form `.form-grid` wrappers used for confirm dialogs / lists
+     elsewhere in the sheet are untouched and stay single-column. A nested
+     group is itself a full-width item in its parent grid (it's never given
+     `.field--half`) but lays its own children out in the same two columns. */
+  @media (min-width: 768px) {
+    /* :not([hidden]) keeps this from ever out-specificity-ing the
+       `.form-grid[hidden] { display: none }` rule above for a nested group
+       that's currently hidden (e.g. the CNPJ fields while CPF is selected) —
+       without it, `form.form-grid .form-grid` (0,2,1) beats `.form-grid[hidden]`
+       (0,2,0) and the hidden group would render anyway. */
+    form.form-grid,
+    form.form-grid .form-grid:not([hidden]) {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: var(--space-4);
+      row-gap: var(--space-4);
+      align-items: start;
+    }
+    form.form-grid > *,
+    form.form-grid .form-grid:not([hidden]) > * {
+      grid-column: 1 / -1;
+    }
+    form.form-grid > .field--half,
+    form.form-grid .form-grid:not([hidden]) > .field--half {
+      grid-column: span 1;
+    }
+  }
 
   .field {
     display: flex;
@@ -2923,7 +2954,7 @@
              <p class="field-error" id="af-earTag-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="af-sex">Sexo *</label>
              <select class="select" id="af-sex">
                <option value="" ${initialSex ? "" : "selected"}>Selecione</option>
@@ -2933,7 +2964,7 @@
              <p class="field-error" id="af-sex-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="af-category">Categoria *</label>
              <select class="select" id="af-category" ${initialSex ? "" : "disabled"}>
                <option value="" selected>${initialSex ? "Selecione" : "Selecione o sexo primeiro"}</option>
@@ -2953,12 +2984,12 @@
            </div>
 
            <div id="af-purchased-fields" class="form-grid" ${origin === "purchased" ? "" : "hidden"}>
-             <div class="field">
+             <div class="field field--half">
                <label class="field-label" for="af-purchaseDate">Data da compra *</label>
                <input class="input" id="af-purchaseDate" type="date" value="${toDateInputValue(animal.purchaseDate)}" />
                <p class="field-error" id="af-purchaseDate-error"></p>
              </div>
-             <div class="field">
+             <div class="field field--half">
                <label class="field-label" for="af-purchaseWeightKg">Peso na compra (kg) *</label>
                <input class="input" id="af-purchaseWeightKg" type="number" min="0" step="0.1" placeholder="Ex: 220" value="${animal.purchaseWeightKg ?? ""}" />
                <p class="field-error" id="af-purchaseWeightKg-error"></p>
@@ -2978,7 +3009,7 @@
              </div>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="af-lot">Lote</label>
              <select class="select" id="af-lot">
                <option value="" ${!animal.lotId ? "selected" : ""}>Sem lote</option>
@@ -2986,7 +3017,7 @@
              </select>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="af-currentWeightKg">Peso atual (kg)</label>
              <input class="input" id="af-currentWeightKg" type="number" min="0" step="0.1" placeholder="Ex: 320" value="${animal.currentWeightKg ?? ""}" />
            </div>
@@ -3001,6 +3032,18 @@
            <button type="submit" class="btn-primary pressable" id="af-submit">Salvar alterações</button>
          </form>
        `;
+     }
+
+     // Segmented controls (Origem, Documento do vendedor, Modo de preço, ...)
+     // reveal or restyle a dependent section that often renders below the
+     // fold inside .sheet-body — without this, toggling them looks like a
+     // no-op because the change is off-screen. Called from the relevant
+     // "change" handlers, never from the initial sync (nothing to reveal
+     // when the sheet has just opened).
+     function scrollRevealIntoView(el) {
+       if (!el || el.hidden) return;
+       const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+       requestAnimationFrame(() => el.scrollIntoView({ block: "nearest", behavior }));
      }
 
      function clearFieldError(inputId) {
@@ -3039,7 +3082,10 @@
          purchasedFields.hidden = !purchased;
          bornFields.hidden = purchased;
        }
-       form.querySelectorAll('input[name="af-origin"]').forEach((r) => r.addEventListener("change", syncOrigin));
+       form.querySelectorAll('input[name="af-origin"]').forEach((r) => r.addEventListener("change", () => {
+         syncOrigin();
+         scrollRevealIntoView(originValue() === "purchased" ? purchasedFields : bornFields);
+       }));
        syncOrigin();
 
        // Category options are scoped to the chosen sex (CATTLE_CATEGORIES).
@@ -3331,22 +3377,22 @@
      function buildSaleFormHTML(defaultPrice) {
        return `
          <form id="sale-form" class="form-grid" novalidate>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="sale-date">Data da venda *</label>
              <input class="input" id="sale-date" type="date" />
              <p class="field-error" id="sale-date-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="sale-arrobas">Peso de carcaça (@) *</label>
              <input class="input" id="sale-arrobas" type="number" min="0" step="0.01" placeholder="Ex: 21" />
              <p class="field-error" id="sale-arrobas-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="sale-price">Preço da @ (R$) *</label>
              <input class="input" id="sale-price" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="${defaultPrice != null ? formatBRL(defaultPrice) : ""}" />
              <p class="field-error" id="sale-price-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <span class="field-label">Valor da venda</span>
              <p class="stat-value" id="sale-total" style="font-size: var(--fs-lg);">R$ 0,00</p>
            </div>
@@ -3459,12 +3505,12 @@
      function buildWeighingFormHTML() {
        return `
          <form id="weigh-form" class="form-grid" novalidate>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="weigh-date">Data da pesagem *</label>
              <input class="input" id="weigh-date" type="date" />
              <p class="field-error" id="weigh-date-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="weigh-weight">Peso (kg) *</label>
              <input class="input" id="weigh-weight" type="number" min="0" step="0.1" placeholder="Ex: 340" />
              <p class="field-error" id="weigh-weight-error"></p>
@@ -3543,12 +3589,12 @@
      function buildWeaningFormHTML() {
        return `
          <form id="wean-form" class="form-grid" novalidate>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="wean-date">Data da desmama *</label>
              <input class="input" id="wean-date" type="date" />
              <p class="field-error" id="wean-date-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="wean-weight">Peso (kg)</label>
              <input class="input" id="wean-weight" type="number" min="0" step="0.1" placeholder="Opcional" />
            </div>
@@ -3927,7 +3973,7 @@
              </div>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="tx-category">Categoria *</label>
              <select class="select" id="tx-category">
                <option value="">Selecione</option>
@@ -3936,7 +3982,7 @@
              <p class="field-error" id="tx-category-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="tx-amount">Valor (R$) *</label>
              <input class="input" id="tx-amount" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="${transaction ? formatBRL(transaction.amountBRL) : ""}" />
              <p class="field-error" id="tx-amount-error"></p>
@@ -4020,7 +4066,11 @@
          scopeAnimalField.hidden = scope !== "animal";
          scopeLotField.hidden = scope !== "lot";
        }
-       form.querySelectorAll('input[name="tx-scope"]').forEach((r) => r.addEventListener("change", syncScope));
+       form.querySelectorAll('input[name="tx-scope"]').forEach((r) => r.addEventListener("change", () => {
+         syncScope();
+         const scope = scopeValue();
+         scrollRevealIntoView(scope === "animal" ? scopeAnimalField : scope === "lot" ? scopeLotField : null);
+       }));
        syncScope();
 
        amountInput.addEventListener("input", () => formatCurrencyInput(amountInput));
@@ -4209,12 +4259,12 @@
      function buildSettingsFormHTML() {
        return `
          <form id="settings-form" class="form-grid" novalidate>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="settings-area">Área da propriedade (ha)</label>
              <input class="input" id="settings-area" type="number" min="0" step="0.01" placeholder="Ex: 120" value="${settingsCache.propertyAreaHa ?? ""}" />
              <p class="field-error" id="settings-area-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="settings-price">Preço padrão da @ (R$)</label>
              <input class="input" id="settings-price" type="number" min="0" step="0.01" placeholder="Ex: 350" value="${settingsCache.defaultArrobaPriceBRL ?? ""}" />
              <p class="field-error" id="settings-price-error"></p>
@@ -4225,12 +4275,12 @@
              <p class="field-hint">Custo não-efetivo mensal (máquinas, benfeitorias) — alimenta o COT/@ e a margem líquida.</p>
              <p class="field-error" id="settings-depreciation-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="settings-prolabore">Pró-labore mensal (R$)</label>
              <input class="input" id="settings-prolabore" type="number" min="0" step="0.01" placeholder="Ex: 3000" value="${settingsCache.monthlyProLaboreBRL ?? ""}" />
              <p class="field-error" id="settings-prolabore-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="settings-capital">Capital investido (R$)</label>
              <input class="input" id="settings-capital" type="number" min="0" step="0.01" placeholder="Ex: 500000" value="${settingsCache.investedCapitalBRL ?? ""}" />
              <p class="field-hint">Usado para calcular o ROI %.</p>
@@ -4392,7 +4442,7 @@
            ${noTargets ? `
              <p class="field-hint">Nenhuma outra propriedade disponível. Cadastre uma nova propriedade antes de transferir este lote.</p>
            ` : `
-             <div class="field">
+             <div class="field field--half">
                <label class="field-label" for="transfer-property">Nova propriedade *</label>
                <select class="select" id="transfer-property">
                  <option value="" selected>Selecione</option>
@@ -4400,7 +4450,7 @@
                </select>
                <p class="field-error" id="transfer-property-error"></p>
              </div>
-             <div class="field">
+             <div class="field field--half">
                <label class="field-label" for="transfer-date">Data da transferência *</label>
                <input class="input" id="transfer-date" type="date" value="${toDateInputValue(new Date())}" />
                <p class="field-error" id="transfer-date-error"></p>
@@ -4512,12 +4562,12 @@
              <input class="input" id="lot-name" type="text" placeholder="Ex: Lote 3 — Engorda" autocomplete="off" value="${escapeHtml(lot.name)}" />
              <p class="field-error" id="lot-name-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="lot-category">Categoria *</label>
              <select class="select" id="lot-category">${categoryOptions}</select>
              <p class="field-error" id="lot-category-error"></p>
            </div>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="lot-area">Área (ha)</label>
              <input class="input" id="lot-area" type="number" min="0" step="0.01" placeholder="Opcional" value="${lot.areaHa ?? ""}" />
            </div>
@@ -4684,7 +4734,7 @@
              <p class="field-error" id="nl-newproperty-name-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="nl-sex">Sexo *</label>
              <select class="select" id="nl-sex">
                <option value="" selected>Selecione</option>
@@ -4694,7 +4744,7 @@
              <p class="field-error" id="nl-sex-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="nl-category">Categoria *</label>
              <select class="select" id="nl-category" disabled>
                <option value="" selected>Selecione o sexo primeiro</option>
@@ -4702,25 +4752,25 @@
              <p class="field-error" id="nl-category-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="nl-acquisitionDate">Data de entrada *</label>
              <input class="input" id="nl-acquisitionDate" type="date" value="${toDateInputValue(new Date())}" />
              <p class="field-error" id="nl-acquisitionDate-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="nl-headcount">Quantidade de cabeças *</label>
              <input class="input" id="nl-headcount" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex: 140" />
              <p class="field-error" id="nl-headcount-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="nl-avgWeightKg">Peso na entrada (kg) *</label>
              <input class="input" id="nl-avgWeightKg" type="number" min="0" step="1" placeholder="Ex: 210" />
              <p class="field-error" id="nl-avgWeightKg-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="nl-birthDateRef">Data de nascimento (ref.)</label>
              <input class="input" id="nl-birthDateRef" type="date" />
            </div>
@@ -4794,11 +4844,11 @@
                  <p class="field-error" id="nl-seller-cpf-error"></p>
                </div>
 
-               <div class="field">
+               <div class="field field--half">
                  <label class="field-label" for="nl-seller-municipio">Município</label>
                  <input class="input" id="nl-seller-municipio" type="text" placeholder="Opcional" autocomplete="off" />
                </div>
-               <div class="field">
+               <div class="field field--half">
                  <label class="field-label" for="nl-seller-estado">Estado (UF)</label>
                  <input class="input" id="nl-seller-estado" type="text" maxlength="2" placeholder="Ex: MG" autocomplete="off" />
                </div>
@@ -4816,12 +4866,12 @@
                </div>
              </div>
              <p class="field-hint" id="nl-price-hint">Informe o preço por cabeça ou o valor total — o outro é calculado automaticamente.</p>
-             <div class="field" id="nl-price-unit-field">
+             <div class="field field--half" id="nl-price-unit-field">
                <label class="field-label" id="nl-priceUnit-label" for="nl-priceUnit">Preço por cabeça (R$)</label>
                <input class="input" id="nl-priceUnit" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
                <p class="field-error" id="nl-priceUnit-error"></p>
              </div>
-             <div class="field">
+             <div class="field field--half" id="nl-price-total-field">
                <label class="field-label" for="nl-priceTotal">Valor total (R$)</label>
                <input class="input" id="nl-priceTotal" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
                <p class="field-error" id="nl-priceTotal-error"></p>
@@ -4880,6 +4930,7 @@
        const sellerMunicipioInput = document.getElementById("nl-seller-municipio");
        const sellerEstadoInput = document.getElementById("nl-seller-estado");
        const priceUnitField = document.getElementById("nl-price-unit-field");
+       const priceTotalField = document.getElementById("nl-price-total-field");
        const priceHintEl = document.getElementById("nl-price-hint");
        const priceUnitLabel = document.getElementById("nl-priceUnit-label");
        const priceUnitInput = document.getElementById("nl-priceUnit");
@@ -4906,7 +4957,10 @@
        function syncOrigin() {
          purchaseFields.hidden = originValue() !== "purchased";
        }
-       form.querySelectorAll('input[name="nl-origin"]').forEach((r) => r.addEventListener("change", syncOrigin));
+       form.querySelectorAll('input[name="nl-origin"]').forEach((r) => r.addEventListener("change", () => {
+         syncOrigin();
+         if (originValue() === "purchased") scrollRevealIntoView(purchaseFields);
+       }));
        syncOrigin();
 
        // --- Categoria options are scoped to the chosen sex (CATTLE_CATEGORIES) ---
@@ -5054,7 +5108,11 @@
          sellerCnpjFields.hidden = docType !== "cnpj";
          sellerCpfField.hidden = docType !== "cpf";
        }
-       form.querySelectorAll('input[name="nl-seller-doctype"]').forEach((r) => r.addEventListener("change", syncSellerDocType));
+       form.querySelectorAll('input[name="nl-seller-doctype"]').forEach((r) => r.addEventListener("change", () => {
+         syncSellerDocType();
+         const docType = sellerDocTypeValue();
+         scrollRevealIntoView(docType === "cnpj" ? sellerCnpjFields : docType === "cpf" ? sellerCpfField : null);
+       }));
        syncSellerDocType();
 
        function applySellerCnpjMask() {
@@ -5089,11 +5147,16 @@
          priceUnitField.hidden = isLump;
          priceHintEl.hidden = isLump;
          priceUnitLabel.textContent = mode === "per_head" ? "Preço por cabeça (R$)" : "Preço por kg (R$)";
+         // Desktop 2-col layout: when the unit field is hidden (lump_sum),
+         // let "Valor total" take the full row instead of sitting half-width
+         // next to an empty gap.
+         priceTotalField.classList.toggle("field--half", !isLump);
        }
        form.querySelectorAll('input[name="nl-pricemode"]').forEach((r) => r.addEventListener("change", () => {
          priceUnitInput.value = "";
          priceTotalInput.value = "";
          syncPriceMode();
+         scrollRevealIntoView(priceModeValue() === "lump_sum" ? priceTotalField : priceUnitField);
        }));
 
        function unitToTotal() {
@@ -5534,7 +5597,7 @@
        const typeOptions = MOVEMENT_TYPES.map((t) => `<option value="${t.value}">${t.label}</option>`).join("");
        return `
          <form id="mv-form" class="form-grid" novalidate>
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="mv-type">Tipo *</label>
              <select class="select" id="mv-type">
                <option value="" selected>Selecione</option>
@@ -5543,7 +5606,7 @@
              <p class="field-error" id="mv-type-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="mv-date">Data *</label>
              <input class="input" id="mv-date" type="date" value="${toDateInputValue(new Date())}" />
              <p class="field-error" id="mv-date-error"></p>
@@ -5559,23 +5622,23 @@
              </div>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="mv-qty">Quantidade (cabeças) *</label>
              <input class="input" id="mv-qty" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex: 28" />
              <p class="field-error" id="mv-qty-error"></p>
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="mv-avgWeightKg">Peso médio (kg)</label>
              <input class="input" id="mv-avgWeightKg" type="number" min="0" step="1" placeholder="Opcional" />
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="mv-amount">Valor (R$)</label>
              <input class="input" id="mv-amount" type="text" inputmode="decimal" placeholder="R$ 0,00 (opcional)" autocomplete="off" />
            </div>
 
-           <div class="field">
+           <div class="field field--half">
              <label class="field-label" for="mv-description">Descrição</label>
              <input class="input" id="mv-description" type="text" placeholder="Ex: retorno de confinamento" autocomplete="off" />
            </div>
@@ -6460,7 +6523,11 @@
          cnpjFields.hidden = docType !== "cnpj";
          cpfField.hidden = docType !== "cpf";
        }
-       form.querySelectorAll('input[name="supplier-doctype"]').forEach((r) => r.addEventListener("change", syncDocType));
+       form.querySelectorAll('input[name="supplier-doctype"]').forEach((r) => r.addEventListener("change", () => {
+         syncDocType();
+         const docType = docTypeValue();
+         scrollRevealIntoView(docType === "cnpj" ? cnpjFields : docType === "cpf" ? cpfField : null);
+       }));
        syncDocType();
 
        function applyCnpjMask() {
