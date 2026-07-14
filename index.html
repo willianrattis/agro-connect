@@ -811,42 +811,44 @@
   body:not([data-auth="in"]) .fab { display: none; }   /* FAB is a protected action */
 
   /* =====================================================
-      13. Bottom sheet / modal
+      13. Bottom sheet / modal — native <dialog>
+      Centering, background scroll-lock, focus trap and ESC are all native
+      <dialog> behavior; only enter/exit animation is hand-rolled (via the
+      `.is-open` class, toggled a frame after showModal() so the transition
+      runs from the closed state below/scaled-down).
       ===================================================== */
-   .sheet-backdrop {
+   dialog.sheet {
      position: fixed;
      inset: 0;
-     z-index: 100;
-     background: rgba(20, 35, 18, 0.45);
-     -webkit-backdrop-filter: blur(6px) saturate(1.4);
-     backdrop-filter: blur(6px) saturate(1.4);
-     opacity: 0;
-     visibility: hidden;
-     transition: opacity 0.22s ease-out, visibility 0.22s ease-out;
-   }
-   .sheet-backdrop.is-open {
-     opacity: 1;
-     visibility: visible;
-   }
-
-   .sheet {
-     position: fixed;
-     z-index: 101;
+     border: 0;
+     padding: 0;
      background: var(--surface);
+     color: inherit;
      box-shadow: var(--shadow-lg);
      display: flex;
      flex-direction: column;
      overflow: hidden;
      /* Mobile: bottom sheet */
-     inset-inline: 0;
-     bottom: 0;
+     margin: auto auto 0;
+     width: 100%;
+     max-width: none;
      max-height: 92dvh;
      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
      transform: translateY(100%);
      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
    }
-   .sheet.is-open {
+   dialog.sheet.is-open {
      transform: translateY(0);
+   }
+   dialog.sheet::backdrop {
+     background: rgba(20, 35, 18, 0.45);
+     -webkit-backdrop-filter: blur(6px) saturate(1.4);
+     backdrop-filter: blur(6px) saturate(1.4);
+     opacity: 0;
+     transition: opacity 0.22s ease-out;
+   }
+   dialog.sheet.is-open::backdrop {
+     opacity: 1;
    }
 
    /* Drag handle (mobile only) */
@@ -907,35 +909,34 @@
      -webkit-overflow-scrolling: touch;
    }
 
-   /* Desktop ≥768px: centered dialog */
+   /* Desktop ≥768px: centered dialog, sized to content up to max-height.
+      Native <dialog> centers via margin:auto within its fixed inset:0 box —
+      no transform-translate centering, so a transform is free to use for
+      the enter/exit scale animation alone. */
    @media (min-width: 768px) {
-     .sheet {
-       inset: auto;
-       top: 50%;
-       left: 50%;
-       bottom: auto;
+     dialog.sheet {
+       margin: auto;
        width: min(94vw, 720px);
+       max-width: none;
        max-height: 85vh;
        border-radius: var(--radius-lg);
-       transform: translate(-50%, -50%) scale(0.95);
+       transform: scale(0.96);
        opacity: 0;
        transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
                    opacity 0.22s ease-out;
      }
-     .sheet.is-open {
-       transform: translate(-50%, -50%) scale(1);
+     dialog.sheet.is-open {
+       transform: scale(1);
        opacity: 1;
      }
      .sheet-drag-region { display: none; }
    }
 
-   /* Body scroll lock */
-   body.sheet-scroll-locked {
+   /* Background scroll-lock is native: a modal <dialog> already blocks
+      interaction with the rest of the page; this just stops the page
+      underneath from scrolling too. */
+   html:has(dialog.sheet[open]) {
      overflow: hidden;
-     /* iOS Safari needs this to actually lock */
-     position: fixed;
-     inset-inline: 0;
-     /* top is set dynamically via JS */
    }
 
   /* =====================================================
@@ -1484,8 +1485,7 @@
     .pressable { transition: none; }
     .pressable:active { transform: none; }
     .session-menu, .toast, .toast.leaving { animation: none; }
-    .sheet-backdrop { transition: none; }
-    .sheet { transition: none; }
+    dialog.sheet, dialog.sheet::backdrop { transition: none; }
   }
 </style>
 </head>
@@ -1805,9 +1805,8 @@
     </div>
   </nav>
 
-   <!-- ===== Bottom sheet / modal ===== -->
-   <div class="sheet-backdrop" id="sheet-backdrop"></div>
-   <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+   <!-- ===== Bottom sheet / modal (native <dialog>) ===== -->
+   <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
      <div class="sheet-drag-region" id="sheet-drag" aria-hidden="true">
        <span class="sheet-drag-bar"></span>
      </div>
@@ -1820,7 +1819,7 @@
        </button>
      </div>
      <div class="sheet-body" id="sheet-body"></div>
-   </div>
+   </dialog>
 
   <!-- ===== Toast region (discreet auth feedback) ===== -->
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
@@ -2769,7 +2768,6 @@
      // 6. Bottom sheet / modal framework
      // =====================================================
      const Sheet = (() => {
-       const backdrop = document.getElementById("sheet-backdrop");
        const sheet   = document.getElementById("sheet");
        const titleEl = document.getElementById("sheet-title");
        const bodyEl  = document.getElementById("sheet-body");
@@ -2777,44 +2775,18 @@
        const dragRegion = document.getElementById("sheet-drag");
 
        let _onClose = null;
-       let _triggerEl = null;
-       let _scrollY = 0;
        let _isOpen = false;
+       let _closing = false;
 
-       // -- Focus trap --
+       // Native <dialog> traps Tab itself; this is only for picking where to
+       // land initial focus on open.
        const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-       function getFocusable() {
-         return Array.from(sheet.querySelectorAll(FOCUSABLE)).filter(
-           (el) => el.offsetParent !== null
-         );
+       function firstFocusable() {
+         return Array.from(sheet.querySelectorAll(FOCUSABLE)).find((el) => el.offsetParent !== null) || closeBtn;
        }
 
-       function trapFocus(e) {
-         if (e.key !== "Tab") return;
-         const nodes = getFocusable();
-         if (!nodes.length) return;
-         const first = nodes[0];
-         const last = nodes[nodes.length - 1];
-         if (e.shiftKey && document.activeElement === first) {
-           e.preventDefault();
-           last.focus();
-         } else if (!e.shiftKey && document.activeElement === last) {
-           e.preventDefault();
-           first.focus();
-         }
-       }
-
-       // -- Scroll lock (preserves scroll position on iOS) --
-       function lockScroll() {
-         _scrollY = window.scrollY;
-         document.body.classList.add("sheet-scroll-locked");
-         document.body.style.top = `-${_scrollY}px`;
-       }
-       function unlockScroll() {
-         document.body.classList.remove("sheet-scroll-locked");
-         document.body.style.top = "";
-         window.scrollTo(0, _scrollY);
+       function prefersReducedMotion() {
+         return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
        }
 
        // -- Swipe-down gesture (pointer events, mobile only) --
@@ -2856,18 +2828,29 @@
        dragRegion.addEventListener("pointerup", onDragEnd);
        dragRegion.addEventListener("pointercancel", onDragEnd);
 
-       // -- Keyboard: ESC --
-       function onKeyDown(e) {
-         if (e.key === "Escape" && _isOpen) {
-           e.stopPropagation();
-           closeSheet();
-         }
-         trapFocus(e);
-       }
+       // -- ESC: the native dialog fires a cancelable `cancel` event before
+       //    closing itself immediately — preventDefault it and route through
+       //    our own close() instead, so the exit animation gets to play. --
+       sheet.addEventListener("cancel", (e) => {
+         e.preventDefault();
+         closeSheet();
+       });
+
+       // -- Light-dismiss: there's no separate backdrop element anymore
+       //    (native ::backdrop can't take JS listeners), so we rely on
+       //    e.target instead. Padding/border are 0 on the dialog, so its own
+       //    box is fully covered by sheet-header/sheet-body — a click can
+       //    only land with e.target === sheet itself if it hit the backdrop
+       //    area outside that content. (A coordinate/rect check instead of
+       //    this was tried first, but clientX/clientY are 0 for keyboard-
+       //    activated clicks — e.g. pressing Space on a focused segmented
+       //    label — which made Tab+Space anywhere in the sheet close it.)
+       sheet.addEventListener("click", (e) => {
+         if (e.target === sheet) closeSheet();
+       });
 
        // -- Open --
        function openSheet({ title = "", content = "", onClose = null } = {}) {
-         _triggerEl = document.activeElement;
          _onClose = onClose;
 
          titleEl.textContent = title;
@@ -2878,52 +2861,63 @@
            bodyEl.appendChild(content);
          }
 
-         lockScroll();
-         backdrop.classList.add("is-open");
-         sheet.classList.add("is-open");
-         _isOpen = true;
-
-         // Reset transform in case interrupted by a drag
+         // Reset transform in case a previous close was interrupted by a drag
          sheet.style.transform = "";
+         sheet.showModal();
+         _isOpen = true;
+         _closing = false;
 
-         document.addEventListener("keydown", onKeyDown, true);
-
-         // Focus first focusable inside, or the close button
          requestAnimationFrame(() => {
-           const targets = getFocusable();
-           (targets[0] || closeBtn).focus();
+           sheet.classList.add("is-open");
+           firstFocusable().focus({ preventScroll: true });
          });
        }
 
        // -- Close --
+       // The exit transition is 0.22s (desktop) / 0.24s (mobile); FALLBACK_MS
+       // is a safety net slightly above both in case transitionend doesn't
+       // fire (e.g. the sheet was closed again mid-drag with no property
+       // actually changing) — without it, a missed event would leave the
+       // dialog stuck open forever.
+       const FALLBACK_MS = 320;
        function closeSheet() {
-         if (!_isOpen) return;
-         _isOpen = false;
+         if (!_isOpen || _closing) return;
+         _closing = true;
+         let done = false;
 
-         backdrop.classList.remove("is-open");
+         function finish() {
+           if (done) return;
+           done = true;
+           sheet.removeEventListener("transitionend", onTransitionEnd);
+           clearTimeout(fallbackTimer);
+           sheet.close();
+           _isOpen = false;
+           _closing = false;
+           sheet.style.transform = "";
+           if (typeof _onClose === "function") {
+             _onClose();
+             _onClose = null;
+           }
+         }
+
+         function onTransitionEnd(e) {
+           if (e.target !== sheet) return;
+           finish();
+         }
+
          sheet.classList.remove("is-open");
-         sheet.style.transform = "";
 
-         document.removeEventListener("keydown", onKeyDown, true);
-
-         unlockScroll();
-
-         // Return focus to trigger
-         if (_triggerEl && typeof _triggerEl.focus === "function") {
-           _triggerEl.focus();
+         if (prefersReducedMotion()) {
+           finish();
+           return;
          }
 
-         if (typeof _onClose === "function") {
-           _onClose();
-           _onClose = null;
-         }
+         sheet.addEventListener("transitionend", onTransitionEnd);
+         const fallbackTimer = setTimeout(finish, FALLBACK_MS);
        }
 
        // -- Close via X button --
        closeBtn.addEventListener("click", closeSheet);
-
-       // -- Close via backdrop tap --
-       backdrop.addEventListener("click", closeSheet);
 
        // Expose public API
        return { open: openSheet, close: closeSheet };
@@ -3034,33 +3028,6 @@
        `;
      }
 
-     // Segmented controls (Origem, Documento do vendedor, Modo de preço, ...)
-     // reveal or restyle a dependent section that often renders below the
-     // fold inside .sheet-body — without this, toggling them looks like a
-     // no-op because the change is off-screen. Called from the relevant
-     // "change" handlers, never from the initial sync (nothing to reveal
-     // when the sheet has just opened).
-     //
-     // Scrolls only #sheet-body — never Element.scrollIntoView, which walks
-     // every scrollable ancestor up to the viewport. .sheet is fixed +
-     // transform-centered and <body> is position:fixed while the sheet is
-     // open (scroll lock), so a viewport-level scroll has nowhere sane to
-     // land: it knocks the centered dialog off-center with no way back.
-     function scrollRevealIntoView(el) {
-       if (!el || el.hidden) return;
-       const body = document.getElementById("sheet-body");
-       if (!body || !body.contains(el)) return;
-       const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-       requestAnimationFrame(() => {
-         const b = body.getBoundingClientRect();
-         const e = el.getBoundingClientRect();
-         let delta = 0;
-         if (e.bottom > b.bottom) delta = e.bottom - b.bottom + 8;
-         else if (e.top < b.top) delta = e.top - b.top - 8;
-         if (delta) body.scrollBy({ top: delta, behavior });
-       });
-     }
-
      function clearFieldError(inputId) {
        document.getElementById(inputId)?.classList.remove("has-error");
        const err = document.getElementById(`${inputId}-error`);
@@ -3097,10 +3064,7 @@
          purchasedFields.hidden = !purchased;
          bornFields.hidden = purchased;
        }
-       form.querySelectorAll('input[name="af-origin"]').forEach((r) => r.addEventListener("change", () => {
-         syncOrigin();
-         scrollRevealIntoView(originValue() === "purchased" ? purchasedFields : bornFields);
-       }));
+       form.querySelectorAll('input[name="af-origin"]').forEach((r) => r.addEventListener("change", syncOrigin));
        syncOrigin();
 
        // Category options are scoped to the chosen sex (CATTLE_CATEGORIES).
@@ -4081,11 +4045,7 @@
          scopeAnimalField.hidden = scope !== "animal";
          scopeLotField.hidden = scope !== "lot";
        }
-       form.querySelectorAll('input[name="tx-scope"]').forEach((r) => r.addEventListener("change", () => {
-         syncScope();
-         const scope = scopeValue();
-         scrollRevealIntoView(scope === "animal" ? scopeAnimalField : scope === "lot" ? scopeLotField : null);
-       }));
+       form.querySelectorAll('input[name="tx-scope"]').forEach((r) => r.addEventListener("change", syncScope));
        syncScope();
 
        amountInput.addEventListener("input", () => formatCurrencyInput(amountInput));
@@ -4972,10 +4932,7 @@
        function syncOrigin() {
          purchaseFields.hidden = originValue() !== "purchased";
        }
-       form.querySelectorAll('input[name="nl-origin"]').forEach((r) => r.addEventListener("change", () => {
-         syncOrigin();
-         if (originValue() === "purchased") scrollRevealIntoView(purchaseFields);
-       }));
+       form.querySelectorAll('input[name="nl-origin"]').forEach((r) => r.addEventListener("change", syncOrigin));
        syncOrigin();
 
        // --- Categoria options are scoped to the chosen sex (CATTLE_CATEGORIES) ---
@@ -5123,11 +5080,7 @@
          sellerCnpjFields.hidden = docType !== "cnpj";
          sellerCpfField.hidden = docType !== "cpf";
        }
-       form.querySelectorAll('input[name="nl-seller-doctype"]').forEach((r) => r.addEventListener("change", () => {
-         syncSellerDocType();
-         const docType = sellerDocTypeValue();
-         scrollRevealIntoView(docType === "cnpj" ? sellerCnpjFields : docType === "cpf" ? sellerCpfField : null);
-       }));
+       form.querySelectorAll('input[name="nl-seller-doctype"]').forEach((r) => r.addEventListener("change", syncSellerDocType));
        syncSellerDocType();
 
        function applySellerCnpjMask() {
@@ -5171,7 +5124,6 @@
          priceUnitInput.value = "";
          priceTotalInput.value = "";
          syncPriceMode();
-         scrollRevealIntoView(priceModeValue() === "lump_sum" ? priceTotalField : priceUnitField);
        }));
 
        function unitToTotal() {
@@ -6538,11 +6490,7 @@
          cnpjFields.hidden = docType !== "cnpj";
          cpfField.hidden = docType !== "cpf";
        }
-       form.querySelectorAll('input[name="supplier-doctype"]').forEach((r) => r.addEventListener("change", () => {
-         syncDocType();
-         const docType = docTypeValue();
-         scrollRevealIntoView(docType === "cnpj" ? cnpjFields : docType === "cpf" ? cpfField : null);
-       }));
+       form.querySelectorAll('input[name="supplier-doctype"]').forEach((r) => r.addEventListener("change", syncDocType));
        syncDocType();
 
        function applyCnpjMask() {
