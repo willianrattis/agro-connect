@@ -4785,35 +4785,11 @@
                </div>
 
                <div class="field">
-                 <span class="field-label">Documento do vendedor</span>
-                 <div class="segmented" role="radiogroup" aria-label="Tipo de documento do vendedor">
-                   <input type="radio" id="nl-seller-doctype-none" name="nl-seller-doctype" value="none" checked />
-                   <label for="nl-seller-doctype-none">Nenhum</label>
-                   <input type="radio" id="nl-seller-doctype-cnpj" name="nl-seller-doctype" value="cnpj" />
-                   <label for="nl-seller-doctype-cnpj">CNPJ</label>
-                   <input type="radio" id="nl-seller-doctype-cpf" name="nl-seller-doctype" value="cpf" />
-                   <label for="nl-seller-doctype-cpf">CPF</label>
-                 </div>
+                 <label class="field-label" for="nl-seller-cnpj">CNPJ</label>
+                 <input class="input" id="nl-seller-cnpj" type="text" inputmode="text" autocomplete="off" placeholder="00.000.000/0000-00 ou alfanumérico" />
+                 <p class="field-error" id="nl-seller-cnpj-error"></p>
                </div>
-
-               <div class="form-grid" id="nl-seller-cnpj-fields" hidden>
-                 <div class="field">
-                   <span class="field-label">Formato do CNPJ</span>
-                   <div class="segmented" role="radiogroup" aria-label="Formato do CNPJ do vendedor">
-                     <input type="radio" id="nl-seller-cnpj-format-numeric" name="nl-seller-cnpj-format" value="numeric" checked />
-                     <label for="nl-seller-cnpj-format-numeric">Numérico</label>
-                     <input type="radio" id="nl-seller-cnpj-format-alnum" name="nl-seller-cnpj-format" value="alnum" />
-                     <label for="nl-seller-cnpj-format-alnum">Alfanumérico</label>
-                   </div>
-                 </div>
-                 <div class="field">
-                   <label class="field-label" for="nl-seller-cnpj">CNPJ</label>
-                   <input class="input" id="nl-seller-cnpj" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0000-00" />
-                   <p class="field-error" id="nl-seller-cnpj-error"></p>
-                 </div>
-               </div>
-
-               <div class="field" id="nl-seller-cpf-field" hidden>
+               <div class="field">
                  <label class="field-label" for="nl-seller-cpf">CPF</label>
                  <input class="input" id="nl-seller-cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" />
                  <p class="field-error" id="nl-seller-cpf-error"></p>
@@ -4829,24 +4805,18 @@
                </div>
              </div>
 
-             <div class="field">
-               <span class="field-label">Modo de preço *</span>
-               <div class="segmented" role="radiogroup" aria-label="Modo de preço">
-                 <input type="radio" id="nl-pricemode-head" name="nl-pricemode" value="per_head" checked />
-                 <label for="nl-pricemode-head">Por cabeça</label>
-                 <input type="radio" id="nl-pricemode-kg" name="nl-pricemode" value="per_kg" />
-                 <label for="nl-pricemode-kg">Por kg</label>
-                 <input type="radio" id="nl-pricemode-lump" name="nl-pricemode" value="lump_sum" />
-                 <label for="nl-pricemode-lump">Valor total</label>
-               </div>
-             </div>
-             <p class="field-hint" id="nl-price-hint">Informe o preço por cabeça ou o valor total — o outro é calculado automaticamente.</p>
-             <div class="field field--half" id="nl-price-unit-field">
-               <label class="field-label" id="nl-priceUnit-label" for="nl-priceUnit">Preço por cabeça (R$)</label>
+             <p class="field-hint" id="nl-price-hint">Preencha um dos campos — os demais são calculados a partir da quantidade e do peso.</p>
+             <div class="field field--half">
+               <label class="field-label" for="nl-priceUnit">Preço por cabeça (R$)</label>
                <input class="input" id="nl-priceUnit" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
                <p class="field-error" id="nl-priceUnit-error"></p>
              </div>
-             <div class="field field--half" id="nl-price-total-field">
+             <div class="field field--half">
+               <label class="field-label" for="nl-priceKg">Preço por kg (R$)</label>
+               <input class="input" id="nl-priceKg" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
+               <p class="field-error" id="nl-priceKg-error"></p>
+             </div>
+             <div class="field field--half">
                <label class="field-label" for="nl-priceTotal">Valor total (R$)</label>
                <input class="input" id="nl-priceTotal" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" />
                <p class="field-error" id="nl-priceTotal-error"></p>
@@ -4898,17 +4868,12 @@
        const produtorClearBtn = document.getElementById("nl-produtor-clear");
        const sellerDetails = document.getElementById("nl-seller-details");
        const sellerFazendaInput = document.getElementById("nl-seller-fazenda");
-       const sellerCnpjFields = document.getElementById("nl-seller-cnpj-fields");
-       const sellerCpfField = document.getElementById("nl-seller-cpf-field");
        const sellerCnpjInput = document.getElementById("nl-seller-cnpj");
        const sellerCpfInput = document.getElementById("nl-seller-cpf");
        const sellerMunicipioInput = document.getElementById("nl-seller-municipio");
        const sellerEstadoInput = document.getElementById("nl-seller-estado");
-       const priceUnitField = document.getElementById("nl-price-unit-field");
-       const priceTotalField = document.getElementById("nl-price-total-field");
-       const priceHintEl = document.getElementById("nl-price-hint");
-       const priceUnitLabel = document.getElementById("nl-priceUnit-label");
        const priceUnitInput = document.getElementById("nl-priceUnit");
+       const priceKgInput = document.getElementById("nl-priceKg");
        const priceTotalInput = document.getElementById("nl-priceTotal");
        const freightInput = document.getElementById("nl-freight");
        const genPurchaseExpenseCheckbox = document.getElementById("nl-gen-purchase-expense");
@@ -4922,7 +4887,7 @@
        const allFieldIds = [
          "nl-name", "nl-property", "nl-newproperty-name", "nl-sex", "nl-category",
          "nl-acquisitionDate", "nl-headcount", "nl-avgWeightKg",
-         "nl-seller-cnpj", "nl-seller-cpf", "nl-priceUnit", "nl-priceTotal",
+         "nl-seller-cnpj", "nl-seller-cpf", "nl-priceUnit", "nl-priceKg", "nl-priceTotal",
        ];
 
        // --- Origem: Compra shows seller + price + freight; Nascimento hides them ---
@@ -5068,39 +5033,18 @@
          if (!e.target.closest(".autocomplete")) hideSuggestions();
        });
 
-       // --- Seller document type (none/CNPJ/CPF), same masks as the produtor sheet ---
-       function sellerDocTypeValue() {
-         return form.querySelector('input[name="nl-seller-doctype"]:checked').value;
-       }
-       function sellerCnpjFormatValue() {
-         return form.querySelector('input[name="nl-seller-cnpj-format"]:checked').value;
-       }
-       function syncSellerDocType() {
-         const docType = sellerDocTypeValue();
-         sellerCnpjFields.hidden = docType !== "cnpj";
-         sellerCpfField.hidden = docType !== "cpf";
-       }
-       form.querySelectorAll('input[name="nl-seller-doctype"]').forEach((r) => r.addEventListener("change", syncSellerDocType));
-       syncSellerDocType();
-
-       function applySellerCnpjMask() {
-         if (sellerCnpjFormatValue() === "alnum") formatCNPJAlnumInput(sellerCnpjInput);
+       // --- Seller document: CNPJ/CPF fields are always visible and optional;
+       //     the CNPJ mask auto-detects numeric vs alphanumeric as the user types. ---
+       sellerCnpjInput.addEventListener("input", () => {
+         const hasLetter = /[A-Za-z]/.test(sellerCnpjInput.value);
+         if (hasLetter) formatCNPJAlnumInput(sellerCnpjInput);
          else formatCNPJNumericInput(sellerCnpjInput);
-       }
-       form.querySelectorAll('input[name="nl-seller-cnpj-format"]').forEach((r) => r.addEventListener("change", () => {
-         sellerCnpjInput.value = "";
-         sellerCnpjInput.focus({ preventScroll: true });
-       }));
-       sellerCnpjInput.addEventListener("input", applySellerCnpjMask);
+       });
        sellerCpfInput.addEventListener("input", () => formatCPFInput(sellerCpfInput));
        sellerEstadoInput.addEventListener("input", () => formatUFInput(sellerEstadoInput));
 
-       // --- Preço: unit ⇄ total, bidirectionally driven by Quantidade
-       //     (and, for "por kg", also by Peso na entrada). "Valor total" is
-       //     the one field common to all 3 modes; "lump_sum" uses it alone. ---
-       function priceModeValue() {
-         return form.querySelector('input[name="nl-pricemode"]:checked').value;
-       }
+       // --- Preço: três campos sempre visíveis, inter-derivados a partir do
+       //     último editado pelo usuário, usando Quantidade e Peso na entrada. ---
        function qtyValue() {
          const q = parseInt(headcountInput.value, 10);
          return Number.isInteger(q) && q > 0 ? q : null;
@@ -5109,53 +5053,35 @@
          const w = parseFloat(avgWeightInput.value);
          return Number.isFinite(w) && w > 0 ? w : null;
        }
-       function syncPriceMode() {
-         const mode = priceModeValue();
-         const isLump = mode === "lump_sum";
-         priceUnitField.hidden = isLump;
-         priceHintEl.hidden = isLump;
-         priceUnitLabel.textContent = mode === "per_head" ? "Preço por cabeça (R$)" : "Preço por kg (R$)";
-         // Desktop 2-col layout: when the unit field is hidden (lump_sum),
-         // let "Valor total" take the full row instead of sitting half-width
-         // next to an empty gap.
-         priceTotalField.classList.toggle("field--half", !isLump);
-       }
-       form.querySelectorAll('input[name="nl-pricemode"]').forEach((r) => r.addEventListener("change", () => {
-         priceUnitInput.value = "";
-         priceTotalInput.value = "";
-         syncPriceMode();
-       }));
 
-       function unitToTotal() {
-         const mode = priceModeValue();
-         if (mode === "lump_sum") return;
+       let lastPriceSource = null; // "unit" | "kg" | "total"
+
+       function recomputeFromLast() {
          const qty = qtyValue();
-         const unit = parseBRLToNumber(priceUnitInput.value);
-         if (!qty || !Number.isFinite(unit)) return;
-         if (mode === "per_head") {
-           priceTotalInput.value = formatBRL(unit * qty);
-         } else {
-           const weight = weightValue();
-           if (weight) priceTotalInput.value = formatBRL(unit * weight * qty);
+         const weight = weightValue();
+         if (lastPriceSource === "unit") {
+           const unit = parseBRLToNumber(priceUnitInput.value);
+           if (!Number.isFinite(unit)) { priceKgInput.value = ""; priceTotalInput.value = ""; return; }
+           priceTotalInput.value = qty ? formatBRL(unit * qty) : "";
+           priceKgInput.value = weight ? formatBRL(unit / weight) : "";
+         } else if (lastPriceSource === "kg") {
+           const kg = parseBRLToNumber(priceKgInput.value);
+           if (!Number.isFinite(kg)) { priceUnitInput.value = ""; priceTotalInput.value = ""; return; }
+           priceUnitInput.value = weight ? formatBRL(kg * weight) : "";
+           priceTotalInput.value = (weight && qty) ? formatBRL(kg * weight * qty) : "";
+         } else if (lastPriceSource === "total") {
+           const total = parseBRLToNumber(priceTotalInput.value);
+           if (!Number.isFinite(total)) { priceUnitInput.value = ""; priceKgInput.value = ""; return; }
+           priceUnitInput.value = qty ? formatBRL(total / qty) : "";
+           priceKgInput.value = (qty && weight) ? formatBRL(total / (weight * qty)) : "";
          }
        }
-       function totalToUnit() {
-         const mode = priceModeValue();
-         if (mode === "lump_sum") return;
-         const qty = qtyValue();
-         const total = parseBRLToNumber(priceTotalInput.value);
-         if (!qty || !Number.isFinite(total)) return;
-         if (mode === "per_head") {
-           priceUnitInput.value = formatBRL(total / qty);
-         } else {
-           const weight = weightValue();
-           if (weight) priceUnitInput.value = formatBRL(total / (weight * qty));
-         }
-       }
-       priceUnitInput.addEventListener("input", () => { formatCurrencyInput(priceUnitInput); unitToTotal(); });
-       priceTotalInput.addEventListener("input", () => { formatCurrencyInput(priceTotalInput); totalToUnit(); });
-       headcountInput.addEventListener("input", unitToTotal);
-       avgWeightInput.addEventListener("input", unitToTotal);
+
+       priceUnitInput.addEventListener("input", () => { formatCurrencyInput(priceUnitInput); lastPriceSource = "unit"; recomputeFromLast(); });
+       priceKgInput.addEventListener("input", () => { formatCurrencyInput(priceKgInput); lastPriceSource = "kg"; recomputeFromLast(); });
+       priceTotalInput.addEventListener("input", () => { formatCurrencyInput(priceTotalInput); lastPriceSource = "total"; recomputeFromLast(); });
+       headcountInput.addEventListener("input", recomputeFromLast);
+       avgWeightInput.addEventListener("input", recomputeFromLast);
 
        // --- Frete: R$ 0,00 unlocks the "Gerar despesa do frete" opt-out ---
        freightInput.addEventListener("input", () => {
@@ -5163,8 +5089,6 @@
          const freight = parseBRLToNumber(freightInput.value);
          genFreightExpenseField.hidden = !(Number.isFinite(freight) && freight > 0);
        });
-
-       syncPriceMode();
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
@@ -5222,7 +5146,6 @@
            ? (produtorPicked.hidden ? produtorInput.value : produtorPickedName.textContent).trim()
            : "";
 
-         const priceMode = priceModeValue();
          let avgPurchaseCostBRL = null;
          let totalPurchaseCostBRL = null;
          let freightBRL = null;
@@ -5231,26 +5154,20 @@
 
          if (origin === "purchased") {
            const qty = Number.isInteger(headcount) && headcount > 0 ? headcount : null;
-           if (priceMode === "lump_sum") {
-             const total = parseBRLToNumber(priceTotalInput.value);
-             if (!Number.isFinite(total) || total <= 0) {
-               fail("nl-priceTotal", "Informe o valor total.");
-             } else if (qty) {
-               totalPurchaseCostBRL = total;
-               avgPurchaseCostBRL = total / qty;
-             }
+           const unit = parseBRLToNumber(priceUnitInput.value);
+           const kg = parseBRLToNumber(priceKgInput.value);
+           const total = parseBRLToNumber(priceTotalInput.value);
+           if (Number.isFinite(total) && total > 0 && qty) {
+             totalPurchaseCostBRL = total;
+             avgPurchaseCostBRL = total / qty;
+           } else if (Number.isFinite(unit) && unit > 0 && qty) {
+             avgPurchaseCostBRL = unit;
+             totalPurchaseCostBRL = unit * qty;
+           } else if (Number.isFinite(kg) && kg > 0 && qty && avgWeightKg) {
+             avgPurchaseCostBRL = kg * avgWeightKg;
+             totalPurchaseCostBRL = kg * avgWeightKg * qty;
            } else {
-             const unit = parseBRLToNumber(priceUnitInput.value);
-             const total = parseBRLToNumber(priceTotalInput.value);
-             if (!Number.isFinite(unit) && !Number.isFinite(total)) {
-               fail("nl-priceUnit", priceMode === "per_head" ? "Informe o preço por cabeça ou o valor total." : "Informe o preço por kg ou o valor total.");
-             } else if (priceMode === "per_head" && qty) {
-               if (Number.isFinite(unit)) { avgPurchaseCostBRL = unit; totalPurchaseCostBRL = unit * qty; }
-               else { totalPurchaseCostBRL = total; avgPurchaseCostBRL = total / qty; }
-             } else if (priceMode === "per_kg" && qty && avgWeightKg) {
-               if (Number.isFinite(unit)) { avgPurchaseCostBRL = unit * avgWeightKg; totalPurchaseCostBRL = unit * avgWeightKg * qty; }
-               else { totalPurchaseCostBRL = total; avgPurchaseCostBRL = total / qty; }
-             }
+             fail("nl-priceTotal", "Informe o preço por cabeça, por kg ou o valor total.");
            }
 
            const freightRaw = parseBRLToNumber(freightInput.value);
@@ -5290,16 +5207,17 @@
              if (existing) {
                supplierId = existing.id;
              } else {
-               const sellerDocType = sellerDocTypeValue();
                const fazenda = sellerFazendaInput.value.trim() || null;
                const municipio = sellerMunicipioInput.value.trim() || null;
                const estado = sellerEstadoInput.value.trim() || null;
+               const cnpjRaw = sellerCnpjInput.value.trim();
+               const cpfRaw = sellerCpfInput.value.trim();
                let cnpj = null, cnpjKey = null, cpf = null, cpfDigits = null;
-               if (sellerDocType === "cnpj" && sellerCnpjInput.value.trim()) {
-                 cnpj = sellerCnpjInput.value.trim();
+               if (cnpjRaw) {
+                 cnpj = cnpjRaw;
                  cnpjKey = cnpj.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-               } else if (sellerDocType === "cpf" && sellerCpfInput.value.trim()) {
-                 cpf = sellerCpfInput.value.trim();
+               } else if (cpfRaw) {
+                 cpf = cpfRaw;
                  cpfDigits = cpf.replace(/\D/g, "");
                }
                const supplierRef = await addDoc(collection(db, "suppliers"), {
@@ -5347,7 +5265,6 @@
              avgPurchaseCostBRL: origin === "purchased" ? avgPurchaseCostBRL : null,
              totalPurchaseCostBRL: origin === "purchased" ? totalPurchaseCostBRL : null,
              freightBRL,
-             priceMode: origin === "purchased" ? priceMode : null,
              createdAt: serverTimestamp(),
              updatedAt: serverTimestamp(),
            });
