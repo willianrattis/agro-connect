@@ -982,6 +982,47 @@
     }
   }
 
+  /* Lightweight section divider heading (full-width in the form grid) */
+  .form-section-title {
+    grid-column: 1 / -1;               /* span both desktop columns */
+    margin-top: var(--space-2);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+    font-family: var(--font-display);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--brand);
+  }
+  .form-section-title:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+
+  /* Highlighted grouped panel — used for the seller block so it reads as one unit */
+  .form-fieldset {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin: 0;
+    min-inline-size: 0;                /* stops fieldset from blowing out the grid */
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .form-fieldset--seller {
+    background: var(--accent-tint);
+    border-color: rgba(46, 125, 50, 0.28);
+  }
+  .form-fieldset > legend {
+    padding: 2px var(--space-2);
+    margin-left: calc(var(--space-2) * -1);
+    font-family: var(--font-display);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--brand);
+  }
+  /* Seller inputs sit on tinted bg — nudge them to full-white for contrast */
+  .form-fieldset--seller .input { background: var(--surface); }
+
   .field {
     display: flex;
     flex-direction: column;
@@ -4702,6 +4743,7 @@
                <option value="__new__">+ Nova propriedade…</option>
              </select>
              <p class="field-error" id="nl-property-error"></p>
+             <p class="field-hint">Propriedade que vai receber os animais — o destino da entrada deste lote.</p>
            </div>
            <div class="field" id="nl-newproperty-field" hidden>
              <label class="field-label" for="nl-newproperty-name">Nome da nova propriedade *</label>
@@ -4709,6 +4751,7 @@
              <p class="field-error" id="nl-newproperty-name-error"></p>
            </div>
 
+           <p class="form-section-title">Animais</p>
            <div class="field field--half">
              <label class="field-label" for="nl-sex">Sexo *</label>
              <select class="select" id="nl-sex">
@@ -4765,46 +4808,52 @@
            </div>
 
            <div id="nl-purchase-fields" class="form-grid">
-             <div class="field autocomplete">
-               <label class="field-label" for="nl-produtor">Nome do produtor</label>
-               <input class="input" id="nl-produtor" type="text" placeholder="Opcional" autocomplete="off" />
-               <ul class="autocomplete-list" id="nl-produtor-list" hidden></ul>
-               <div class="supplier-picked" id="nl-produtor-picked" hidden>
-                 <div class="supplier-picked-info">
-                   <strong id="nl-produtor-picked-name"></strong>
-                   <span id="nl-produtor-picked-doc"></span>
+             <fieldset class="form-fieldset form-fieldset--seller">
+               <legend>Dados do vendedor</legend>
+               <p class="field-hint">Quem vendeu este lote. Estes dados criam ou vinculam o cadastro do produtor.</p>
+
+               <div class="field autocomplete">
+                 <label class="field-label" for="nl-produtor">Nome do produtor</label>
+                 <input class="input" id="nl-produtor" type="text" placeholder="Opcional" autocomplete="off" />
+                 <ul class="autocomplete-list" id="nl-produtor-list" hidden></ul>
+                 <div class="supplier-picked" id="nl-produtor-picked" hidden>
+                   <div class="supplier-picked-info">
+                     <strong id="nl-produtor-picked-name"></strong>
+                     <span id="nl-produtor-picked-doc"></span>
+                   </div>
+                   <button type="button" class="supplier-picked-clear pressable" id="nl-produtor-clear">Trocar</button>
                  </div>
-                 <button type="button" class="supplier-picked-clear pressable" id="nl-produtor-clear">Trocar</button>
-               </div>
-             </div>
-
-             <div class="form-grid" id="nl-seller-details">
-               <div class="field">
-                 <label class="field-label" for="nl-seller-fazenda">Propriedade do vendedor</label>
-                 <input class="input" id="nl-seller-fazenda" type="text" placeholder="Opcional" autocomplete="off" />
                </div>
 
-               <div class="field">
-                 <label class="field-label" for="nl-seller-cnpj">CNPJ</label>
-                 <input class="input" id="nl-seller-cnpj" type="text" inputmode="text" autocomplete="off" placeholder="00.000.000/0000-00 ou alfanumérico" />
-                 <p class="field-error" id="nl-seller-cnpj-error"></p>
-               </div>
-               <div class="field">
-                 <label class="field-label" for="nl-seller-cpf">CPF</label>
-                 <input class="input" id="nl-seller-cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" />
-                 <p class="field-error" id="nl-seller-cpf-error"></p>
-               </div>
+               <div class="form-grid" id="nl-seller-details">
+                 <div class="field">
+                   <label class="field-label" for="nl-seller-fazenda">Propriedade do vendedor</label>
+                   <input class="input" id="nl-seller-fazenda" type="text" placeholder="Opcional" autocomplete="off" />
+                 </div>
 
-               <div class="field field--half">
-                 <label class="field-label" for="nl-seller-municipio">Município</label>
-                 <input class="input" id="nl-seller-municipio" type="text" placeholder="Opcional" autocomplete="off" />
-               </div>
-               <div class="field field--half">
-                 <label class="field-label" for="nl-seller-estado">Estado (UF)</label>
-                 <input class="input" id="nl-seller-estado" type="text" maxlength="2" placeholder="Ex: MG" autocomplete="off" />
-               </div>
-             </div>
+                 <div class="field">
+                   <label class="field-label" for="nl-seller-cnpj">CNPJ</label>
+                   <input class="input" id="nl-seller-cnpj" type="text" inputmode="text" autocomplete="off" placeholder="00.000.000/0000-00 ou alfanumérico" />
+                   <p class="field-error" id="nl-seller-cnpj-error"></p>
+                 </div>
+                 <div class="field">
+                   <label class="field-label" for="nl-seller-cpf">CPF</label>
+                   <input class="input" id="nl-seller-cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" />
+                   <p class="field-error" id="nl-seller-cpf-error"></p>
+                 </div>
 
+                 <div class="field field--half">
+                   <label class="field-label" for="nl-seller-municipio">Município</label>
+                   <input class="input" id="nl-seller-municipio" type="text" placeholder="Opcional" autocomplete="off" />
+                 </div>
+                 <div class="field field--half">
+                   <label class="field-label" for="nl-seller-estado">Estado (UF)</label>
+                   <input class="input" id="nl-seller-estado" type="text" maxlength="2" placeholder="Ex: MG" autocomplete="off" />
+                 </div>
+               </div>
+             </fieldset>
+
+             <p class="form-section-title">Valores da compra</p>
              <p class="field-hint" id="nl-price-hint">Preencha um dos campos — os demais são calculados a partir da quantidade e do peso.</p>
              <div class="field field--half">
                <label class="field-label" for="nl-priceUnit">Preço por cabeça (R$)</label>
