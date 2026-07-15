@@ -1537,6 +1537,75 @@
     color: var(--text-muted);
   }
 
+  /* Ponto de abate panel (top of Indicadores) */
+  .slaughter-panel { margin-bottom: var(--space-6); }
+  .chip-location { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .chip-success  { background: var(--accent-tint); color: var(--success); }
+  .chip-muted    { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+  .slaughter-row-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    list-style: none;
+  }
+  .slaughter-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .slaughter-row.is-ready { background: var(--accent-tint); border-color: rgba(46, 125, 50, 0.3); }
+  .slaughter-row.is-near { border-left: 3px solid var(--chip-bezerro-text); }
+  .slaughter-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .slaughter-row-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .slaughter-row-name {
+    font-weight: 700;
+    font-size: var(--fs-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .slaughter-row-heads { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
+  .slaughter-row-right { display: flex; align-items: baseline; gap: var(--space-2); flex: none; }
+  .slaughter-row-arrobas {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--fs-base);
+    color: var(--brand);
+    white-space: nowrap;
+  }
+  .slaughter-row-target { font-size: var(--fs-xs); color: var(--text-muted); white-space: nowrap; }
+
+  .slaughter-progress {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--border);
+    overflow: hidden;
+  }
+  .slaughter-progress-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
+    transition: width 0.3s ease;
+  }
+  .slaughter-row.is-ready .slaughter-progress-fill { background: var(--success); }
+  .slaughter-row.is-near .slaughter-progress-fill { background: var(--chip-bezerro-text); }
+
   /* Animal detail sheet */
   .detail-section {
     margin-top: var(--space-5);
@@ -1594,6 +1663,7 @@
     .pressable:active { transform: none; }
     .session-menu, .toast, .toast.leaving { animation: none; }
     dialog.sheet, dialog.sheet::backdrop { transition: none; }
+    .slaughter-progress-fill { transition: none; }
   }
 </style>
 </head>
@@ -1876,6 +1946,30 @@
             </div>
           </div>
         </div>
+
+        <div class="card" style="margin-top: var(--space-4);">
+          <div class="card-top">
+            <span class="ear-tag" style="font-size: var(--fs-base);">Metas e aproveitamento</span>
+            <button type="button" class="card-menu-btn pressable" id="settings-edit-btn-3" aria-label="Editar metas e aproveitamento">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+          </div>
+          <p class="field-hint" style="margin-bottom: var(--space-3);">Usados no painel "Ponto de abate" (aba Indicadores) para estimar quando cada lote está pronto.</p>
+          <div class="card-stats" style="grid-template-columns: repeat(3, 1fr); border-top: none; padding-top: 0;">
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-target-value">—</p>
+              <p class="mini-label">Meta @/cab</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-farmyield-value">—</p>
+              <p class="mini-label">Aprov. a pasto</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="settings-confyield-value">—</p>
+              <p class="mini-label">Aprov. confinamento</p>
+            </div>
+          </div>
+        </div>
       </section>
 
     </div>
@@ -2000,6 +2094,14 @@
     // pasture; 0.865 is the midpoint of that band. Single tunable knob.
     const FEMALE_GMD_FACTOR = 0.865;
     const CONFINEMENT_GMD_KG_PER_DAY = 1.7; // typical feedlot GMD 1.6–1.8 kg/day
+
+    // Ponto de abate — global target/yield defaults, overridable per lot and
+    // per Perfil settings (settings/{uid}.targetArrobasPerHead/defaultFarmYieldPct/
+    // defaultConfinementYieldPct). These constants are the final fallback for
+    // docs that predate the feature or never set the settings doc.
+    const DEFAULT_TARGET_ARROBAS_PER_HEAD = 21;
+    const DEFAULT_FARM_YIELD_PCT = CARCASS_YIELD;  // ~50% at pasture
+    const DEFAULT_CONFINEMENT_YIELD_PCT = 0.54;    // feedlot runs higher, up to ~57%
 
     // Single source of truth for cattle category taxonomy (key → label/sex).
     // Order matters: it drives select option order everywhere it's rendered.
@@ -2342,6 +2444,10 @@
     const settingsCapitalValueEl = document.getElementById("settings-capital-value");
     const settingsEditBtn = document.getElementById("settings-edit-btn");
     const settingsEditBtn2 = document.getElementById("settings-edit-btn-2");
+    const settingsTargetValueEl = document.getElementById("settings-target-value");
+    const settingsFarmYieldValueEl = document.getElementById("settings-farmyield-value");
+    const settingsConfYieldValueEl = document.getElementById("settings-confyield-value");
+    const settingsEditBtn3 = document.getElementById("settings-edit-btn-3");
 
     const propertiesCountValueEl = document.getElementById("properties-count-value");
     const propertiesAreaValueEl = document.getElementById("properties-area-value");
@@ -2402,6 +2508,11 @@
     // pt-BR percent with 1 decimal, trailing ",0" trimmed (13.5 → "13,5", 10 → "10").
     function formatPercentTrim(n) {
       return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+    }
+    // Yield fraction (0.53) → plain 1-decimal percent number for number-input
+    // value/placeholder attributes (53, not a pt-BR locale string with a comma).
+    function fractionToPercentDisplay(fraction) {
+      return Math.round(fraction * 1000) / 10;
     }
 
     // pt-BR duration phrase for a whole month count: "X meses" under a year,
@@ -2501,6 +2612,35 @@
       };
     }
 
+    // Perfil-level targets/yields (settings/{uid}), each with its own
+    // hardcoded fallback so the feature works before the settings doc has
+    // ever been saved.
+    function getSlaughterConfig() {
+      return {
+        targetArrobasPerHead: Number.isFinite(settingsCache.targetArrobasPerHead)
+          ? settingsCache.targetArrobasPerHead
+          : DEFAULT_TARGET_ARROBAS_PER_HEAD,
+        defaultFarmYieldPct: Number.isFinite(settingsCache.defaultFarmYieldPct)
+          ? settingsCache.defaultFarmYieldPct
+          : DEFAULT_FARM_YIELD_PCT,
+        defaultConfinementYieldPct: Number.isFinite(settingsCache.defaultConfinementYieldPct)
+          ? settingsCache.defaultConfinementYieldPct
+          : DEFAULT_CONFINEMENT_YIELD_PCT,
+      };
+    }
+
+    // Farm-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
+    function resolveFarmYieldPct(lot) {
+      if (Number.isFinite(lot.carcassYieldPct)) return lot.carcassYieldPct;
+      return getSlaughterConfig().defaultFarmYieldPct;
+    }
+
+    // Confined-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
+    function resolveConfinementYieldPct(lot) {
+      if (Number.isFinite(lot.confinementYieldPct)) return lot.confinementYieldPct;
+      return getSlaughterConfig().defaultConfinementYieldPct;
+    }
+
     // Projects a lot's on-farm weight/@ from its farm anchor using the
     // property's pasture-quality GMD (Embrapa averages), reduced for females
     // (they gain slower than the male-referenced Embrapa figures) —
@@ -2522,7 +2662,7 @@
 
       const gainKg = days * gmdKgPerDay;
       const projectedWeightKg = baseWeightKg + gainKg;
-      const yieldPct = Number.isFinite(lot.carcassYieldPct) ? lot.carcassYieldPct : CARCASS_YIELD;
+      const yieldPct = resolveFarmYieldPct(lot);
       const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
 
       return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
@@ -2794,13 +2934,13 @@
         if (projection) {
           arrobas += projection.projectedTotalArrobas;
         } else if (Number.isFinite(l.avgWeightKg)) {
-          const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
+          const yieldPct = resolveFarmYieldPct(l);
           arrobas += (l.headcount ?? 0) * ((l.avgWeightKg * yieldPct) / KG_PER_ARROBA);
         }
 
         if (confinedHeadcount > 0) {
           const confinedProjection = lotConfinedProjection(l);
-          const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
+          const yieldPct = resolveConfinementYieldPct(l);
           const confinedWeightKg = confinedProjection?.projectedWeightKg ?? l.avgWeightKg;
           if (Number.isFinite(confinedWeightKg)) {
             arrobas += confinedHeadcount * ((confinedWeightKg * yieldPct) / KG_PER_ARROBA);
@@ -2897,18 +3037,20 @@
             const confinedHeadcount = l.confinedHeadcount ?? 0;
             const hasConfined = confinedHeadcount > 0;
             const ownedHeadcount = headcount + confinedHeadcount;
-            const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
+            const yieldPct = resolveFarmYieldPct(l);
 
             // Economics row is computed over OWNED head (farm + confined),
-            // each side valued at its own location's projected weight, so a
+            // each side valued at its own location's projected weight (and
+            // its own yield — feedlot runs higher than pasture), so a
             // fully-confined lot doesn't read as worthless patrimony.
             const farmProjection = lotWeightProjection(l);
             const confinedProjection = lotConfinedProjection(l);
+            const confinedYieldPct = resolveConfinementYieldPct(l);
             const farmArrobas = farmProjection && headcount > 0
               ? headcount * ((farmProjection.projectedWeightKg * yieldPct) / KG_PER_ARROBA)
               : 0;
             const confinedArrobas = confinedProjection
-              ? confinedHeadcount * ((confinedProjection.projectedWeightKg * yieldPct) / KG_PER_ARROBA)
+              ? confinedHeadcount * ((confinedProjection.projectedWeightKg * confinedYieldPct) / KG_PER_ARROBA)
               : 0;
             const hasArrobaData = (farmProjection && headcount > 0) || confinedProjection;
             const totalArrobasEst = hasArrobaData ? farmArrobas + confinedArrobas : null;
@@ -4731,6 +4873,11 @@
        settingsDepreciationValueEl.textContent = settingsCache.monthlyDepreciationBRL != null ? formatBRL(settingsCache.monthlyDepreciationBRL) : "—";
        settingsProlaboreValueEl.textContent = settingsCache.monthlyProLaboreBRL != null ? formatBRL(settingsCache.monthlyProLaboreBRL) : "—";
        settingsCapitalValueEl.textContent = settingsCache.investedCapitalBRL != null ? formatBRL(settingsCache.investedCapitalBRL) : "—";
+
+       const slaughterCfg = getSlaughterConfig();
+       settingsTargetValueEl.textContent = `${formatArrobas(slaughterCfg.targetArrobasPerHead)} @`;
+       settingsFarmYieldValueEl.textContent = `${formatPercentTrim(slaughterCfg.defaultFarmYieldPct * 100)}%`;
+       settingsConfYieldValueEl.textContent = `${formatPercentTrim(slaughterCfg.defaultConfinementYieldPct * 100)}%`;
      }
 
      function buildSettingsFormHTML() {
@@ -4839,6 +4986,102 @@
 
      settingsEditBtn.addEventListener("click", openSettingsSheet);
      settingsEditBtn2.addEventListener("click", openSettingsSheet);
+
+     // --- Metas e aproveitamento (targetArrobasPerHead, defaultFarmYieldPct,
+     //     defaultConfinementYieldPct) — feeds getSlaughterConfig() and the
+     //     "Ponto de abate" panel in Indicadores. ---
+     function buildSlaughterSettingsFormHTML() {
+       return `
+         <form id="slaughter-settings-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="slaughter-target">Meta de @ por cabeça</label>
+             <input class="input" id="slaughter-target" type="number" min="0" step="0.5" placeholder="Ex: 21" value="${settingsCache.targetArrobasPerHead ?? ""}" />
+             <p class="field-hint">Meta de @ por cabeça para considerar o animal pronto.</p>
+             <p class="field-error" id="slaughter-target-error"></p>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="slaughter-farmyield">Aprov. a pasto (%)</label>
+             <input class="input" id="slaughter-farmyield" type="number" min="1" max="100" step="0.5" placeholder="Ex: 50" value="${settingsCache.defaultFarmYieldPct != null ? fractionToPercentDisplay(settingsCache.defaultFarmYieldPct) : ""}" />
+             <p class="field-hint">Aproveitamento de carcaça a pasto.</p>
+             <p class="field-error" id="slaughter-farmyield-error"></p>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="slaughter-confyield">Aprov. confinamento (%)</label>
+             <input class="input" id="slaughter-confyield" type="number" min="1" max="100" step="0.5" placeholder="Ex: 54" value="${settingsCache.defaultConfinementYieldPct != null ? fractionToPercentDisplay(settingsCache.defaultConfinementYieldPct) : ""}" />
+             <p class="field-hint">Aproveitamento de carcaça em confinamento — geralmente maior, até ~57%.</p>
+             <p class="field-error" id="slaughter-confyield-error"></p>
+           </div>
+           <p class="field-error" id="slaughter-settings-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="slaughter-settings-submit">Salvar configurações</button>
+         </form>
+       `;
+     }
+
+     function wireSlaughterSettingsForm() {
+       const form = document.getElementById("slaughter-settings-form");
+       const submitBtn = document.getElementById("slaughter-settings-submit");
+       const formError = document.getElementById("slaughter-settings-form-error");
+       const numericFieldIds = ["slaughter-target", "slaughter-farmyield", "slaughter-confyield"];
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         numericFieldIds.forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         function readOptionalNumber(id, label, { min = 0, max = Infinity } = {}) {
+           const raw = document.getElementById(id).value;
+           if (!raw) return null;
+           const n = parseFloat(raw);
+           if (!Number.isFinite(n) || n < min || n > max) { fail(id, `Informe ${label} válido(a).`); return null; }
+           return n;
+         }
+
+         const targetArrobasPerHead = readOptionalNumber("slaughter-target", "uma meta de @");
+         const farmYieldRaw = readOptionalNumber("slaughter-farmyield", "um aproveitamento", { min: 1, max: 100 });
+         const confYieldRaw = readOptionalNumber("slaughter-confyield", "um aproveitamento", { min: 1, max: 100 });
+
+         if (!valid) return;
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await setDoc(
+             doc(db, "settings", currentUid),
+             {
+               ownerId: currentUid,
+               targetArrobasPerHead,
+               defaultFarmYieldPct: farmYieldRaw != null ? farmYieldRaw / 100 : null,
+               defaultConfinementYieldPct: confYieldRaw != null ? confYieldRaw / 100 : null,
+               updatedAt: serverTimestamp(),
+             },
+             { merge: true }
+           );
+           showToast("Configurações salvas.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao salvar configurações:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Salvar configurações";
+         }
+       });
+     }
+
+     function openSlaughterSettingsSheet() {
+       Sheet.open({ title: "Metas e aproveitamento", content: buildSlaughterSettingsFormHTML() });
+       wireSlaughterSettingsForm();
+     }
+
+     settingsEditBtn3.addEventListener("click", openSlaughterSettingsSheet);
 
      // =====================================================
      // 7e. Lotes — "..." action menu (Editar / Excluir)
@@ -5032,6 +5275,8 @@
        const propertyOptions = propertiesCache
          .map((p) => `<option value="${escapeHtml(p.id)}" ${lot.propertyId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
          .join("");
+       const cfg = getSlaughterConfig();
+       const hasConfined = (lot.confinedHeadcount ?? 0) > 0;
        return `
          <form id="lot-form" class="form-grid" novalidate>
            <div class="field">
@@ -5055,6 +5300,26 @@
                ${propertyOptions}
              </select>
            </div>
+
+           <p class="form-section-title">Finalização (opcional)</p>
+           <div class="field field--half">
+             <label class="field-label" for="lot-target-arrobas">Meta de @ por cabeça</label>
+             <input class="input" id="lot-target-arrobas" type="number" min="0" step="0.5" placeholder="${cfg.targetArrobasPerHead}" value="${lot.targetArrobas ?? ""}" />
+             <p class="field-hint">Vazio = usa a meta padrão (Perfil).</p>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="lot-carcass-yield">Aprov. a pasto (%)</label>
+             <input class="input" id="lot-carcass-yield" type="number" min="1" max="100" step="0.5" placeholder="${fractionToPercentDisplay(cfg.defaultFarmYieldPct)}" value="${lot.carcassYieldPct != null ? fractionToPercentDisplay(lot.carcassYieldPct) : ""}" />
+             <p class="field-hint">Vazio = usa o padrão da fazenda (Perfil).</p>
+           </div>
+           ${hasConfined ? `
+           <div class="field">
+             <label class="field-label" for="lot-confinement-yield">Aprov. no confinamento (%)</label>
+             <input class="input" id="lot-confinement-yield" type="number" min="1" max="100" step="0.5" placeholder="${fractionToPercentDisplay(cfg.defaultConfinementYieldPct)}" value="${lot.confinementYieldPct != null ? fractionToPercentDisplay(lot.confinementYieldPct) : ""}" />
+             <p class="field-hint">Vazio = usa o padrão do confinamento (Perfil).</p>
+           </div>
+           ` : ""}
+
            <p class="field-error" id="lot-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="lot-submit">Salvar alterações</button>
          </form>
@@ -5085,13 +5350,24 @@
 
          const propertyId = document.getElementById("lot-property").value || null;
 
+         const targetArrobasRaw = document.getElementById("lot-target-arrobas").value;
+         const targetArrobas = targetArrobasRaw ? parseFloat(targetArrobasRaw) : null;
+
+         const carcassYieldRaw = document.getElementById("lot-carcass-yield").value;
+         const carcassYieldPct = carcassYieldRaw ? parseFloat(carcassYieldRaw) / 100 : null;
+
+         const confinementYieldInput = document.getElementById("lot-confinement-yield");
+         const confinementYieldPct = confinementYieldInput?.value ? parseFloat(confinementYieldInput.value) / 100 : null;
+
          if (!valid) return;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
 
          try {
-           await updateDoc(doc(db, "lots", lot.id), { name, category, areaHa, propertyId, updatedAt: serverTimestamp() });
+           const updates = { name, category, areaHa, propertyId, targetArrobas, carcassYieldPct, updatedAt: serverTimestamp() };
+           if (confinementYieldInput) updates.confinementYieldPct = confinementYieldPct;
+           await updateDoc(doc(db, "lots", lot.id), updates);
            showToast("Lote atualizado.");
            Sheet.close();
          } catch (err) {
@@ -8050,6 +8326,125 @@
          .join("");
      }
 
+     // =====================================================
+     // 7f1. Ponto de abate — per-head arroba projection vs. target, one row
+     //      per lot per location (farm/confined), sorted heaviest-first.
+     //      Pure derivation from lotsCache/movementsCache/settingsCache —
+     //      reuses the lotWeightProjection/lotConfinedProjection anchors.
+     // =====================================================
+     function computeSlaughterRows() {
+       const cfg = getSlaughterConfig();
+       const rows = [];
+
+       for (const lot of lotsCache) {
+         const target = Number.isFinite(lot.targetArrobas) ? lot.targetArrobas : cfg.targetArrobasPerHead;
+
+         const headcount = lot.headcount ?? 0;
+         if (headcount > 0) {
+           const projection = lotWeightProjection(lot);
+           if (projection) {
+             const yieldPct = resolveFarmYieldPct(lot);
+             const arrobasPerHead = (projection.projectedWeightKg * yieldPct) / KG_PER_ARROBA;
+             rows.push({
+               lotId: lot.id,
+               lotName: lot.name,
+               location: "farm",
+               heads: headcount,
+               projectedWeightKg: projection.projectedWeightKg,
+               yieldPct,
+               arrobasPerHead,
+               targetArrobas: target,
+               status: arrobasPerHead >= target ? "ready" : arrobasPerHead >= target - 1 ? "near" : "growing",
+             });
+           }
+         }
+
+         const confinedHeadcount = lot.confinedHeadcount ?? 0;
+         if (confinedHeadcount > 0) {
+           const confinedProjection = lotConfinedProjection(lot);
+           if (confinedProjection) {
+             const yieldPct = resolveConfinementYieldPct(lot);
+             const arrobasPerHead = (confinedProjection.projectedWeightKg * yieldPct) / KG_PER_ARROBA;
+             rows.push({
+               lotId: lot.id,
+               lotName: lot.name,
+               location: "confined",
+               heads: confinedHeadcount,
+               projectedWeightKg: confinedProjection.projectedWeightKg,
+               yieldPct,
+               arrobasPerHead,
+               targetArrobas: target,
+               status: arrobasPerHead >= target ? "ready" : arrobasPerHead >= target - 1 ? "near" : "growing",
+             });
+           }
+         }
+       }
+
+       rows.sort((a, b) => b.arrobasPerHead - a.arrobasPerHead);
+       return rows;
+     }
+
+     function slaughterRowHTML(row) {
+       const locationLabel = row.location === "farm" ? "Fazenda" : "Confinamento";
+       const pct = Math.max(0, Math.min(100, (row.arrobasPerHead / row.targetArrobas) * 100));
+       return `
+         <li class="slaughter-row is-${row.status}" data-lot-id="${escapeHtml(row.lotId)}" tabindex="0" role="button" aria-label="Ver detalhes do lote ${escapeHtml(row.lotName)}">
+           <div class="slaughter-row-top">
+             <div class="slaughter-row-left">
+               <span class="slaughter-row-name">${escapeHtml(row.lotName)}</span>
+               <span class="chip chip-location">${locationLabel}</span>
+               <span class="slaughter-row-heads">${row.heads} cab.</span>
+             </div>
+             <div class="slaughter-row-right">
+               <span class="slaughter-row-arrobas">${formatArrobas(row.arrobasPerHead)} @/cab</span>
+               <span class="slaughter-row-target">meta ${formatArrobas(row.targetArrobas)} @</span>
+             </div>
+           </div>
+           <div class="slaughter-progress">
+             <div class="slaughter-progress-fill" style="width: ${pct.toFixed(1)}%;"></div>
+           </div>
+         </li>
+       `;
+     }
+
+     function slaughterPanelHTML() {
+       const rows = computeSlaughterRows();
+       const readyCount = rows.filter((r) => r.status === "ready").length;
+       const summaryChip = readyCount > 0
+         ? `<span class="chip chip-success">${readyCount} pronto${readyCount === 1 ? "" : "s"}</span>`
+         : `<span class="chip chip-muted">Nenhum lote no ponto</span>`;
+
+       const body = rows.length
+         ? `<ul class="slaughter-row-list">${rows.map(slaughterRowHTML).join("")}</ul>`
+         : `<p class="field-hint">Cadastre lotes com peso para acompanhar a projeção de @.</p>`;
+
+       return `
+         <div class="card slaughter-panel">
+           <div class="card-top">
+             <span class="ear-tag" style="font-size: var(--fs-base);">Ponto de abate</span>
+             ${summaryChip}
+           </div>
+           ${body}
+         </div>
+       `;
+     }
+
+     // Delegated once — indicadoresRootEl's innerHTML is fully replaced on
+     // every render, so per-row listeners would leak/duplicate.
+     function handleSlaughterRowActivate(e) {
+       const row = e.target.closest(".slaughter-row[data-lot-id]");
+       if (!row) return;
+       const lot = lotsCache.find((l) => l.id === row.dataset.lotId);
+       if (lot) openLotDetailSheet(lot);
+     }
+     indicadoresRootEl.addEventListener("click", handleSlaughterRowActivate);
+     indicadoresRootEl.addEventListener("keydown", (e) => {
+       if (e.key !== "Enter" && e.key !== " ") return;
+       if (!e.target.closest(".slaughter-row[data-lot-id]")) return;
+       e.preventDefault();
+       handleSlaughterRowActivate(e);
+     });
+
      function renderIndicadores() {
        if (!loadedFlags.animals || !loadedFlags.transactions || !loadedFlags.events || !loadedFlags.settings) {
          renderIndicadoresLoading();
@@ -8059,6 +8454,7 @@
        const label = periodLabelText(range);
 
        indicadoresRootEl.innerHTML = [
+         slaughterPanelHTML(),
          kpiSectionHTML("Desempenho animal", label, renderGroup1(range).map(kpiCardHTML).join("")),
          kpiSectionHTML("Reprodutivo", "Cobertura/IA, diagnóstico de gestação e partos", renderGroup2(range).map(kpiCardHTML).join("")),
          kpiSectionHTML("Econômico-financeiro", label, renderGroup3(range).map(kpiCardHTML).join("")),
@@ -8359,6 +8755,7 @@
           refreshLotDetailSheetIfOpen();
           loadedFlags.lots = true;
           renderEstoque();
+          renderIndicadores();
         },
         (err) => {
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
@@ -8368,11 +8765,13 @@
           statArrobasEl.textContent = "—";
           loadedFlags.lots = true;
           renderEstoque();
+          renderIndicadores();
         }
       );
 
       // Per-lot ledger (aggregate lots): read-only feed for the lot detail
-      // sheet's movement history + running headcount.
+      // sheet's movement history + running headcount, and for the farm/
+      // confined weight-projection anchors (feeds Ponto de abate too).
       const movementsQuery = query(
         collection(db, "movements"),
         where("ownerId", "==", uid),
@@ -8383,10 +8782,12 @@
         (snap) => {
           movementsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           refreshLotDetailSheetIfOpen();
+          renderIndicadores();
         },
         (err) => {
           console.warn("[Agro Connect] movements onSnapshot error:", err?.code ?? err);
           movementsCache = [];
+          renderIndicadores();
         }
       );
 
@@ -8591,6 +8992,9 @@
       suppliersCountValueEl.textContent = "—";
       suppliersWithDocValueEl.textContent = "—";
       settingsCapitalValueEl.textContent = "—";
+      settingsTargetValueEl.textContent = "—";
+      settingsFarmYieldValueEl.textContent = "—";
+      settingsConfYieldValueEl.textContent = "—";
       renderIndicadoresLoading();
     }
 
