@@ -2647,9 +2647,27 @@
         .join("");
 
       const active = animals.filter((a) => (a.status || "active") === "active");
-      statHeadEl.textContent = String(active.length);
-      statArrobasEl.innerHTML = `${formatArrobas(totalArrobas(active))} <small>@</small>`;
       herdCountEl.textContent = `${active.length} animais ativos`;
+    }
+
+    // Herd summary strip (Cabeças no rebanho / Estoque estimado) is derived
+    // from lot headcount, not tagged animals — aggregate lots have no animal
+    // docs, and tagged animals are a non-additive subset of a lot's headcount.
+    function renderHerdSummary() {
+      let head = 0;
+      let arrobas = 0;
+      for (const l of lotsCache) {
+        head += l.headcount ?? 0;
+        const projection = lotWeightProjection(l);
+        if (projection) {
+          arrobas += projection.projectedTotalArrobas;
+        } else if (Number.isFinite(l.avgWeightKg)) {
+          const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
+          arrobas += (l.headcount ?? 0) * ((l.avgWeightKg * yieldPct) / KG_PER_ARROBA);
+        }
+      }
+      statHeadEl.textContent = String(head);
+      statArrobasEl.innerHTML = `${formatArrobas(arrobas)} <small>@</small>`;
     }
 
     function renderHerdEmpty() {
@@ -2660,12 +2678,10 @@
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v9a6 6 0 0 1-12 0V4a1 1 0 0 1 1-1z"/><circle cx="12" cy="7" r="1.4"/></svg>
             </span>
             <h3>Nenhum animal ainda</h3>
-            <p>Toque em + para criar um lote — adicione brincos nele para ver animais aqui.</p>
+            <p>Esta lista mostra apenas animais com brinco. Seus lotes aparecem na aba Lotes.</p>
           </div>
         </li>
       `;
-      statHeadEl.textContent = "0";
-      statArrobasEl.innerHTML = `0 <small>@</small>`;
       herdCountEl.textContent = "0 animais ativos";
     }
 
@@ -7887,6 +7903,7 @@
           if (animalsCache.length === 0) renderHerdEmpty();
           else renderHerd(animalsCache);
           renderLots();
+          renderHerdSummary();
           loadedFlags.animals = true;
           renderIndicadores();
         },
@@ -7908,6 +7925,7 @@
         (snap) => {
           lotsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           renderLots();
+          renderHerdSummary();
           renderFinanceiro();
           refreshLotDetailSheetIfOpen();
           loadedFlags.lots = true;
@@ -7917,6 +7935,8 @@
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
           lotsCache = [];
           renderLotsError();
+          statHeadEl.textContent = "—";
+          statArrobasEl.textContent = "—";
           loadedFlags.lots = true;
           renderEstoque();
         }
