@@ -218,6 +218,7 @@
   }
 
   .stat-tile {
+    min-width: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -294,6 +295,16 @@
   }
   .month-selector::-webkit-scrollbar { display: none; }
 
+  @media (hover: hover) and (pointer: fine) {
+    .month-selector { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .month-selector::-webkit-scrollbar { display: block; height: 6px; }
+    .month-selector::-webkit-scrollbar-track { background: transparent; }
+    .month-selector::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: var(--radius-full);
+    }
+  }
+
   .month-chip {
     flex: none;
     display: inline-flex;
@@ -321,10 +332,8 @@
   }
 
   .summary-strip.fin-summary {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  @media (max-width: 420px) {
-    .summary-strip.fin-summary { grid-template-columns: 1fr; }
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
   }
 
   .stat-value.fin-positive, .tx-amount.fin-positive { color: var(--success); }
@@ -2847,6 +2856,16 @@
       syncMonthChipActive();
       renderFinanceiro();
     });
+
+    monthSelectorEl.addEventListener("wheel", (e) => {
+      if (e.deltaX !== 0) return;
+      const max = monthSelectorEl.scrollWidth - monthSelectorEl.clientWidth;
+      if (max <= 0) return;
+      const next = monthSelectorEl.scrollLeft + e.deltaY;
+      if ((next < 0 && e.deltaY < 0) || (next > max && e.deltaY > 0)) return;
+      e.preventDefault();
+      monthSelectorEl.scrollLeft = next;
+    }, { passive: false });
 
     yearPrevBtn.addEventListener("click", () => {
       const years = getAvailableYears();
