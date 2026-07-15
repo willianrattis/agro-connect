@@ -1981,6 +1981,9 @@
       boa:       { label: "Boa",       gmdKgPerDay: 0.480 },
     };
     const DEFAULT_PASTURE_QUALITY = "regular";
+    // Embrapa GMD figures are for males. Females gain 12–15% less on the same
+    // pasture; 0.865 is the midpoint of that band. Single tunable knob.
+    const FEMALE_GMD_FACTOR = 0.865;
 
     // Single source of truth for cattle category taxonomy (key → label/sex).
     // Order matters: it drives select option order everywhere it's rendered.
@@ -2378,6 +2381,10 @@
     function formatArrobas(n) {
       return n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
+    // pt-BR percent with 1 decimal, trailing ",0" trimmed (13.5 → "13,5", 10 → "10").
+    function formatPercentTrim(n) {
+      return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+    }
 
     // pt-BR duration phrase for a whole month count: "X meses" under a year,
     // "X anos" or "X anos e Y meses" at 12+.
@@ -2420,7 +2427,9 @@
     }
 
     // Projects a lot's weight/@ from acquisitionDate using the property's
-    // pasture-quality GMD (Embrapa averages) — read-time only, never persisted.
+    // pasture-quality GMD (Embrapa averages), reduced for females (they gain
+    // slower than the male-referenced Embrapa figures) — read-time only,
+    // never persisted.
     function lotWeightProjection(lot) {
       if (!Number.isFinite(lot.avgWeightKg) || lot.avgWeightKg <= 0) return null;
       const acquisitionDate = toDateSafe(lot.acquisitionDate);
@@ -2428,13 +2437,20 @@
 
       const days = Math.max(0, Math.floor((Date.now() - acquisitionDate.getTime()) / 86_400_000));
       const qualityKey = resolveLotPastureQualityKey(lot);
-      const { label: qualityLabel, gmdKgPerDay } = PASTURE_QUALITY[qualityKey];
+      const { label: qualityLabel, gmdKgPerDay: baseGmdKgPerDay } = PASTURE_QUALITY[qualityKey];
+
+      // Legacy lots predate the `sex` field, so fall back to the category
+      // taxonomy's sex, then default to male.
+      const sex = lot.sex ?? CATTLE_CATEGORIES[resolveCategoryKey(lot.entryCategory, null)]?.sex ?? "M";
+      const isFemale = sex === "F";
+      const gmdKgPerDay = isFemale ? baseGmdKgPerDay * FEMALE_GMD_FACTOR : baseGmdKgPerDay;
+
       const gainKg = days * gmdKgPerDay;
       const projectedWeightKg = lot.avgWeightKg + gainKg;
       const yieldPct = Number.isFinite(lot.carcassYieldPct) ? lot.carcassYieldPct : CARCASS_YIELD;
       const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
 
-      return { days, qualityKey, qualityLabel, gmdKgPerDay, projectedWeightKg, gainKg, projectedTotalArrobas };
+      return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
     }
 
     // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
@@ -2794,6 +2810,10 @@
                 ${(() => {
                   const p = lotWeightProjection(l);
                   if (!p) return "";
+                  const femaleSuffix = p.isFemale
+                    ? ` (fêmea −${formatPercentTrim((1 - FEMALE_GMD_FACTOR) * 100)}%)`
+                    : "";
+                  const hint = `Projeção: pastagem ${p.qualityLabel.toLowerCase()} · ${Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia${femaleSuffix} · ${p.days.toLocaleString("pt-BR")} dias`;
                   return `
                     <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                       <div class="mini-stat">
@@ -2805,7 +2825,7 @@
                         <p class="mini-label">@ estimada hoje</p>
                       </div>
                     </div>
-                    <p class="field-hint">Projeção: pastagem ${escapeHtml(p.qualityLabel.toLowerCase())} · ${escapeHtml(Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR"))} g/dia · ${escapeHtml(p.days.toLocaleString("pt-BR"))} dias</p>
+                    <p class="field-hint">${escapeHtml(hint)}</p>
                   `;
                 })()}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
