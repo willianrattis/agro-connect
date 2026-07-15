@@ -121,6 +121,18 @@ service cloud.firestore {
       allow delete: if owns(resource);
     }
 
+    // Confinamentos (third-party feedlots) — a lot's cattle sent here stay
+    // owned by the same owner, so only name/nameLower are required, same as
+    // suppliers' minimal identity fields.
+    match /confinements/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
+
     // Lot movements (aggregate-lot ledger: entries/exits, headcount deltas;
     // also property-transfer log entries)
     match /movements/{id} {

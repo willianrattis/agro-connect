@@ -1984,6 +1984,7 @@
     // Embrapa GMD figures are for males. Females gain 12–15% less on the same
     // pasture; 0.865 is the midpoint of that band. Single tunable knob.
     const FEMALE_GMD_FACTOR = 0.865;
+    const CONFINEMENT_GMD_KG_PER_DAY = 1.7; // typical feedlot GMD 1.6–1.8 kg/day
 
     // Single source of truth for cattle category taxonomy (key → label/sex).
     // Order matters: it drives select option order everywhere it's rendered.
@@ -2230,6 +2231,8 @@
       { value: "death", label: "Morte", defaultSign: "-", defaultFinance: false },
       { value: "shipment", label: "Embarque", defaultSign: "-", defaultFinance: true },
       { value: "sale", label: "Venda", defaultSign: "-", defaultFinance: true },
+      { value: "confinement_out", label: "Envio p/ confinamento", defaultSign: "-", defaultFinance: false },
+      { value: "confinement_return", label: "Retorno de confinamento", defaultSign: "+", defaultFinance: false },
     ];
     const MOVEMENT_TYPE_LABEL = Object.fromEntries(MOVEMENT_TYPES.map((t) => [t.value, t.label]));
     const MOVEMENT_TYPE_BY_VALUE = Object.fromEntries(MOVEMENT_TYPES.map((t) => [t.value, t]));
@@ -2451,6 +2454,46 @@
       const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
 
       return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
+    }
+
+    // A movement's effect on the lot's two balances (on-farm headcount vs.
+    // confined headcount) — shared by the ledger replay and the submit-time
+    // counter update, so the two can never drift apart.
+    function movementDeltas(m) {
+      const magnitude = Math.abs(m.qty || 0);
+      if (m.type === "confinement_out") return { farmDelta: -magnitude, confinedDelta: magnitude };
+      if (m.type === "confinement_return") return { farmDelta: magnitude, confinedDelta: -magnitude };
+      if (m.fromConfinement) return { farmDelta: 0, confinedDelta: -magnitude };
+      return { farmDelta: m.qty || 0, confinedDelta: 0 };
+    }
+
+    // Feedlot day-counter + weight projection for a lot currently holding
+    // confined head: days since the OLDEST confinement_out movement (the
+    // lot may have been topped up more than once), weight based on the
+    // MOST RECENT confinement_out's shipping weight (falls back to
+    // lot.avgWeightKg) — read-time only, never persisted.
+    function lotConfinementInfo(lot) {
+      if (!((lot.confinedHeadcount ?? 0) > 0)) return null;
+      const outs = movementsCache
+        .filter((m) => m.lotId === lot.id && m.type === "confinement_out")
+        .map((m) => ({ ...m, _date: toDateSafe(m.date) }))
+        .filter((m) => m._date);
+      if (!outs.length) return null;
+      const oldest = outs.reduce((a, b) => (a._date < b._date ? a : b));
+      const newest = outs.reduce((a, b) => (a._date > b._date ? a : b));
+      const days = Math.max(0, Math.floor((Date.now() - oldest._date.getTime()) / 86_400_000));
+      const baseWeightKg = Number.isFinite(newest.avgWeightKg) ? newest.avgWeightKg : lot.avgWeightKg;
+      const projectedWeightKg = Number.isFinite(baseWeightKg) ? baseWeightKg + days * CONFINEMENT_GMD_KG_PER_DAY : null;
+      return { name: newest.confinementName || "—", days, projectedWeightKg };
+    }
+
+    function confinementHintLabel(lot) {
+      const info = lotConfinementInfo(lot);
+      if (!info) return null;
+      const gmd = CONFINEMENT_GMD_KG_PER_DAY.toLocaleString("pt-BR", { minimumFractionDigits: 1 });
+      const parts = [`Confinamento: ${info.name}`, `${info.days.toLocaleString("pt-BR")} dias`, `+${gmd} kg/dia`];
+      if (info.projectedWeightKg != null) parts.push(`peso est. ${formatKg(info.projectedWeightKg)} kg`);
+      return parts.join(" · ");
     }
 
     // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
@@ -2769,6 +2812,8 @@
 
           if ((l.trackingMode || "individual") === "aggregate") {
             const headcount = l.headcount ?? 0;
+            const confinedHeadcount = l.confinedHeadcount ?? 0;
+            const hasConfined = confinedHeadcount > 0;
             const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
             const totalArrobasEst = Number.isFinite(l.avgWeightKg)
               ? headcount * ((l.avgWeightKg * yieldPct) / KG_PER_ARROBA)
@@ -2777,6 +2822,7 @@
               ? (l.totalPurchaseCostBRL ?? 0) / totalArrobasEst
               : null;
             const property = l.propertyId ? propertiesCache.find((p) => p.id === l.propertyId) : null;
+            const confinementHint = hasConfined ? confinementHintLabel(l) : null;
             return `
               <li class="card enter pressable" style="--i: ${i}" data-lot-id="${escapeHtml(l.id)}" tabindex="0" role="button" aria-label="Ver detalhes do lote ${escapeHtml(l.name)}">
                 <div class="card-top">
@@ -2787,16 +2833,23 @@
                   </div>
                 </div>
                 ${property ? `<p class="field-hint">${escapeHtml(property.name)}</p>` : ""}
-                <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+                <div class="card-stats" style="grid-template-columns: repeat(${hasConfined ? 3 : 2}, 1fr);">
                   <div class="mini-stat">
                     <p class="mini-value">${headcount}</p>
                     <p class="mini-label">Cabeças</p>
                   </div>
+                  ${hasConfined ? `
+                  <div class="mini-stat">
+                    <p class="mini-value">${confinedHeadcount}</p>
+                    <p class="mini-label">No confinamento</p>
+                  </div>
+                  ` : ""}
                   <div class="mini-stat">
                     <p class="mini-value">${l.avgWeightKg != null ? `${formatKg(l.avgWeightKg)} kg` : "—"}</p>
                     <p class="mini-label">Peso médio</p>
                   </div>
                 </div>
+                ${confinementHint ? `<p class="field-hint">${escapeHtml(confinementHint)}</p>` : ""}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
                     <p class="mini-value">${totalArrobasEst != null ? `${formatArrobas(totalArrobasEst)} @` : "—"}</p>
@@ -5647,6 +5700,7 @@
              areaHa: null,
              trackingMode,
              headcount,
+             confinedHeadcount: 0,
              avgWeightKg,
              propertyId,
              supplierId: origin === "purchased" ? (supplierId || null) : null,
@@ -5760,19 +5814,24 @@
      // =====================================================
      let openLotDetailLotId = null; // tracks which lot's detail sheet is open, for live refresh
 
-     // Running headcount per row, anchored to the lot's current headcount
-     // (the source of truth) and walked backwards so it stays correct even
-     // when there's no movement recording the lot's original headcount.
+     // Running dual balances per row, anchored to the lot's current
+     // headcount/confinedHeadcount (the source of truth) and walked
+     // backwards so it stays correct even when there's no movement
+     // recording the lot's original headcount.
      function computeLotMovementRows(lot) {
        const rows = movementsCache
          .filter((m) => m.lotId === lot.id)
          .slice()
          .sort((a, b) => toDateSafe(b.date) - toDateSafe(a.date));
-       let runningAfter = lot.headcount ?? 0;
+       let runningFarm = lot.headcount ?? 0;
+       let runningConfined = lot.confinedHeadcount ?? 0;
        return rows.map((m) => {
-         const after = runningAfter;
-         runningAfter = after - (m.qty || 0);
-         return { ...m, after };
+         const afterFarm = runningFarm;
+         const afterConfined = runningConfined;
+         const { farmDelta, confinedDelta } = movementDeltas(m);
+         runningFarm = afterFarm - farmDelta;
+         runningConfined = afterConfined - confinedDelta;
+         return { ...m, afterFarm, afterConfined };
        });
      }
 
@@ -5783,18 +5842,26 @@
        const amountClass = isEntry ? "fin-positive" : "fin-negative";
        const typeLabel = MOVEMENT_TYPE_LABEL[m.type] || m.type;
        const date = toDateSafe(m.date);
+       const touchesConfined = m.type === "confinement_out" || m.type === "confinement_return" || !!m.fromConfinement;
+       const balanceHint = touchesConfined || m.afterConfined !== 0
+         ? `Saldo após: ${m.afterFarm} na fazenda · ${m.afterConfined} no confinamento`
+         : `Saldo após: ${m.afterFarm} na fazenda`;
        return `
          <li class="tx-row">
            <div class="tx-row-main">
              <div class="tx-tags">
                <span class="chip tx-category-chip">${escapeHtml(typeLabel)}</span>
                <span class="chip tx-link-chip">${date ? formatDayLabel(date) : "—"}</span>
+               ${m.confinementName ? `<span class="chip tx-link-chip">${escapeHtml(m.confinementName)}</span>` : ""}
              </div>
              ${m.description ? `<p class="tx-desc">${escapeHtml(m.description)}</p>` : ""}
-             <p class="field-hint">Saldo após: ${m.after} cabeça${m.after === 1 ? "" : "s"}</p>
+             <p class="field-hint">${balanceHint}</p>
            </div>
            <div class="tx-row-end">
              <p class="tx-amount ${amountClass}">${sign}${Math.abs(qty)}${m.amountBRL != null ? ` (${formatBRL(m.amountBRL)})` : ""}</p>
+             <button type="button" class="card-menu-btn pressable" data-action="mv-edit" data-id="${escapeHtml(m.id)}" aria-label="Editar movimentação">
+               ${ICONS.edit}
+             </button>
            </div>
          </li>
        `;
@@ -5810,17 +5877,27 @@
 
      function buildLotDetailHTML(lot) {
        const headcount = lot.headcount ?? 0;
+       const confinedHeadcount = lot.confinedHeadcount ?? 0;
+       const hasConfined = confinedHeadcount > 0;
+       const confinementHint = hasConfined ? confinementHintLabel(lot) : null;
        return `
-         <div class="card-stats" style="grid-template-columns: repeat(2, 1fr); border-top: none; padding-top: 0;">
+         <div class="card-stats" style="grid-template-columns: repeat(${hasConfined ? 3 : 2}, 1fr); border-top: none; padding-top: 0;">
            <div class="mini-stat">
              <p class="mini-value">${headcount}</p>
              <p class="mini-label">Cabeças atuais</p>
            </div>
+           ${hasConfined ? `
+           <div class="mini-stat">
+             <p class="mini-value">${confinedHeadcount}</p>
+             <p class="mini-label">No confinamento</p>
+           </div>
+           ` : ""}
            <div class="mini-stat">
              <p class="mini-value">${lot.avgWeightKg != null ? `${formatKg(lot.avgWeightKg)} kg` : "—"}</p>
              <p class="mini-label">Peso médio</p>
            </div>
          </div>
+         ${confinementHint ? `<p class="field-hint">${escapeHtml(confinementHint)}</p>` : ""}
 
          <div class="detail-section">
            <p class="detail-section-title">Movimentações</p>
@@ -5845,6 +5922,14 @@
        document.getElementById("lot-detail-actions-btn")?.addEventListener("click", () => {
          openLotDetailLotId = null;
          openLotActionSheet(lot);
+       });
+       document.querySelectorAll("#sheet-body [data-action='mv-edit']").forEach((btn) => {
+         btn.addEventListener("click", () => {
+           const m = movementsCache.find((x) => x.id === btn.dataset.id);
+           if (!m) return;
+           openLotDetailLotId = null;
+           openEditMovementSheet(m);
+         });
        });
      }
 
@@ -5872,6 +5957,9 @@
      // --- "Nova movimentação" form ---
      function buildMovementFormHTML(lot) {
        const typeOptions = MOVEMENT_TYPES.map((t) => `<option value="${t.value}">${t.label}</option>`).join("");
+       const confinamentoOptions = confinementsCache
+         .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)
+         .join("");
        return `
          <form id="mv-form" class="form-grid" novalidate>
            <div class="field field--half">
@@ -5899,6 +5987,21 @@
              </div>
            </div>
 
+           <div class="field" id="mv-confinamento-field" hidden>
+             <label class="field-label" for="mv-confinamento">Confinamento *</label>
+             <select class="select" id="mv-confinamento">
+               <option value="" selected>Selecione</option>
+               ${confinamentoOptions}
+               <option value="__new__">+ Novo confinamento…</option>
+             </select>
+             <p class="field-error" id="mv-confinamento-error"></p>
+           </div>
+           <div class="field" id="mv-newconfinamento-field" hidden>
+             <label class="field-label" for="mv-newconfinamento-name">Nome do novo confinamento *</label>
+             <input class="input" id="mv-newconfinamento-name" type="text" placeholder="Ex: Confinamento Chaparral" autocomplete="off" />
+             <p class="field-error" id="mv-newconfinamento-name-error"></p>
+           </div>
+
            <div class="field field--half">
              <label class="field-label" for="mv-qty">Quantidade (cabeças) *</label>
              <input class="input" id="mv-qty" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex: 28" />
@@ -5908,7 +6011,13 @@
            <div class="field field--half">
              <label class="field-label" for="mv-avgWeightKg">Peso médio (kg)</label>
              <input class="input" id="mv-avgWeightKg" type="number" min="0" step="1" placeholder="Opcional" />
+             <p class="field-hint" id="mv-avgWeightKg-hint" hidden></p>
            </div>
+
+           <label class="field checkbox-field" id="mv-from-confinamento-field" for="mv-from-confinamento" hidden>
+             <input type="checkbox" id="mv-from-confinamento" />
+             <span class="field-label">Animais estão no confinamento</span>
+           </label>
 
            <div class="field field--half" id="mv-arroba-price-field" hidden>
              <label class="field-label" for="mv-arroba-price">Valor da @ (R$)</label>
@@ -5948,6 +6057,7 @@
        const typeSelect = document.getElementById("mv-type");
        const qtyInput = document.getElementById("mv-qty");
        const avgWeightInput = document.getElementById("mv-avgWeightKg");
+       const avgWeightHint = document.getElementById("mv-avgWeightKg-hint");
        const amountInput = document.getElementById("mv-amount");
        const arrobaPriceField = document.getElementById("mv-arroba-price-field");
        const arrobaPriceInput = document.getElementById("mv-arroba-price");
@@ -5957,8 +6067,23 @@
        const genFinanceField = document.getElementById("mv-gen-finance-field");
        const genFinanceCheckbox = document.getElementById("mv-gen-finance");
        const genFinanceLabel = document.getElementById("mv-gen-finance-label");
+       const confinamentoField = document.getElementById("mv-confinamento-field");
+       const confinamentoSelect = document.getElementById("mv-confinamento");
+       const newConfinamentoField = document.getElementById("mv-newconfinamento-field");
+       const newConfinamentoNameInput = document.getElementById("mv-newconfinamento-name");
+       const fromConfinamentoField = document.getElementById("mv-from-confinamento-field");
+       const fromConfinamentoCheckbox = document.getElementById("mv-from-confinamento");
+       const signPlusRadio = document.getElementById("mv-sign-plus");
+       const signMinusRadio = document.getElementById("mv-sign-minus");
        const submitBtn = document.getElementById("mv-submit");
        const formError = document.getElementById("mv-form-error");
+
+       function isConfinementType() {
+         return typeSelect.value === "confinement_out" || typeSelect.value === "confinement_return";
+       }
+       function isNegativeType() {
+         return typeSelect.value === "sale" || typeSelect.value === "shipment" || typeSelect.value === "death";
+       }
 
        // sale/shipment → receita; entry → despesa; everything else (birth,
        // death, transfer, adjustment) falls back to the movement's own sign
@@ -6034,10 +6159,37 @@
          genFinanceCheckbox.checked = meta ? meta.defaultFinance : false;
          arrobaPriceField.hidden = !isArrobaSaleType();
          yieldPctField.hidden = !isArrobaSaleType();
+
+         // confinement_out/confinement_return: sign is fixed by the type,
+         // so the segmented control is locked instead of left editable.
+         const confinementType = isConfinementType();
+         signPlusRadio.disabled = confinementType;
+         signMinusRadio.disabled = confinementType;
+         confinamentoField.hidden = !confinementType;
+         if (!confinementType) {
+           confinamentoSelect.value = "";
+           newConfinamentoField.hidden = true;
+           newConfinamentoNameInput.value = "";
+         }
+
+         // sale/shipment/death: offer "animals are at the feedlot" only when
+         // the lot actually has confined head to draw down.
+         const showFromConfinamento = isNegativeType() && (lot.confinedHeadcount ?? 0) > 0;
+         fromConfinamentoField.hidden = !showFromConfinamento;
+         if (!showFromConfinamento) fromConfinamentoCheckbox.checked = false;
+
+         avgWeightHint.hidden = typeSelect.value !== "confinement_out";
+         avgWeightHint.textContent = typeSelect.value === "confinement_out"
+           ? "Peso de embarque — pode ser editado depois com o peso aferido no confinamento"
+           : "";
+
          syncArrobaCalc();
          syncFinanceVisibility();
        }
        typeSelect.addEventListener("change", syncType);
+       confinamentoSelect.addEventListener("change", () => {
+         newConfinamentoField.hidden = confinamentoSelect.value !== "__new__";
+       });
        form.querySelectorAll('input[name="mv-sign"]').forEach((r) => r.addEventListener("change", syncFinanceLabel));
        amountInput.addEventListener("input", () => {
          formatCurrencyInput(amountInput);
@@ -6056,7 +6208,7 @@
          if (!currentUid) return;
 
          formError.textContent = "";
-         ["mv-type", "mv-date", "mv-qty"].forEach(clearFieldError);
+         ["mv-type", "mv-date", "mv-qty", "mv-confinamento", "mv-newconfinamento-name"].forEach(clearFieldError);
 
          let valid = true;
          const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
@@ -6070,10 +6222,28 @@
          const magnitude = parseInt(document.getElementById("mv-qty").value, 10);
          if (!Number.isInteger(magnitude) || magnitude <= 0) fail("mv-qty", "Informe a quantidade.");
 
+         const confinementType = isConfinementType();
+         let newConfinamentoName = null;
+         if (confinementType) {
+           if (!confinamentoSelect.value) {
+             fail("mv-confinamento", "Selecione o confinamento.");
+           } else if (confinamentoSelect.value === "__new__") {
+             newConfinamentoName = newConfinamentoNameInput.value.trim();
+             if (!newConfinamentoName) fail("mv-newconfinamento-name", "Informe o nome do confinamento.");
+           }
+         }
+
+         const fromConfinement = !fromConfinamentoField.hidden && fromConfinamentoCheckbox.checked;
+
          const qty = currentSign() === "-" ? -magnitude : magnitude;
-         const newHeadcount = (lot.headcount ?? 0) + (Number.isInteger(magnitude) ? qty : 0);
+         const { farmDelta, confinedDelta } = movementDeltas({ type, qty, fromConfinement });
+         const newHeadcount = (lot.headcount ?? 0) + farmDelta;
+         const newConfinedHeadcount = (lot.confinedHeadcount ?? 0) + confinedDelta;
          if (valid && newHeadcount < 0) {
            fail("mv-qty", "Essa movimentação deixaria o lote com cabeças negativas.");
+         }
+         if (valid && newConfinedHeadcount < 0) {
+           fail("mv-qty", "Essa movimentação deixaria o confinamento com cabeças negativas.");
          }
 
          const avgWeightRaw = document.getElementById("mv-avgWeightKg").value;
@@ -6100,6 +6270,36 @@
          submitBtn.textContent = "Salvando…";
 
          try {
+           // Reuse an existing confinamento on an exact name match; otherwise
+           // persist a new one and link its id — same dedupe rule as the
+           // supplier quick-create in the "Novo lote" flow.
+           let confinementId = null;
+           let confinementName = null;
+           if (confinementType) {
+             if (confinamentoSelect.value === "__new__") {
+               const nameLower = newConfinamentoName.toLowerCase();
+               const existing = confinementsCache.find((c) => c.nameLower === nameLower);
+               if (existing) {
+                 confinementId = existing.id;
+                 confinementName = existing.name;
+               } else {
+                 const confinementRef = await addDoc(collection(db, "confinements"), {
+                   ownerId: currentUid,
+                   name: newConfinamentoName,
+                   nameLower,
+                   createdAt: serverTimestamp(),
+                   updatedAt: serverTimestamp(),
+                 });
+                 confinementId = confinementRef.id;
+                 confinementName = newConfinamentoName;
+               }
+             } else {
+               const selected = confinementsCache.find((c) => c.id === confinamentoSelect.value);
+               confinementId = selected?.id ?? null;
+               confinementName = selected?.name ?? null;
+             }
+           }
+
            let linkedTransactionId = null;
            if (genFinance) {
              const kind = financeKindForType(type, qty);
@@ -6132,10 +6332,17 @@
              carcassYieldPct,
              description,
              linkedTransactionId,
+             confinementId,
+             confinementName,
+             fromConfinement: fromConfinement || null,
              createdAt: serverTimestamp(),
            });
 
-           await updateDoc(doc(db, "lots", lot.id), { headcount: newHeadcount, updatedAt: serverTimestamp() });
+           await updateDoc(doc(db, "lots", lot.id), {
+             headcount: newHeadcount,
+             confinedHeadcount: newConfinedHeadcount,
+             updatedAt: serverTimestamp(),
+           });
 
            showToast("Movimentação registrada.");
            Sheet.close();
@@ -6154,6 +6361,119 @@
      function openLotMovementSheet(lot) {
        Sheet.open({ title: `Nova movimentação · ${escapeHtml(lot.name)}`, content: buildMovementFormHTML(lot) });
        wireMovementForm(lot);
+     }
+
+     // --- Editar movimentação: type and qty are immutable (they'd require
+     //     replaying every counter change since), so only date, weight,
+     //     description and amount are editable here. ---
+     function buildEditMovementFormHTML(m) {
+       const typeLabel = MOVEMENT_TYPE_LABEL[m.type] || m.type;
+       const qty = m.qty || 0;
+       const qtyLabel = `${qty >= 0 ? "+" : "−"}${Math.abs(qty)}`;
+       return `
+         <form id="mve-form" class="form-grid" novalidate>
+           <div class="field field--half">
+             <label class="field-label" for="mve-type-display">Tipo</label>
+             <input class="input" id="mve-type-display" type="text" value="${escapeHtml(typeLabel)}" disabled />
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="mve-qty-display">Quantidade</label>
+             <input class="input" id="mve-qty-display" type="text" value="${escapeHtml(qtyLabel)}" disabled />
+           </div>
+
+           <div class="field field--half">
+             <label class="field-label" for="mve-date">Data *</label>
+             <input class="input" id="mve-date" type="date" value="${toDateInputValue(m.date)}" />
+             <p class="field-error" id="mve-date-error"></p>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="mve-avgWeightKg">Peso médio (kg)</label>
+             <input class="input" id="mve-avgWeightKg" type="number" min="0" step="1" placeholder="Opcional" value="${m.avgWeightKg ?? ""}" />
+           </div>
+
+           <div class="field field--half">
+             <label class="field-label" for="mve-amount">Valor (R$)</label>
+             <input class="input" id="mve-amount" type="text" inputmode="decimal" placeholder="R$ 0,00 (opcional)" autocomplete="off" value="${m.amountBRL != null ? formatBRL(m.amountBRL) : ""}" />
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="mve-description">Descrição</label>
+             <input class="input" id="mve-description" type="text" placeholder="Opcional" autocomplete="off" value="${m.description ? escapeHtml(m.description) : ""}" />
+           </div>
+
+           <p class="field-error" id="mve-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="mve-submit">Salvar alterações</button>
+         </form>
+       `;
+     }
+
+     function wireEditMovementForm(m) {
+       const form = document.getElementById("mve-form");
+       const dateInput = document.getElementById("mve-date");
+       const avgWeightInput = document.getElementById("mve-avgWeightKg");
+       const amountInput = document.getElementById("mve-amount");
+       const descriptionInput = document.getElementById("mve-description");
+       const submitBtn = document.getElementById("mve-submit");
+       const formError = document.getElementById("mve-form-error");
+
+       amountInput.addEventListener("input", () => formatCurrencyInput(amountInput));
+
+       form.addEventListener("submit", async (e) => {
+         e.preventDefault();
+         if (!currentUid) return;
+
+         formError.textContent = "";
+         clearFieldError("mve-date");
+
+         const dateStr = dateInput.value;
+         if (!dateStr) { setFieldError("mve-date", "Informe a data."); return; }
+
+         const date = new Date(`${dateStr}T00:00:00`);
+         const avgWeightRaw = avgWeightInput.value;
+         const avgWeightKg = avgWeightRaw ? parseFloat(avgWeightRaw) : null;
+         const amountRaw = parseBRLToNumber(amountInput.value);
+         const amountBRL = Number.isFinite(amountRaw) && amountRaw > 0 ? amountRaw : null;
+         const description = descriptionInput.value.trim() || null;
+
+         submitBtn.disabled = true;
+         submitBtn.textContent = "Salvando…";
+
+         try {
+           await updateDoc(doc(db, "movements", m.id), {
+             date,
+             avgWeightKg,
+             amountBRL,
+             description,
+             updatedAt: serverTimestamp(),
+           });
+
+           if (m.linkedTransactionId) {
+             const amountChanged = amountBRL != null && amountBRL !== (m.amountBRL ?? null);
+             const dateChanged = dateStr !== toDateInputValue(m.date);
+             if (amountChanged || dateChanged) {
+               await updateDoc(doc(db, "transactions", m.linkedTransactionId), {
+                 ...(amountChanged ? { amountBRL } : {}),
+                 ...(dateChanged ? { date } : {}),
+               });
+             }
+           }
+
+           showToast("Movimentação atualizada.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao atualizar movimentação:", err?.code ?? err);
+           formError.textContent =
+             err?.code === "permission-denied"
+               ? "Sem permissão para gravar."
+               : "Não foi possível salvar. Tente novamente.";
+           submitBtn.disabled = false;
+           submitBtn.textContent = "Salvar alterações";
+         }
+       });
+     }
+
+     function openEditMovementSheet(m) {
+       Sheet.open({ title: "Editar movimentação", content: buildEditMovementFormHTML(m) });
+       wireEditMovementForm(m);
      }
 
      // =====================================================
@@ -7886,6 +8206,7 @@
     let settingsCache = {};
     let propertiesCache = [];
     let suppliersCache = [];
+    let confinementsCache = [];
     let movementsCache = [];
     let unsubAnimals = null;
     let unsubLots = null;
@@ -7894,6 +8215,7 @@
     let unsubSettings = null;
     let unsubProperties = null;
     let unsubSuppliers = null;
+    let unsubConfinements = null;
     let unsubMovements = null;
 
     // Indicadores needs all four caches to have resolved at least once before
@@ -8088,6 +8410,22 @@
           suppliersCache = [];
         }
       );
+
+      const confinementsQuery = query(
+        collection(db, "confinements"),
+        where("ownerId", "==", uid),
+        orderBy("nameLower")
+      );
+      unsubConfinements = onSnapshot(
+        confinementsQuery,
+        (snap) => {
+          confinementsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        },
+        (err) => {
+          console.warn("[Agro Connect] confinements onSnapshot error:", err?.code ?? err);
+          confinementsCache = [];
+        }
+      );
     }
 
     // One-time compat migration: users who set an area under the old
@@ -8120,6 +8458,7 @@
       unsubSettings?.();
       unsubProperties?.();
       unsubSuppliers?.();
+      unsubConfinements?.();
       unsubMovements?.();
       unsubAnimals = null;
       unsubLots = null;
@@ -8128,6 +8467,7 @@
       unsubSettings = null;
       unsubProperties = null;
       unsubSuppliers = null;
+      unsubConfinements = null;
       unsubMovements = null;
       currentUid = null;
       lotsCache = [];
@@ -8137,6 +8477,7 @@
       settingsCache = {};
       propertiesCache = [];
       suppliersCache = [];
+      confinementsCache = [];
       movementsCache = [];
       openLotDetailLotId = null;
       estoqueSelectedPropertyId = null;
