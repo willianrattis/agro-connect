@@ -514,6 +514,21 @@
     font-weight: 600;
   }
 
+  .confinement-strip {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--chip-engorda-bg);
+    color: var(--chip-engorda-text);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+    line-height: 1.4;
+  }
+  .confinement-strip svg { flex: none; margin-top: 1px; }
+  .confinement-strip strong { font-weight: 700; }
+
   .sale-result {
     margin-top: var(--space-3);
     padding-top: var(--space-3);
@@ -2429,33 +2444,6 @@
       return key && Object.prototype.hasOwnProperty.call(PASTURE_QUALITY, key) ? key : DEFAULT_PASTURE_QUALITY;
     }
 
-    // Projects a lot's weight/@ from acquisitionDate using the property's
-    // pasture-quality GMD (Embrapa averages), reduced for females (they gain
-    // slower than the male-referenced Embrapa figures) — read-time only,
-    // never persisted.
-    function lotWeightProjection(lot) {
-      if (!Number.isFinite(lot.avgWeightKg) || lot.avgWeightKg <= 0) return null;
-      const acquisitionDate = toDateSafe(lot.acquisitionDate);
-      if (!acquisitionDate) return null;
-
-      const days = Math.max(0, Math.floor((Date.now() - acquisitionDate.getTime()) / 86_400_000));
-      const qualityKey = resolveLotPastureQualityKey(lot);
-      const { label: qualityLabel, gmdKgPerDay: baseGmdKgPerDay } = PASTURE_QUALITY[qualityKey];
-
-      // Legacy lots predate the `sex` field, so fall back to the category
-      // taxonomy's sex, then default to male.
-      const sex = lot.sex ?? CATTLE_CATEGORIES[resolveCategoryKey(lot.entryCategory, null)]?.sex ?? "M";
-      const isFemale = sex === "F";
-      const gmdKgPerDay = isFemale ? baseGmdKgPerDay * FEMALE_GMD_FACTOR : baseGmdKgPerDay;
-
-      const gainKg = days * gmdKgPerDay;
-      const projectedWeightKg = lot.avgWeightKg + gainKg;
-      const yieldPct = Number.isFinite(lot.carcassYieldPct) ? lot.carcassYieldPct : CARCASS_YIELD;
-      const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
-
-      return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
-    }
-
     // A movement's effect on the lot's two balances (on-farm headcount vs.
     // confined headcount) — shared by the ledger replay and the submit-time
     // counter update, so the two can never drift apart.
@@ -2467,33 +2455,113 @@
       return { farmDelta: m.qty || 0, confinedDelta: 0 };
     }
 
-    // Feedlot day-counter + weight projection for a lot currently holding
-    // confined head: days since the OLDEST confinement_out movement (the
-    // lot may have been topped up more than once), weight based on the
-    // MOST RECENT confinement_out's shipping weight (falls back to
-    // lot.avgWeightKg) — read-time only, never persisted.
-    function lotConfinementInfo(lot) {
-      if (!((lot.confinedHeadcount ?? 0) > 0)) return null;
-      const outs = movementsCache
-        .filter((m) => m.lotId === lot.id && m.type === "confinement_out")
+    // Each location (farm pasture / feedlot) has its own weight-projection
+    // anchor: a base weight + base date the GMD is applied from. Leaving a
+    // location freezes that location's projection for the animals that left;
+    // entering the other re-anchors it. One anchor per location, most-recent
+    // movement wins — no per-batch cohort tracking.
+    //
+    // Confined anchor: the most recent confinement_out movement's shipping
+    // weight/date. That weight is user-editable (e.g. once the feedlot
+    // reports the post-transport arrival weight), so the projection
+    // automatically re-bases when it's updated.
+    //
+    // Farm anchor: the most recent confinement_return movement with a
+    // recorded weight; absent that (never confined, or still out), falls
+    // back to the lot's stored avgWeightKg/acquisitionDate — identical to
+    // this function's pre-confinement behavior.
+    function lotProjectionAnchors(lot) {
+      const movements = movementsCache.filter((m) => m.lotId === lot.id);
+
+      const outs = movements
+        .filter((m) => m.type === "confinement_out")
         .map((m) => ({ ...m, _date: toDateSafe(m.date) }))
-        .filter((m) => m._date);
-      if (!outs.length) return null;
-      const oldest = outs.reduce((a, b) => (a._date < b._date ? a : b));
-      const newest = outs.reduce((a, b) => (a._date > b._date ? a : b));
-      const days = Math.max(0, Math.floor((Date.now() - oldest._date.getTime()) / 86_400_000));
-      const baseWeightKg = Number.isFinite(newest.avgWeightKg) ? newest.avgWeightKg : lot.avgWeightKg;
-      const projectedWeightKg = Number.isFinite(baseWeightKg) ? baseWeightKg + days * CONFINEMENT_GMD_KG_PER_DAY : null;
-      return { name: newest.confinementName || "—", days, projectedWeightKg };
+        .filter((m) => m._date)
+        .sort((a, b) => b._date - a._date);
+      const latestOut = outs[0] ?? null;
+
+      const returns = movements
+        .filter((m) => m.type === "confinement_return" && Number.isFinite(m.avgWeightKg))
+        .map((m) => ({ ...m, _date: toDateSafe(m.date) }))
+        .filter((m) => m._date)
+        .sort((a, b) => b._date - a._date);
+      const latestReturn = returns[0] ?? null;
+
+      return {
+        confined: latestOut
+          ? {
+              baseWeightKg: Number.isFinite(latestOut.avgWeightKg) ? latestOut.avgWeightKg : lot.avgWeightKg,
+              baseDate: latestOut._date,
+              confinementName: latestOut.confinementName || "—",
+            }
+          : null,
+        farm: latestReturn
+          ? { baseWeightKg: latestReturn.avgWeightKg, baseDate: latestReturn._date }
+          : { baseWeightKg: lot.avgWeightKg, baseDate: toDateSafe(lot.acquisitionDate) },
+      };
     }
 
-    function confinementHintLabel(lot) {
-      const info = lotConfinementInfo(lot);
-      if (!info) return null;
-      const gmd = CONFINEMENT_GMD_KG_PER_DAY.toLocaleString("pt-BR", { minimumFractionDigits: 1 });
-      const parts = [`Confinamento: ${info.name}`, `${info.days.toLocaleString("pt-BR")} dias`, `+${gmd} kg/dia`];
-      if (info.projectedWeightKg != null) parts.push(`peso est. ${formatKg(info.projectedWeightKg)} kg`);
-      return parts.join(" · ");
+    // Projects a lot's on-farm weight/@ from its farm anchor using the
+    // property's pasture-quality GMD (Embrapa averages), reduced for females
+    // (they gain slower than the male-referenced Embrapa figures) —
+    // read-time only, never persisted.
+    function lotWeightProjection(lot) {
+      const { baseWeightKg, baseDate } = lotProjectionAnchors(lot).farm;
+      if (!Number.isFinite(baseWeightKg) || baseWeightKg <= 0) return null;
+      if (!baseDate) return null;
+
+      const days = Math.max(0, Math.floor((Date.now() - baseDate.getTime()) / 86_400_000));
+      const qualityKey = resolveLotPastureQualityKey(lot);
+      const { label: qualityLabel, gmdKgPerDay: baseGmdKgPerDay } = PASTURE_QUALITY[qualityKey];
+
+      // Legacy lots predate the `sex` field, so fall back to the category
+      // taxonomy's sex, then default to male.
+      const sex = lot.sex ?? CATTLE_CATEGORIES[resolveCategoryKey(lot.entryCategory, null)]?.sex ?? "M";
+      const isFemale = sex === "F";
+      const gmdKgPerDay = isFemale ? baseGmdKgPerDay * FEMALE_GMD_FACTOR : baseGmdKgPerDay;
+
+      const gainKg = days * gmdKgPerDay;
+      const projectedWeightKg = baseWeightKg + gainKg;
+      const yieldPct = Number.isFinite(lot.carcassYieldPct) ? lot.carcassYieldPct : CARCASS_YIELD;
+      const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
+
+      return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
+    }
+
+    // Feedlot day-counter + weight projection for a lot's confined head,
+    // from the confined anchor — read-time only, never persisted. Null when
+    // the lot holds no confined head, or none of its movements is a
+    // confinement_out (so there's no anchor to project from).
+    function lotConfinedProjection(lot) {
+      if (!((lot.confinedHeadcount ?? 0) > 0)) return null;
+      const { confined } = lotProjectionAnchors(lot);
+      if (!confined || !Number.isFinite(confined.baseWeightKg) || confined.baseWeightKg <= 0) return null;
+
+      const days = Math.max(0, Math.floor((Date.now() - confined.baseDate.getTime()) / 86_400_000));
+      const projectedWeightKg = confined.baseWeightKg + days * CONFINEMENT_GMD_KG_PER_DAY;
+      return { days, projectedWeightKg, confinementName: confined.confinementName };
+    }
+
+    // Tinted single-line strip summarizing a lot's confined head — shared by
+    // the lot card and the lot detail sheet. Returns "" when the lot holds
+    // no confined head.
+    function confinementStripHTML(lot) {
+      const confinedHeadcount = lot.confinedHeadcount ?? 0;
+      if (confinedHeadcount <= 0) return "";
+      const projection = lotConfinedProjection(lot);
+      const parts = [`<strong>${confinedHeadcount} no confinamento</strong>`];
+      if (projection) {
+        const gmd = CONFINEMENT_GMD_KG_PER_DAY.toLocaleString("pt-BR", { minimumFractionDigits: 1 });
+        parts.push(escapeHtml(projection.confinementName));
+        parts.push(`${projection.days.toLocaleString("pt-BR")} dias`);
+        parts.push(`peso est. ${formatKg(projection.projectedWeightKg)} kg (+${gmd} kg/dia)`);
+      }
+      return `
+        <div class="confinement-strip">
+          ${ICONS.transfer}
+          <span>${parts.join(" · ")}</span>
+        </div>
+      `;
     }
 
     // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
@@ -2712,17 +2780,31 @@
     // Herd summary strip (Cabeças no rebanho / Estoque estimado) is derived
     // from lot headcount, not tagged animals — aggregate lots have no animal
     // docs, and tagged animals are a non-additive subset of a lot's headcount.
+    // Owned totals include confined head (still the owner's patrimony, just
+    // not on the farm) via the confined projection, so fully-confined lots
+    // don't vanish from these totals.
     function renderHerdSummary() {
       let head = 0;
       let arrobas = 0;
       for (const l of lotsCache) {
-        head += l.headcount ?? 0;
+        const confinedHeadcount = l.confinedHeadcount ?? 0;
+        head += (l.headcount ?? 0) + confinedHeadcount;
+
         const projection = lotWeightProjection(l);
         if (projection) {
           arrobas += projection.projectedTotalArrobas;
         } else if (Number.isFinite(l.avgWeightKg)) {
           const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
           arrobas += (l.headcount ?? 0) * ((l.avgWeightKg * yieldPct) / KG_PER_ARROBA);
+        }
+
+        if (confinedHeadcount > 0) {
+          const confinedProjection = lotConfinedProjection(l);
+          const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
+          const confinedWeightKg = confinedProjection?.projectedWeightKg ?? l.avgWeightKg;
+          if (Number.isFinite(confinedWeightKg)) {
+            arrobas += confinedHeadcount * ((confinedWeightKg * yieldPct) / KG_PER_ARROBA);
+          }
         }
       }
       statHeadEl.textContent = String(head);
@@ -2814,15 +2896,26 @@
             const headcount = l.headcount ?? 0;
             const confinedHeadcount = l.confinedHeadcount ?? 0;
             const hasConfined = confinedHeadcount > 0;
+            const ownedHeadcount = headcount + confinedHeadcount;
             const yieldPct = Number.isFinite(l.carcassYieldPct) ? l.carcassYieldPct : CARCASS_YIELD;
-            const totalArrobasEst = Number.isFinite(l.avgWeightKg)
-              ? headcount * ((l.avgWeightKg * yieldPct) / KG_PER_ARROBA)
-              : null;
+
+            // Economics row is computed over OWNED head (farm + confined),
+            // each side valued at its own location's projected weight, so a
+            // fully-confined lot doesn't read as worthless patrimony.
+            const farmProjection = lotWeightProjection(l);
+            const confinedProjection = lotConfinedProjection(l);
+            const farmArrobas = farmProjection && headcount > 0
+              ? headcount * ((farmProjection.projectedWeightKg * yieldPct) / KG_PER_ARROBA)
+              : 0;
+            const confinedArrobas = confinedProjection
+              ? confinedHeadcount * ((confinedProjection.projectedWeightKg * yieldPct) / KG_PER_ARROBA)
+              : 0;
+            const hasArrobaData = (farmProjection && headcount > 0) || confinedProjection;
+            const totalArrobasEst = hasArrobaData ? farmArrobas + confinedArrobas : null;
             const costPerArroba = totalArrobasEst
               ? (l.totalPurchaseCostBRL ?? 0) / totalArrobasEst
               : null;
             const property = l.propertyId ? propertiesCache.find((p) => p.id === l.propertyId) : null;
-            const confinementHint = hasConfined ? confinementHintLabel(l) : null;
             return `
               <li class="card enter pressable" style="--i: ${i}" data-lot-id="${escapeHtml(l.id)}" tabindex="0" role="button" aria-label="Ver detalhes do lote ${escapeHtml(l.name)}">
                 <div class="card-top">
@@ -2833,23 +2926,17 @@
                   </div>
                 </div>
                 ${property ? `<p class="field-hint">${escapeHtml(property.name)}</p>` : ""}
-                <div class="card-stats" style="grid-template-columns: repeat(${hasConfined ? 3 : 2}, 1fr);">
+                <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
-                    <p class="mini-value">${headcount}</p>
-                    <p class="mini-label">Cabeças</p>
+                    <p class="mini-value">${ownedHeadcount}</p>
+                    <p class="mini-label">${hasConfined ? `Cabeças · ${headcount} na fazenda` : "Cabeças"}</p>
                   </div>
-                  ${hasConfined ? `
-                  <div class="mini-stat">
-                    <p class="mini-value">${confinedHeadcount}</p>
-                    <p class="mini-label">No confinamento</p>
-                  </div>
-                  ` : ""}
                   <div class="mini-stat">
                     <p class="mini-value">${l.avgWeightKg != null ? `${formatKg(l.avgWeightKg)} kg` : "—"}</p>
                     <p class="mini-label">Peso médio</p>
                   </div>
                 </div>
-                ${confinementHint ? `<p class="field-hint">${escapeHtml(confinementHint)}</p>` : ""}
+                ${confinementStripHTML(l)}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
                     <p class="mini-value">${totalArrobasEst != null ? `${formatArrobas(totalArrobasEst)} @` : "—"}</p>
@@ -2861,21 +2948,23 @@
                   </div>
                 </div>
                 ${(() => {
-                  const p = lotWeightProjection(l);
-                  if (!p) return "";
+                  if (headcount <= 0 || !farmProjection) return "";
+                  const p = farmProjection;
                   const femaleSuffix = p.isFemale
                     ? ` (fêmea −${formatPercentTrim((1 - FEMALE_GMD_FACTOR) * 100)}%)`
                     : "";
-                  const hint = `Projeção: pastagem ${p.qualityLabel.toLowerCase()} · ${Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia${femaleSuffix} · ${p.days.toLocaleString("pt-BR")} dias`;
+                  const headSuffix = hasConfined ? ` · ${headcount} cab.` : "";
+                  const labelSuffix = hasConfined ? " (fazenda)" : "";
+                  const hint = `Projeção: pastagem ${p.qualityLabel.toLowerCase()} · ${Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia${femaleSuffix} · ${p.days.toLocaleString("pt-BR")} dias${headSuffix}`;
                   return `
                     <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                       <div class="mini-stat">
                         <p class="mini-value">${formatKg(p.projectedWeightKg)} kg</p>
-                        <p class="mini-label">Peso estimado hoje</p>
+                        <p class="mini-label">Peso estimado hoje${labelSuffix}</p>
                       </div>
                       <div class="mini-stat">
                         <p class="mini-value">${formatArrobas(p.projectedTotalArrobas)} @</p>
-                        <p class="mini-label">@ estimada hoje</p>
+                        <p class="mini-label">@ estimada hoje${labelSuffix}</p>
                       </div>
                     </div>
                     <p class="field-hint">${escapeHtml(hint)}</p>
@@ -5879,25 +5968,19 @@
        const headcount = lot.headcount ?? 0;
        const confinedHeadcount = lot.confinedHeadcount ?? 0;
        const hasConfined = confinedHeadcount > 0;
-       const confinementHint = hasConfined ? confinementHintLabel(lot) : null;
+       const ownedHeadcount = headcount + confinedHeadcount;
        return `
-         <div class="card-stats" style="grid-template-columns: repeat(${hasConfined ? 3 : 2}, 1fr); border-top: none; padding-top: 0;">
+         <div class="card-stats" style="grid-template-columns: repeat(2, 1fr); border-top: none; padding-top: 0;">
            <div class="mini-stat">
-             <p class="mini-value">${headcount}</p>
-             <p class="mini-label">Cabeças atuais</p>
+             <p class="mini-value">${ownedHeadcount}</p>
+             <p class="mini-label">${hasConfined ? `Cabeças atuais · ${headcount} na fazenda` : "Cabeças atuais"}</p>
            </div>
-           ${hasConfined ? `
-           <div class="mini-stat">
-             <p class="mini-value">${confinedHeadcount}</p>
-             <p class="mini-label">No confinamento</p>
-           </div>
-           ` : ""}
            <div class="mini-stat">
              <p class="mini-value">${lot.avgWeightKg != null ? `${formatKg(lot.avgWeightKg)} kg` : "—"}</p>
              <p class="mini-label">Peso médio</p>
            </div>
          </div>
-         ${confinementHint ? `<p class="field-hint">${escapeHtml(confinementHint)}</p>` : ""}
+         ${confinementStripHTML(lot)}
 
          <div class="detail-section">
            <p class="detail-section-title">Movimentações</p>
@@ -8005,13 +8088,17 @@
      }));
 
      // { buckets: { [CATTLE_CATEGORIES key or "sem_categoria"]: headcount }, total }
-     function computeInventoryBuckets(lots) {
+     // includeConfined: per-property stock is physical/farm-only by
+     // definition (like lotação), so it stays headcount-only; the
+     // consolidated (all-properties) view opts in so a fully-confined lot
+     // doesn't vanish from the owner's total inventory.
+     function computeInventoryBuckets(lots, { includeConfined = false } = {}) {
        const buckets = {};
        for (const key of Object.keys(CATTLE_CATEGORIES)) buckets[key] = 0;
        buckets.sem_categoria = 0;
        let total = 0;
        for (const lot of lots) {
-         const headcount = lot.headcount ?? 0;
+         const headcount = (lot.headcount ?? 0) + (includeConfined ? (lot.confinedHeadcount ?? 0) : 0);
          const key = displayCategoryKeyForLot(lot) || "sem_categoria";
          buckets[key] = (buckets[key] || 0) + headcount;
          total += headcount;
@@ -8077,7 +8164,7 @@
          : "Sem propriedade";
        const propertyLots = lotsCache.filter((l) => (l.propertyId || "") === estoqueSelectedPropertyId);
        const perProperty = computeInventoryBuckets(propertyLots);
-       const consolidated = computeInventoryBuckets(lotsCache);
+       const consolidated = computeInventoryBuckets(lotsCache, { includeConfined: true });
 
        estoqueRootEl.innerHTML = [
          kpiSectionHTML(`Estoque — ${propertyName}`, `${propertyLots.length} lote(s) ativo(s)`, inventoryCardsHTML(perProperty.buckets, perProperty.total)),
