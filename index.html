@@ -1972,6 +1972,16 @@
     const CARCASS_YIELD = 0.5;   // live → carcass approximation for the @ estimate
     const KG_PER_ARROBA = 15;
 
+    // Embrapa annual average daily gain for pasture-only systems (mineral
+    // salt only) — already nets out dry-season losses.
+    const PASTURE_QUALITY = {
+      degradada: { label: "Degradada", gmdKgPerDay: 0.205 },
+      fraca:     { label: "Fraca",     gmdKgPerDay: 0.288 },
+      regular:   { label: "Regular",   gmdKgPerDay: 0.383 },
+      boa:       { label: "Boa",       gmdKgPerDay: 0.480 },
+    };
+    const DEFAULT_PASTURE_QUALITY = "regular";
+
     // Single source of truth for cattle category taxonomy (key → label/sex).
     // Order matters: it drives select option order everywhere it's rendered.
     const CATTLE_CATEGORIES = {
@@ -2400,6 +2410,33 @@
       return d ? `${duration} (desde ${d.toLocaleDateString("pt-BR")})` : duration;
     }
 
+    // Resolves a lot's pasture quality key, falling back to the default
+    // when the lot has no property, the property is missing from cache,
+    // or its pastureQuality value isn't a known PASTURE_QUALITY key.
+    function resolveLotPastureQualityKey(lot) {
+      const property = lot?.propertyId ? propertiesCache.find((p) => p.id === lot.propertyId) : null;
+      const key = property?.pastureQuality;
+      return key && Object.prototype.hasOwnProperty.call(PASTURE_QUALITY, key) ? key : DEFAULT_PASTURE_QUALITY;
+    }
+
+    // Projects a lot's weight/@ from acquisitionDate using the property's
+    // pasture-quality GMD (Embrapa averages) — read-time only, never persisted.
+    function lotWeightProjection(lot) {
+      if (!Number.isFinite(lot.avgWeightKg) || lot.avgWeightKg <= 0) return null;
+      const acquisitionDate = toDateSafe(lot.acquisitionDate);
+      if (!acquisitionDate) return null;
+
+      const days = Math.max(0, Math.floor((Date.now() - acquisitionDate.getTime()) / 86_400_000));
+      const qualityKey = resolveLotPastureQualityKey(lot);
+      const { label: qualityLabel, gmdKgPerDay } = PASTURE_QUALITY[qualityKey];
+      const gainKg = days * gmdKgPerDay;
+      const projectedWeightKg = lot.avgWeightKg + gainKg;
+      const yieldPct = Number.isFinite(lot.carcassYieldPct) ? lot.carcassYieldPct : CARCASS_YIELD;
+      const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
+
+      return { days, qualityKey, qualityLabel, gmdKgPerDay, projectedWeightKg, gainKg, projectedTotalArrobas };
+    }
+
     // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
     function formatCurrencyInput(input) {
       const digits = input.value.replace(/\D/g, "");
@@ -2738,6 +2775,23 @@
                     <p class="mini-label">Custo médio/@</p>
                   </div>
                 </div>
+                ${(() => {
+                  const p = lotWeightProjection(l);
+                  if (!p) return "";
+                  return `
+                    <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+                      <div class="mini-stat">
+                        <p class="mini-value">${formatKg(p.projectedWeightKg)} kg</p>
+                        <p class="mini-label">Peso estimado hoje</p>
+                      </div>
+                      <div class="mini-stat">
+                        <p class="mini-value">${formatArrobas(p.projectedTotalArrobas)} @</p>
+                        <p class="mini-label">@ estimada hoje</p>
+                      </div>
+                    </div>
+                    <p class="field-hint">Projeção: pastagem ${escapeHtml(p.qualityLabel.toLowerCase())} · ${escapeHtml(Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR"))} g/dia · ${escapeHtml(p.days.toLocaleString("pt-BR"))} dias</p>
+                  `;
+                })()}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
                     <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l))}</p>
@@ -6376,6 +6430,10 @@
        const cards = propertiesCache
          .map((p, i) => {
            const lotCount = lotsCache.filter((l) => l.propertyId === p.id).length;
+           const pastureKey = p.pastureQuality && Object.prototype.hasOwnProperty.call(PASTURE_QUALITY, p.pastureQuality)
+             ? p.pastureQuality
+             : DEFAULT_PASTURE_QUALITY;
+           const pastureQ = PASTURE_QUALITY[pastureKey];
            return `
              <li class="card enter" style="--i: ${i}">
                <div class="card-top">
@@ -6394,6 +6452,7 @@
                    <p class="mini-label">${lotCount === 1 ? "Lote vinculado" : "Lotes vinculados"}</p>
                  </div>
                </div>
+               <p class="field-hint">Pastagem: ${escapeHtml(pastureQ.label)} · ${escapeHtml(Math.round(pastureQ.gmdKgPerDay * 1000).toLocaleString("pt-BR"))} g/dia</p>
              </li>
            `;
          })
@@ -6449,6 +6508,15 @@
 
      // --- Nova / editar propriedade (shared form; addDoc vs. updateDoc) ---
      function buildPropertyFormHTML(property) {
+       const pastureKey = property?.pastureQuality && Object.prototype.hasOwnProperty.call(PASTURE_QUALITY, property.pastureQuality)
+         ? property.pastureQuality
+         : DEFAULT_PASTURE_QUALITY;
+       const pastureOptionsHTML = Object.entries(PASTURE_QUALITY)
+         .map(([key, q]) => `
+             <input type="radio" id="property-pasture-${key}" name="property-pasture" value="${key}" ${key === pastureKey ? "checked" : ""} />
+             <label for="property-pasture-${key}">${escapeHtml(q.label)}</label>
+           `)
+         .join("");
        return `
          <form id="property-form" class="form-grid" novalidate>
            <div class="field">
@@ -6459,6 +6527,13 @@
            <div class="field">
              <label class="field-label" for="property-area">Área (ha)</label>
              <input class="input" id="property-area" type="number" min="0" step="0.01" placeholder="Opcional" value="${property?.areaHa ?? ""}" />
+           </div>
+           <div class="field">
+             <span class="field-label">Qualidade da pastagem</span>
+             <div class="segmented" role="radiogroup" aria-label="Qualidade da pastagem">
+               ${pastureOptionsHTML}
+             </div>
+             <p class="field-hint" id="property-pasture-hint">Ganho médio estimado: ${escapeHtml(Math.round(PASTURE_QUALITY[pastureKey].gmdKgPerDay * 1000).toLocaleString("pt-BR"))} g/dia</p>
            </div>
            <div class="field">
              <label class="field-label" for="property-notes">Observações</label>
@@ -6473,6 +6548,15 @@
      function wirePropertyForm(property) {
        const form = document.getElementById("property-form");
        const submitBtn = document.getElementById("property-submit");
+       const pastureHint = document.getElementById("property-pasture-hint");
+
+       form.querySelectorAll('input[name="property-pasture"]').forEach((radio) => {
+         radio.addEventListener("change", () => {
+           if (!radio.checked) return;
+           const q = PASTURE_QUALITY[radio.value];
+           if (q) pastureHint.textContent = `Ganho médio estimado: ${Math.round(q.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia`;
+         });
+       });
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
@@ -6491,6 +6575,11 @@
 
          const notes = document.getElementById("property-notes").value.trim() || null;
 
+         const pastureRaw = form.querySelector('input[name="property-pasture"]:checked')?.value;
+         const pastureQuality = pastureRaw && Object.prototype.hasOwnProperty.call(PASTURE_QUALITY, pastureRaw)
+           ? pastureRaw
+           : DEFAULT_PASTURE_QUALITY;
+
          if (!valid) return;
 
          submitBtn.disabled = true;
@@ -6499,7 +6588,7 @@
          try {
            if (property) {
              // Editar: updateDoc on the existing document — never recreate.
-             await updateDoc(doc(db, "properties", property.id), { name, areaHa, notes, updatedAt: serverTimestamp() });
+             await updateDoc(doc(db, "properties", property.id), { name, areaHa, notes, pastureQuality, updatedAt: serverTimestamp() });
              showToast("Propriedade atualizada.");
            } else {
              await addDoc(collection(db, "properties"), {
@@ -6507,6 +6596,7 @@
                name,
                areaHa,
                notes,
+               pastureQuality,
                createdAt: serverTimestamp(),
                updatedAt: serverTimestamp(),
              });
