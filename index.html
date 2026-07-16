@@ -1883,6 +1883,14 @@
               <p class="mini-value" id="properties-area-value">—</p>
               <p class="mini-label">Área total (ha)</p>
             </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="properties-price-value">—</p>
+              <p class="mini-label">Preço @ médio</p>
+            </div>
+            <div class="mini-stat">
+              <p class="mini-value" id="properties-capital-value">—</p>
+              <p class="mini-label">Capital total</p>
+            </div>
           </div>
           <div class="detail-section">
             <button type="button" class="btn-secondary pressable" id="properties-manage-btn">Gerenciar propriedades</button>
@@ -1905,49 +1913,6 @@
           </div>
           <div class="detail-section">
             <button type="button" class="btn-secondary pressable" id="suppliers-manage-btn">Gerenciar produtores</button>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top: var(--space-4);">
-          <div class="card-top">
-            <span class="ear-tag" style="font-size: var(--fs-base);">Configurações da propriedade</span>
-            <button type="button" class="card-menu-btn pressable" id="settings-edit-btn" aria-label="Editar configurações">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            </button>
-          </div>
-          <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
-            <div class="mini-stat">
-              <p class="mini-value" id="settings-area-value">—</p>
-              <p class="mini-label">Área (ha)</p>
-            </div>
-            <div class="mini-stat">
-              <p class="mini-value" id="settings-price-value">—</p>
-              <p class="mini-label">Preço padrão da @</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top: var(--space-4);">
-          <div class="card-top">
-            <span class="ear-tag" style="font-size: var(--fs-base);">Parâmetros financeiros</span>
-            <button type="button" class="card-menu-btn pressable" id="settings-edit-btn-2" aria-label="Editar configurações">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-            </button>
-          </div>
-          <p class="field-hint" style="margin-bottom: var(--space-3);">Usados nos indicadores de COT, margem líquida e ROI (aba Indicadores).</p>
-          <div class="card-stats" style="grid-template-columns: repeat(3, 1fr); border-top: none; padding-top: 0;">
-            <div class="mini-stat">
-              <p class="mini-value" id="settings-depreciation-value">—</p>
-              <p class="mini-label">Depreciação/mês</p>
-            </div>
-            <div class="mini-stat">
-              <p class="mini-value" id="settings-prolabore-value">—</p>
-              <p class="mini-label">Pró-labore/mês</p>
-            </div>
-            <div class="mini-stat">
-              <p class="mini-value" id="settings-capital-value">—</p>
-              <p class="mini-label">Capital investido</p>
-            </div>
           </div>
         </div>
 
@@ -2441,13 +2406,6 @@
     const finCountEl = document.getElementById("fin-count");
     const txListEl = document.getElementById("tx-list");
 
-    const settingsAreaValueEl = document.getElementById("settings-area-value");
-    const settingsPriceValueEl = document.getElementById("settings-price-value");
-    const settingsDepreciationValueEl = document.getElementById("settings-depreciation-value");
-    const settingsProlaboreValueEl = document.getElementById("settings-prolabore-value");
-    const settingsCapitalValueEl = document.getElementById("settings-capital-value");
-    const settingsEditBtn = document.getElementById("settings-edit-btn");
-    const settingsEditBtn2 = document.getElementById("settings-edit-btn-2");
     const settingsTargetValueEl = document.getElementById("settings-target-value");
     const settingsFarmYieldValueEl = document.getElementById("settings-farmyield-value");
     const settingsConfYieldValueEl = document.getElementById("settings-confyield-value");
@@ -2455,6 +2413,8 @@
 
     const propertiesCountValueEl = document.getElementById("properties-count-value");
     const propertiesAreaValueEl = document.getElementById("properties-area-value");
+    const propertiesPriceValueEl = document.getElementById("properties-price-value");
+    const propertiesCapitalValueEl = document.getElementById("properties-capital-value");
     const propertiesManageBtn = document.getElementById("properties-manage-btn");
 
     const suppliersCountValueEl = document.getElementById("suppliers-count-value");
@@ -4897,21 +4857,9 @@
      });
 
      // =====================================================
-     // 7d. Perfil — settings sheet (propertyAreaHa, defaultArrobaPriceBRL)
+     // 7d. Perfil — metas e aproveitamento (slaughter config)
      // =====================================================
      function renderSettingsCard() {
-       const area = settingsCache.propertyAreaHa;
-       settingsAreaValueEl.textContent = area != null ? `${area.toLocaleString("pt-BR")} ha` : "—";
-
-       const priceAgg = avgPropertyField("defaultArrobaPriceBRL") ?? settingsCache.defaultArrobaPriceBRL;
-       const depAgg = totalMonthlyDepreciationBRL();
-       const proAgg = totalMonthlyProLaboreBRL();
-       const capAgg = totalPropertyCapitalBRL();
-       settingsPriceValueEl.textContent = priceAgg != null ? formatBRL(priceAgg) : "—";
-       settingsDepreciationValueEl.textContent = depAgg != null ? formatBRL(depAgg) : "—";
-       settingsProlaboreValueEl.textContent = proAgg != null ? formatBRL(proAgg) : "—";
-       settingsCapitalValueEl.textContent = capAgg != null ? formatBRL(capAgg) : "—";
-
        const slaughterCfg = getSlaughterConfig();
        settingsTargetValueEl.textContent = `${formatArrobas(slaughterCfg.targetArrobasPerHead)} @`;
        settingsFarmYieldValueEl.textContent = `${formatPercentTrim(slaughterCfg.defaultFarmYieldPct * 100)}%`;
@@ -4991,7 +4939,7 @@
        }
      }
 
-     function wireSettingsForm() {
+     function wireSettingsForm(propertyId) {
        const createBtn = document.getElementById("settings-create-property-btn");
        if (createBtn) {
          createBtn.addEventListener("click", openNewPropertySheet);
@@ -5008,6 +4956,10 @@
          const el = document.getElementById(id);
          el.addEventListener("input", () => formatCurrencyInput(el));
        });
+
+       if (propertyId && propertiesCache.some((p) => p.id === propertyId)) {
+         propertySelect.value = propertyId;
+       }
 
        propertySelect.addEventListener("change", () => loadPropertyValues(propertySelect.value));
        loadPropertyValues(propertySelect.value);
@@ -5063,13 +5015,10 @@
        });
      }
 
-     function openSettingsSheet() {
+     function openSettingsSheet(propertyId) {
        Sheet.open({ title: "Configurações da propriedade", content: buildSettingsFormHTML() });
-       wireSettingsForm();
+       wireSettingsForm(propertyId);
      }
-
-     settingsEditBtn.addEventListener("click", openSettingsSheet);
-     settingsEditBtn2.addEventListener("click", openSettingsSheet);
 
      // --- Metas e aproveitamento (targetArrobasPerHead, defaultFarmYieldPct,
      //     defaultConfinementYieldPct) — feeds getSlaughterConfig() and the
@@ -7204,8 +7153,14 @@
      // =====================================================
      function renderPropertiesCard() {
        propertiesCountValueEl.textContent = String(propertiesCache.length);
-       const totalArea = propertiesCache.reduce((s, p) => s + (Number.isFinite(p.areaHa) ? p.areaHa : 0), 0);
-       propertiesAreaValueEl.textContent = totalArea > 0 ? `${totalArea.toLocaleString("pt-BR")} ha` : "—";
+       const totalArea = sumPropertyField("areaHa");
+       propertiesAreaValueEl.textContent = Number.isFinite(totalArea) && totalArea > 0
+         ? `${totalArea.toLocaleString("pt-BR")} ha`
+         : "—";
+       const avgPrice = avgPropertyField("defaultArrobaPriceBRL");
+       propertiesPriceValueEl.textContent = Number.isFinite(avgPrice) ? formatBRL(avgPrice) : "—";
+       const totalCapital = sumPropertyField("investedCapitalBRL");
+       propertiesCapitalValueEl.textContent = Number.isFinite(totalCapital) ? formatBRL(totalCapital) : "—";
      }
 
      function buildPropertiesListHTML() {
@@ -7251,6 +7206,24 @@
                    <p class="mini-label">${lotCount === 1 ? "Lote vinculado" : "Lotes vinculados"}</p>
                  </div>
                </div>
+               <div class="card-stats" style="grid-template-columns: repeat(2, 1fr); border-top: none; padding-top: 0;">
+                 <div class="mini-stat">
+                   <p class="mini-value">${Number.isFinite(p.defaultArrobaPriceBRL) ? formatBRL(p.defaultArrobaPriceBRL) : "—"}</p>
+                   <p class="mini-label">Preço @</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${Number.isFinite(p.monthlyDepreciationBRL) ? formatBRL(p.monthlyDepreciationBRL) : "—"}</p>
+                   <p class="mini-label">Depreciação/mês</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${Number.isFinite(p.monthlyProLaboreBRL) ? formatBRL(p.monthlyProLaboreBRL) : "—"}</p>
+                   <p class="mini-label">Pró-labore/mês</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${Number.isFinite(p.investedCapitalBRL) ? formatBRL(p.investedCapitalBRL) : "—"}</p>
+                   <p class="mini-label">Capital investido</p>
+                 </div>
+               </div>
                <p class="field-hint">Pastagem: ${escapeHtml(pastureQ.label)} · ${escapeHtml(Math.round(pastureQ.gmdKgPerDay * 1000).toLocaleString("pt-BR"))} g/dia</p>
              </li>
            `;
@@ -7286,6 +7259,10 @@
              <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
              Editar
            </button>
+           <button type="button" class="action-item pressable" data-menu-action="econ">
+             <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
+             Configurar economia
+           </button>
            <button type="button" class="action-item danger pressable" data-menu-action="delete">
              <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
              Excluir
@@ -7299,6 +7276,7 @@
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
            if (btn.dataset.menuAction === "edit") openEditPropertySheet(property);
+           else if (btn.dataset.menuAction === "econ") openSettingsSheet(property.id);
            else if (btn.dataset.menuAction === "delete") openDeletePropertySheet(property);
            else Sheet.close();
          });
@@ -9137,15 +9115,12 @@
       finSaldoEl.classList.remove("fin-positive", "fin-negative");
       finCountEl.textContent = "";
       txListEl.innerHTML = "";
-      settingsAreaValueEl.textContent = "—";
-      settingsPriceValueEl.textContent = "—";
-      settingsDepreciationValueEl.textContent = "—";
-      settingsProlaboreValueEl.textContent = "—";
       propertiesCountValueEl.textContent = "—";
       propertiesAreaValueEl.textContent = "—";
+      propertiesPriceValueEl.textContent = "—";
+      propertiesCapitalValueEl.textContent = "—";
       suppliersCountValueEl.textContent = "—";
       suppliersWithDocValueEl.textContent = "—";
-      settingsCapitalValueEl.textContent = "—";
       settingsTargetValueEl.textContent = "—";
       settingsFarmYieldValueEl.textContent = "—";
       settingsConfYieldValueEl.textContent = "—";
