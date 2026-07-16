@@ -917,6 +917,9 @@
    dialog.sheet.is-open::backdrop {
      opacity: 1;
    }
+   dialog.sheet:not([open]) {
+     display: none;
+   }
 
    /* Drag handle (mobile only) */
    .sheet-drag-region {
