@@ -4896,12 +4896,24 @@
      // =====================================================
      function renderSettingsCard() {
        const area = settingsCache.propertyAreaHa;
-       const price = settingsCache.defaultArrobaPriceBRL;
        settingsAreaValueEl.textContent = area != null ? `${area.toLocaleString("pt-BR")} ha` : "—";
-       settingsPriceValueEl.textContent = price != null ? formatBRL(price) : "—";
-       settingsDepreciationValueEl.textContent = settingsCache.monthlyDepreciationBRL != null ? formatBRL(settingsCache.monthlyDepreciationBRL) : "—";
-       settingsProlaboreValueEl.textContent = settingsCache.monthlyProLaboreBRL != null ? formatBRL(settingsCache.monthlyProLaboreBRL) : "—";
-       settingsCapitalValueEl.textContent = settingsCache.investedCapitalBRL != null ? formatBRL(settingsCache.investedCapitalBRL) : "—";
+
+       function sumPropField(field) {
+         const values = propertiesCache.map((p) => p[field]).filter((v) => Number.isFinite(v));
+         return values.length ? values.reduce((s, v) => s + v, 0) : null;
+       }
+       function avgPropField(field) {
+         const values = propertiesCache.map((p) => p[field]).filter((v) => Number.isFinite(v));
+         return values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
+       }
+       const priceAgg = avgPropField("defaultArrobaPriceBRL") ?? settingsCache.defaultArrobaPriceBRL;
+       const depAgg = sumPropField("monthlyDepreciationBRL") ?? settingsCache.monthlyDepreciationBRL;
+       const proAgg = sumPropField("monthlyProLaboreBRL") ?? settingsCache.monthlyProLaboreBRL;
+       const capAgg = sumPropField("investedCapitalBRL") ?? settingsCache.investedCapitalBRL;
+       settingsPriceValueEl.textContent = priceAgg != null ? formatBRL(priceAgg) : "—";
+       settingsDepreciationValueEl.textContent = depAgg != null ? formatBRL(depAgg) : "—";
+       settingsProlaboreValueEl.textContent = proAgg != null ? formatBRL(proAgg) : "—";
+       settingsCapitalValueEl.textContent = capAgg != null ? formatBRL(capAgg) : "—";
 
        const slaughterCfg = getSlaughterConfig();
        settingsTargetValueEl.textContent = `${formatArrobas(slaughterCfg.targetArrobasPerHead)} @`;
@@ -4910,32 +4922,54 @@
      }
 
      function buildSettingsFormHTML() {
+       if (propertiesCache.length === 0) {
+         return `
+           <div class="form-grid">
+             <div class="empty-state">
+               <span class="icon" aria-hidden="true">
+                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+               </span>
+               <h3>Nenhuma propriedade cadastrada</h3>
+               <p>Cadastre uma propriedade para configurar os valores econômicos.</p>
+             </div>
+             <button type="button" class="btn-primary pressable" id="settings-create-property-btn">Nova propriedade</button>
+           </div>
+         `;
+       }
+
+       const propertyOptionsHTML = propertiesCache
+         .slice()
+         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+         .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`)
+         .join("");
+
        return `
          <form id="settings-form" class="form-grid" novalidate>
-           <div class="field field--half">
-             <label class="field-label" for="settings-area">Área da propriedade (ha)</label>
-             <input class="input" id="settings-area" type="number" min="0" step="0.01" placeholder="Ex: 120" value="${settingsCache.propertyAreaHa ?? ""}" />
-             <p class="field-error" id="settings-area-error"></p>
+           <div class="field">
+             <label class="field-label" for="settings-property">Propriedade</label>
+             <select class="select" id="settings-property">
+               ${propertyOptionsHTML}
+             </select>
            </div>
            <div class="field field--half">
              <label class="field-label" for="settings-price">Preço padrão da @ (R$)</label>
-             <input class="input" id="settings-price" type="number" min="0" step="0.01" placeholder="Ex: 350" value="${settingsCache.defaultArrobaPriceBRL ?? ""}" />
+             <input class="input" id="settings-price" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="" />
              <p class="field-error" id="settings-price-error"></p>
            </div>
            <div class="field">
              <label class="field-label" for="settings-depreciation">Depreciação mensal (R$)</label>
-             <input class="input" id="settings-depreciation" type="number" min="0" step="0.01" placeholder="Ex: 800" value="${settingsCache.monthlyDepreciationBRL ?? ""}" />
+             <input class="input" id="settings-depreciation" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="" />
              <p class="field-hint">Custo não-efetivo mensal (máquinas, benfeitorias) — alimenta o COT/@ e a margem líquida.</p>
              <p class="field-error" id="settings-depreciation-error"></p>
            </div>
            <div class="field field--half">
              <label class="field-label" for="settings-prolabore">Pró-labore mensal (R$)</label>
-             <input class="input" id="settings-prolabore" type="number" min="0" step="0.01" placeholder="Ex: 3000" value="${settingsCache.monthlyProLaboreBRL ?? ""}" />
+             <input class="input" id="settings-prolabore" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="" />
              <p class="field-error" id="settings-prolabore-error"></p>
            </div>
            <div class="field field--half">
              <label class="field-label" for="settings-capital">Capital investido (R$)</label>
-             <input class="input" id="settings-capital" type="number" min="0" step="0.01" placeholder="Ex: 500000" value="${settingsCache.investedCapitalBRL ?? ""}" />
+             <input class="input" id="settings-capital" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="" />
              <p class="field-hint">Usado para calcular o ROI %.</p>
              <p class="field-error" id="settings-capital-error"></p>
            </div>
@@ -4945,11 +4979,41 @@
        `;
      }
 
+     function loadPropertyValues(propId) {
+       const prop = propertiesCache.find((p) => p.id === propId);
+       const fields = [
+         ["settings-price", "defaultArrobaPriceBRL"],
+         ["settings-depreciation", "monthlyDepreciationBRL"],
+         ["settings-prolabore", "monthlyProLaboreBRL"],
+         ["settings-capital", "investedCapitalBRL"],
+       ];
+       for (const [id, field] of fields) {
+         const el = document.getElementById(id);
+         const v = prop?.[field];
+         el.value = Number.isFinite(v) ? formatBRL(v) : "";
+       }
+     }
+
      function wireSettingsForm() {
+       const createBtn = document.getElementById("settings-create-property-btn");
+       if (createBtn) {
+         createBtn.addEventListener("click", openNewPropertySheet);
+         return;
+       }
+
        const form = document.getElementById("settings-form");
        const submitBtn = document.getElementById("settings-submit");
        const formError = document.getElementById("settings-form-error");
-       const numericFieldIds = ["settings-area", "settings-price", "settings-depreciation", "settings-prolabore", "settings-capital"];
+       const numericFieldIds = ["settings-price", "settings-depreciation", "settings-prolabore", "settings-capital"];
+       const propertySelect = document.getElementById("settings-property");
+
+       ["settings-price", "settings-depreciation", "settings-prolabore", "settings-capital"].forEach((id) => {
+         const el = document.getElementById(id);
+         el.addEventListener("input", () => formatCurrencyInput(el));
+       });
+
+       propertySelect.addEventListener("change", () => loadPropertyValues(propertySelect.value));
+       loadPropertyValues(propertySelect.value);
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
@@ -4961,19 +5025,19 @@
          let valid = true;
          const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
 
-         function readOptionalNumber(id, label) {
+         function readOptionalBRL(id, label) {
            const raw = document.getElementById(id).value;
            if (!raw) return null;
-           const n = parseFloat(raw);
+           const n = parseBRLToNumber(raw);
            if (!Number.isFinite(n) || n < 0) { fail(id, `Informe ${label} válido(a).`); return null; }
            return n;
          }
 
-         const area = readOptionalNumber("settings-area", "uma área");
-         const price = readOptionalNumber("settings-price", "um preço");
-         const monthlyDepreciationBRL = readOptionalNumber("settings-depreciation", "um valor");
-         const monthlyProLaboreBRL = readOptionalNumber("settings-prolabore", "um valor");
-         const investedCapitalBRL = readOptionalNumber("settings-capital", "um valor");
+         const propId = propertySelect.value;
+         const defaultArrobaPriceBRL = readOptionalBRL("settings-price", "um preço");
+         const monthlyDepreciationBRL = readOptionalBRL("settings-depreciation", "um valor");
+         const monthlyProLaboreBRL = readOptionalBRL("settings-prolabore", "um valor");
+         const investedCapitalBRL = readOptionalBRL("settings-capital", "um valor");
 
          if (!valid) return;
 
@@ -4981,20 +5045,14 @@
          submitBtn.textContent = "Salvando…";
 
          try {
-           await setDoc(
-             doc(db, "settings", currentUid),
-             {
-               ownerId: currentUid,
-               propertyAreaHa: area,
-               defaultArrobaPriceBRL: price,
-               monthlyDepreciationBRL,
-               monthlyProLaboreBRL,
-               investedCapitalBRL,
-               updatedAt: serverTimestamp(),
-             },
-             { merge: true }
-           );
-           showToast("Configurações salvas.");
+           await updateDoc(doc(db, "properties", propId), {
+             defaultArrobaPriceBRL,
+             monthlyDepreciationBRL,
+             monthlyProLaboreBRL,
+             investedCapitalBRL,
+             updatedAt: serverTimestamp(),
+           });
+           showToast("Configurações da propriedade atualizadas.");
            Sheet.close();
          } catch (err) {
            console.warn("[Agro Connect] Falha ao salvar configurações:", err?.code ?? err);
@@ -8897,6 +8955,7 @@
         (snap) => {
           propertiesCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           renderPropertiesCard();
+          renderSettingsCard();
           loadedFlags.properties = true;
           maybeMigratePropertyArea();
           renderIndicadores();
@@ -8905,6 +8964,7 @@
         (err) => {
           console.warn("[Agro Connect] properties onSnapshot error:", err?.code ?? err);
           propertiesCache = [];
+          renderSettingsCard();
           loadedFlags.properties = true;
           renderIndicadores();
           renderEstoque();
