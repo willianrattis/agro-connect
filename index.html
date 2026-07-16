@@ -4146,9 +4146,14 @@
      }
 
      function openSaleSheet(animal) {
+       const lot = animal.lotId ? lotsCache.find((l) => l.id === animal.lotId) : null;
+       const prop = lot?.propertyId ? propertiesCache.find((p) => p.id === lot.propertyId) : null;
+       const defaultPrice = Number.isFinite(prop?.defaultArrobaPriceBRL)
+         ? prop.defaultArrobaPriceBRL
+         : settingsCache.defaultArrobaPriceBRL;
        Sheet.open({
          title: `Vender · #${escapeHtml(animal.earTag)}`,
-         content: buildSaleFormHTML(settingsCache.defaultArrobaPriceBRL),
+         content: buildSaleFormHTML(defaultPrice),
        });
        wireSaleForm(animal);
      }
@@ -4898,18 +4903,10 @@
        const area = settingsCache.propertyAreaHa;
        settingsAreaValueEl.textContent = area != null ? `${area.toLocaleString("pt-BR")} ha` : "—";
 
-       function sumPropField(field) {
-         const values = propertiesCache.map((p) => p[field]).filter((v) => Number.isFinite(v));
-         return values.length ? values.reduce((s, v) => s + v, 0) : null;
-       }
-       function avgPropField(field) {
-         const values = propertiesCache.map((p) => p[field]).filter((v) => Number.isFinite(v));
-         return values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
-       }
-       const priceAgg = avgPropField("defaultArrobaPriceBRL") ?? settingsCache.defaultArrobaPriceBRL;
-       const depAgg = sumPropField("monthlyDepreciationBRL") ?? settingsCache.monthlyDepreciationBRL;
-       const proAgg = sumPropField("monthlyProLaboreBRL") ?? settingsCache.monthlyProLaboreBRL;
-       const capAgg = sumPropField("investedCapitalBRL") ?? settingsCache.investedCapitalBRL;
+       const priceAgg = avgPropertyField("defaultArrobaPriceBRL") ?? settingsCache.defaultArrobaPriceBRL;
+       const depAgg = totalMonthlyDepreciationBRL();
+       const proAgg = totalMonthlyProLaboreBRL();
+       const capAgg = totalPropertyCapitalBRL();
        settingsPriceValueEl.textContent = priceAgg != null ? formatBRL(priceAgg) : "—";
        settingsDepreciationValueEl.textContent = depAgg != null ? formatBRL(depAgg) : "—";
        settingsProlaboreValueEl.textContent = proAgg != null ? formatBRL(proAgg) : "—";
@@ -7993,7 +7990,7 @@
      }
 
      function monthlyExtraCosts() {
-       return (settingsCache.monthlyDepreciationBRL || 0) + (settingsCache.monthlyProLaboreBRL || 0);
+       return (totalMonthlyDepreciationBRL() ?? 0) + (totalMonthlyProLaboreBRL() ?? 0);
      }
 
      // --- Number formatting ---
@@ -8049,11 +8046,58 @@
        return cards;
      }
 
+     // --- Per-property economic aggregates (read-time; legacy settings as fallback) ---
+     function sumPropertyField(field) {
+       const values = propertiesCache.map((p) => p[field]).filter((v) => Number.isFinite(v));
+       return values.length ? values.reduce((s, v) => s + v, 0) : null;
+     }
+     function avgPropertyField(field) {
+       const values = propertiesCache.map((p) => p[field]).filter((v) => Number.isFinite(v));
+       return values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
+     }
+     function totalMonthlyDepreciationBRL() {
+       return sumPropertyField("monthlyDepreciationBRL") ?? settingsCache.monthlyDepreciationBRL ?? null;
+     }
+     function totalMonthlyProLaboreBRL() {
+       return sumPropertyField("monthlyProLaboreBRL") ?? settingsCache.monthlyProLaboreBRL ?? null;
+     }
+     function totalPropertyCapitalBRL() {
+       return sumPropertyField("investedCapitalBRL") ?? settingsCache.investedCapitalBRL ?? null;
+     }
+
+     // Weighted-by-@-produced consolidated arroba price across properties in the
+     // range. Fallbacks: simple avg of property prices → averageRealizedArrobaPrice
+     // → legacy settingsCache.defaultArrobaPriceBRL.
+     function consolidatedArrobaPrice(range) {
+       const arrobasByProp = new Map();
+       for (const a of animalsCache) {
+         if (a.status !== "sold" || !inRange(a.saleDate, range)) continue;
+         if (!Number.isFinite(a.saleArrobas)) continue;
+         const lot = a.lotId ? lotsCache.find((l) => l.id === a.lotId) : null;
+         const propId = lot?.propertyId;
+         if (!propId) continue;
+         arrobasByProp.set(propId, (arrobasByProp.get(propId) || 0) + a.saleArrobas);
+       }
+       let totalArr = 0;
+       let weightedSum = 0;
+       for (const [propId, arrobas] of arrobasByProp) {
+         const prop = propertiesCache.find((p) => p.id === propId);
+         const price = prop?.defaultArrobaPriceBRL;
+         if (Number.isFinite(price)) {
+           weightedSum += price * arrobas;
+           totalArr += arrobas;
+         }
+       }
+       if (totalArr) return weightedSum / totalArr;
+       const simpleAvg = avgPropertyField("defaultArrobaPriceBRL");
+       if (Number.isFinite(simpleAvg)) return simpleAvg;
+       return averageRealizedArrobaPrice(range) || settingsCache.defaultArrobaPriceBRL || null;
+     }
+
      // per-property indicator scoping: Phase F — for now, area-based KPIs
      // sum every property's areaHa rather than scoping per property.
      function totalPropertyAreaHa() {
-       const sum = propertiesCache.reduce((s, p) => s + (Number.isFinite(p.areaHa) ? p.areaHa : 0), 0);
-       return sum || settingsCache.propertyAreaHa;
+       return sumPropertyField("areaHa") ?? settingsCache.propertyAreaHa ?? null;
      }
 
      function kpiGanhoHa(range) {
@@ -8208,12 +8252,12 @@
        if (!arrobas) return kpiMissing("COT/@", "Registre vendas (com @) no período para calcular o custo total por arroba.");
        const despesasEfetivo = sumTx(range, (t) => t.kind === "despesa" && t.costNature === "efetivo");
        const extras = monthlyExtraCosts() * periodMonths(range);
-       const hasExtras = settingsCache.monthlyDepreciationBRL != null || settingsCache.monthlyProLaboreBRL != null;
+       const hasExtras = totalMonthlyDepreciationBRL() != null || totalMonthlyProLaboreBRL() != null;
        return kpiOk(
          "COT/@",
          formatBRL((despesasEfetivo + extras) / arrobas),
          "/@",
-         hasExtras ? "Inclui depreciação e pró-labore mensais" : "Informe depreciação/pró-labore em Perfil para um COT mais preciso"
+         hasExtras ? "Inclui depreciação e pró-labore mensais" : "Informe depreciação/pró-labore em Configurações da propriedade para um COT mais preciso"
        );
      }
 
@@ -8235,8 +8279,8 @@
      function kpiBreakEven(range) {
        const area = totalPropertyAreaHa();
        const cot = sumTx(range, (t) => t.kind === "despesa") + monthlyExtraCosts() * periodMonths(range);
-       const price = settingsCache.defaultArrobaPriceBRL || averageRealizedArrobaPrice(range);
-       if (!price) return kpiMissing("Break-even", "Informe o preço padrão da @ em Perfil ou registre vendas no período.");
+       const price = consolidatedArrobaPrice(range);
+       if (!price) return kpiMissing("Break-even", "Informe o preço padrão da @ em pelo menos uma propriedade ou registre vendas no período.");
        if (!area) return kpiMissing("Break-even", "Informe a área da propriedade em Perfil.");
        if (!cot) return kpiMissing("Break-even", "Registre despesas no período.");
        const breakEvenArrobas = cot / price;
@@ -8244,8 +8288,8 @@
      }
 
      function kpiROI(range) {
-       const capital = settingsCache.investedCapitalBRL;
-       if (!capital) return kpiMissing("ROI", "Informe o capital investido em Perfil.");
+       const capital = totalPropertyCapitalBRL();
+       if (!capital) return kpiMissing("ROI", "Informe o capital investido em pelo menos uma propriedade (Configurações da propriedade).");
        const receitas = sumTx(range, (t) => t.kind === "receita");
        const despesasAll = sumTx(range, (t) => t.kind === "despesa");
        const margemLiquida = receitas - despesasAll - monthlyExtraCosts() * periodMonths(range);
@@ -8300,11 +8344,32 @@
      }
 
      function kpiInventario() {
-       const price = settingsCache.defaultArrobaPriceBRL;
-       if (!price) return kpiMissing("Inventário atual", "Informe o preço padrão da @ em Perfil.");
        const active = animalsCache.filter((a) => (a.status || "active") === "active");
-       const arrobas = totalArrobas(active);
-       return kpiOk("Inventário atual", formatBRL(arrobas * price), "", `${active.length} cabeça(s) · ${formatArrobas(arrobas)} @ estimada(s)`);
+       if (!active.length) return kpiMissing("Inventário atual", "Sem animais ativos para calcular o inventário.");
+       // Group active animals by propertyId (via lot) and apply that property's price.
+       const byProp = new Map();
+       for (const a of active) {
+         const lot = a.lotId ? lotsCache.find((l) => l.id === a.lotId) : null;
+         const key = lot?.propertyId || null;
+         if (!byProp.has(key)) byProp.set(key, []);
+         byProp.get(key).push(a);
+       }
+       let totalValue = 0;
+       let totalArr = 0;
+       let covered = 0;
+       for (const [propId, animals] of byProp) {
+         const prop = propId ? propertiesCache.find((p) => p.id === propId) : null;
+         const price = Number.isFinite(prop?.defaultArrobaPriceBRL)
+           ? prop.defaultArrobaPriceBRL
+           : settingsCache.defaultArrobaPriceBRL;
+         if (!Number.isFinite(price)) continue;
+         const arr = totalArrobas(animals);
+         totalValue += arr * price;
+         totalArr += arr;
+         covered += animals.length;
+       }
+       if (!covered) return kpiMissing("Inventário atual", "Informe o preço padrão da @ em pelo menos uma propriedade.");
+       return kpiOk("Inventário atual", formatBRL(totalValue), "", `${covered} cabeça(s) · ${formatArrobas(totalArr)} @ estimada(s)`);
      }
 
      function renderGroup4Cards(range) {
