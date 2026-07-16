@@ -3422,6 +3422,22 @@
        let _onClose = null;
        let _isOpen = false;
        let _closing = false;
+       let _fallbackTimer = null;
+       let _onTransitionEnd = null;
+
+       // Cancels any in-flight close (pending transitionend listener + fallback
+       // timer) without touching _isOpen. Used both when a new open() interrupts
+       // a close, and internally once a close actually finishes.
+       function cancelPendingClose() {
+         if (_onTransitionEnd) {
+           sheet.removeEventListener("transitionend", _onTransitionEnd);
+           _onTransitionEnd = null;
+         }
+         if (_fallbackTimer !== null) {
+           clearTimeout(_fallbackTimer);
+           _fallbackTimer = null;
+         }
+       }
 
        // Native <dialog> traps Tab itself; this is only for picking where to
        // land initial focus on open.
@@ -3495,7 +3511,17 @@
        });
 
        // -- Open --
+       // Idempotent when already open: a chained sheet-to-sheet transition
+       // (e.g. action menu -> "Vender") or a re-open that races an in-flight
+       // close both land here with _isOpen already true. In that case we swap
+       // content/title/onClose and refocus without calling showModal() again
+       // (calling it on an already-open <dialog> throws on some engines and
+       // no-ops on others — neither path should be relied on), and we cancel
+       // any pending close so its stale finish() can't fire later and call
+       // sheet.close() on the sheet we just swapped in.
        function openSheet({ title = "", content = "", onClose = null } = {}) {
+         cancelPendingClose();
+         _closing = false;
          _onClose = onClose;
 
          titleEl.textContent = title;
@@ -3508,9 +3534,11 @@
 
          // Reset transform in case a previous close was interrupted by a drag
          sheet.style.transform = "";
-         sheet.showModal();
-         _isOpen = true;
-         _closing = false;
+
+         if (!_isOpen) {
+           sheet.showModal();
+           _isOpen = true;
+         }
 
          requestAnimationFrame(() => {
            sheet.classList.add("is-open");
@@ -3525,40 +3553,37 @@
        // actually changing) — without it, a missed event would leave the
        // dialog stuck open forever.
        const FALLBACK_MS = 320;
+
+       function finishClose() {
+         cancelPendingClose();
+         sheet.close();
+         _isOpen = false;
+         _closing = false;
+         sheet.style.transform = "";
+         if (typeof _onClose === "function") {
+           const cb = _onClose;
+           _onClose = null;
+           cb();
+         }
+       }
+
        function closeSheet() {
          if (!_isOpen || _closing) return;
          _closing = true;
-         let done = false;
-
-         function finish() {
-           if (done) return;
-           done = true;
-           sheet.removeEventListener("transitionend", onTransitionEnd);
-           clearTimeout(fallbackTimer);
-           sheet.close();
-           _isOpen = false;
-           _closing = false;
-           sheet.style.transform = "";
-           if (typeof _onClose === "function") {
-             _onClose();
-             _onClose = null;
-           }
-         }
-
-         function onTransitionEnd(e) {
-           if (e.target !== sheet) return;
-           finish();
-         }
 
          sheet.classList.remove("is-open");
 
          if (prefersReducedMotion()) {
-           finish();
+           finishClose();
            return;
          }
 
-         sheet.addEventListener("transitionend", onTransitionEnd);
-         const fallbackTimer = setTimeout(finish, FALLBACK_MS);
+         _onTransitionEnd = (e) => {
+           if (e.target !== sheet) return;
+           finishClose();
+         };
+         sheet.addEventListener("transitionend", _onTransitionEnd);
+         _fallbackTimer = setTimeout(finishClose, FALLBACK_MS);
        }
 
        // -- Close via X button --
