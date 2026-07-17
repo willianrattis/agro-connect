@@ -146,6 +146,19 @@ service cloud.firestore {
       allow delete: if owns(resource);
     }
 
+    // Bulk lot weighing sessions (avg weight + optional individual samples)
+    match /lot_weighings/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.lotId is string
+                    && request.resource.data.lotId.size() > 0
+                    && request.resource.data.date is timestamp
+                    && request.resource.data.avgWeightKg is number
+                    && request.resource.data.avgWeightKg > 0;
+      allow update: if owns(resource) && ownsNew() && ownerImmutable();
+      allow delete: if owns(resource);
+    }
+
     // Everything else is denied by default (Firestore has no implicit
     // grants), stated explicitly here for auditability.
     match /{document=**} {

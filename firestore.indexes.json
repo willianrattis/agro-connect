@@ -7,7 +7,8 @@
     { "collectionGroup": "events",       "queryScope": "COLLECTION", "fields": [ { "fieldPath": "ownerId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" } ] },
     { "collectionGroup": "properties",   "queryScope": "COLLECTION", "fields": [ { "fieldPath": "ownerId", "order": "ASCENDING" }, { "fieldPath": "name", "order": "ASCENDING" } ] },
     { "collectionGroup": "suppliers",    "queryScope": "COLLECTION", "fields": [ { "fieldPath": "ownerId", "order": "ASCENDING" }, { "fieldPath": "nameLower", "order": "ASCENDING" } ] },
-    { "collectionGroup": "confinements", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "ownerId", "order": "ASCENDING" }, { "fieldPath": "nameLower", "order": "ASCENDING" } ] }
+    { "collectionGroup": "confinements", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "ownerId", "order": "ASCENDING" }, { "fieldPath": "nameLower", "order": "ASCENDING" } ] },
+    { "collectionGroup": "lot_weighings", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "ownerId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "DESCENDING" } ] }
   ],
   "fieldOverrides": []
 }

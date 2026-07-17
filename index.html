@@ -5344,25 +5344,45 @@
 
          if (!valid) return;
 
+         const validWeights = individualWeights.filter((w) => Number.isFinite(w) && w > 0);
+
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
 
          try {
            const batch = writeBatch(db);
+           const isIndividual = (lot.trackingMode || "individual") === "individual";
+           const activeAnimals = isIndividual
+             ? animalsCache.filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
+             : [];
+           const headcountAtWeighing = isIndividual ? activeAnimals.length : (lot.headcount || 0);
+
+           // Generates an id client-side without a write, so events can reference it
+           // inside the same batch.
+           const weighingRef = doc(collection(db, "lot_weighings"));
+           batch.set(weighingRef, {
+             ownerId: currentUid,
+             lotId: lot.id,
+             date: weighingDate,
+             avgWeightKg,
+             individualWeights: validWeights.length ? validWeights : null,
+             headcountAtWeighing,
+             trackingMode: isIndividual ? "individual" : "aggregate",
+             createdAt: serverTimestamp(),
+             updatedAt: serverTimestamp(),
+           });
+
            batch.update(doc(db, "lots", lot.id), {
              avgWeightKg,
              lastWeighingDate: weighingDate,
              updatedAt: serverTimestamp(),
            });
 
-           const isIndividual = (lot.trackingMode || "individual") === "individual";
            if (isIndividual) {
-             const activeAnimals = animalsCache.filter(
-               (a) => a.lotId === lot.id && (a.status || "active") === "active"
-             );
              // TODO: lots with > ~490 active animals will exceed Firestore's
-             // 500-op batch limit (1 lot update + 1 event per animal) — needs
-             // chunked batches (see deleteLotCascade) as a follow-up.
+             // 500-op batch limit (1 lot update + 1 weighing doc + 1 event per
+             // animal) — needs chunked batches (see deleteLotCascade) as a
+             // follow-up.
              activeAnimals.forEach((animal) => {
                const eventRef = doc(collection(db, "events"));
                batch.set(eventRef, {
@@ -5373,6 +5393,7 @@
                  date: weighingDate,
                  payload: { weightKg: avgWeightKg },
                  source: "lot_weighing",
+                 lotWeighingId: weighingRef.id,
                  createdAt: serverTimestamp(),
                });
              });
@@ -5736,12 +5757,14 @@
          (t) => t.linkedLotId === lot.id || animalIds.has(t.linkedAnimalId)
        );
        const linkedMovements = movementsCache.filter((m) => m.lotId === lot.id);
+       const linkedWeighings = lotWeighingsCache.filter((w) => w.lotId === lot.id);
 
        const refs = [
          ...linkedAnimals.map((a) => doc(db, "animals", a.id)),
          ...linkedEvents.map((e) => doc(db, "events", e.id)),
          ...linkedTransactions.map((t) => doc(db, "transactions", t.id)),
          ...linkedMovements.map((m) => doc(db, "movements", m.id)),
+         ...linkedWeighings.map((w) => doc(db, "lot_weighings", w.id)),
          doc(db, "lots", lot.id),
        ];
 
@@ -9108,6 +9131,7 @@
     let suppliersCache = [];
     let confinementsCache = [];
     let movementsCache = [];
+    let lotWeighingsCache = [];
     let unsubAnimals = null;
     let unsubLots = null;
     let unsubTransactions = null;
@@ -9117,6 +9141,7 @@
     let unsubSuppliers = null;
     let unsubConfinements = null;
     let unsubMovements = null;
+    let unsubLotWeighings = null;
 
     // Indicadores needs all four caches to have resolved at least once before
     // it can tell "no data yet" apart from "still loading" (skeleton vs. hint).
@@ -9205,6 +9230,24 @@
           console.warn("[Agro Connect] movements onSnapshot error:", err?.code ?? err);
           movementsCache = [];
           renderIndicadores();
+        }
+      );
+
+      // Bulk weighing sessions — feeds the weighing history sheet and lets the
+      // most recent session be edited/deleted.
+      const lotWeighingsQuery = query(
+        collection(db, "lot_weighings"),
+        where("ownerId", "==", uid),
+        orderBy("date", "desc")
+      );
+      unsubLotWeighings = onSnapshot(
+        lotWeighingsQuery,
+        (snap) => {
+          lotWeighingsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        },
+        (err) => {
+          console.warn("[Agro Connect] lot_weighings onSnapshot error:", err?.code ?? err);
+          lotWeighingsCache = [];
         }
       );
 
@@ -9367,6 +9410,7 @@
       unsubSuppliers?.();
       unsubConfinements?.();
       unsubMovements?.();
+      unsubLotWeighings?.();
       unsubAnimals = null;
       unsubLots = null;
       unsubTransactions = null;
@@ -9376,6 +9420,7 @@
       unsubSuppliers = null;
       unsubConfinements = null;
       unsubMovements = null;
+      unsubLotWeighings = null;
       currentUid = null;
       lotsCache = [];
       animalsCache = [];
@@ -9386,6 +9431,7 @@
       suppliersCache = [];
       confinementsCache = [];
       movementsCache = [];
+      lotWeighingsCache = [];
       openLotDetailLotId = null;
       estoqueSelectedPropertyId = null;
       loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
