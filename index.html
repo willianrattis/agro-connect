@@ -1275,30 +1275,6 @@
   .btn-secondary:hover { background: var(--accent-tint); }
   .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 
-  .btn-icon {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    flex: none;
-    border-radius: var(--radius-md);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: var(--fs-base);
-    line-height: 1;
-  }
-  .btn-icon:hover { background: var(--accent-tint); color: var(--danger); }
-
-  .weighing-calculator > summary {
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    color: var(--brand);
-    cursor: pointer;
-    padding: var(--space-2) 0;
-  }
-  .weighing-calculator[open] > summary { margin-bottom: var(--space-2); }
-
   /* View header inline action (e.g. "+ Novo lote" next to the count) */
   .view-header-actions {
     display: flex;
@@ -5160,6 +5136,15 @@
      // "weighing" event so GMD/weighing-history keep working unchanged.
      // =====================================================
      function buildLotWeighingFormHTML(lot) {
+       const isIndividual = (lot.trackingMode || "individual") === "individual";
+       const activeAnimals = isIndividual
+         ? animalsCache.filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
+         : [];
+       const weighableCount = isIndividual ? activeAnimals.length : (lot.headcount || 0);
+       const PAGE_SIZE = 10;
+       const totalPages = Math.max(1, Math.ceil(weighableCount / PAGE_SIZE));
+       const showIndividuals = weighableCount > 0;
+
        return `
          <form id="lot-weighing-form" class="form-grid" novalidate>
            <div class="field field--half">
@@ -5169,16 +5154,33 @@
            </div>
            <div class="field field--half">
              <label class="field-label" for="lot-weighing-avg">Peso médio (kg) *</label>
-             <input class="input" id="lot-weighing-avg" type="number" step="0.01" min="0" placeholder="Ex: 240" />
+             <input class="input" id="lot-weighing-avg" type="number" step="0.01" min="0" placeholder="Ex: 240" inputmode="decimal" />
              <p class="field-error" id="lot-weighing-avg-error"></p>
            </div>
-           <details class="weighing-calculator form-grid">
-             <summary>Calcular a partir de pesagens individuais</summary>
-             <div id="lot-weighing-individual-list"></div>
-             <button type="button" id="lot-weighing-add-individual" class="btn-secondary pressable">+ Adicionar peso</button>
-             <p class="field-hint">Média calculada: <strong id="lot-weighing-calculated-avg">—</strong></p>
-             <button type="button" id="lot-weighing-use-calc" class="btn-secondary pressable">Usar como peso médio</button>
-           </details>
+           ${showIndividuals ? `
+             <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+               <div class="mini-stat">
+                 <p class="mini-value" id="lot-weighing-arroba-head">—</p>
+                 <p class="mini-label">@ por cabeça</p>
+               </div>
+               <div class="mini-stat">
+                 <p class="mini-value" id="lot-weighing-arroba-total">—</p>
+                 <p class="mini-label">@ total (${weighableCount} cab.)</p>
+               </div>
+             </div>
+             <div class="field">
+               <label class="field-label">Pesagens individuais</label>
+               <p class="field-hint" id="lot-weighing-count-hint">0 de ${weighableCount} pesados</p>
+               <div id="lot-weighing-individual-list" class="form-grid"></div>
+               ${totalPages > 1 ? `
+                 <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-3);">
+                   <button type="button" id="lot-weighing-prev-page" class="btn-secondary pressable" disabled>← Anterior</button>
+                   <span id="lot-weighing-page-indicator" class="field-hint">Página 1 de ${totalPages}</span>
+                   <button type="button" id="lot-weighing-next-page" class="btn-secondary pressable">Próxima →</button>
+                 </div>
+               ` : ""}
+             </div>
+           ` : ""}
            <p class="field-error" id="lot-weighing-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="lot-weighing-submit">Salvar pesagem</button>
          </form>
@@ -5189,49 +5191,120 @@
        const form = document.getElementById("lot-weighing-form");
        const submitBtn = document.getElementById("lot-weighing-submit");
        const formError = document.getElementById("lot-weighing-form-error");
-       const individualList = document.getElementById("lot-weighing-individual-list");
-       const calculatedAvgEl = document.getElementById("lot-weighing-calculated-avg");
 
-       let calculatedAvg = null;
+       const isIndividual = (lot.trackingMode || "individual") === "individual";
+       const activeAnimals = isIndividual
+         ? animalsCache.filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
+         : [];
+       const weighableCount = isIndividual ? activeAnimals.length : (lot.headcount || 0);
+       const PAGE_SIZE = 10;
+       const totalPages = Math.max(1, Math.ceil(weighableCount / PAGE_SIZE));
+       const yieldPct = resolveFarmYieldPct(lot);
 
-       function recomputeCalculatedAvg() {
-         const values = Array.from(individualList.querySelectorAll('[data-role="individual-weight"]'))
-           .map((input) => Number(input.value))
-           .filter((n) => Number.isFinite(n) && n > 0);
-         if (!values.length) {
-           calculatedAvg = null;
-           calculatedAvgEl.textContent = "—";
-           return;
+       const individualWeights = new Array(weighableCount).fill(null);
+       let currentPage = 0;
+
+       const listEl = document.getElementById("lot-weighing-individual-list");
+       const avgEl = document.getElementById("lot-weighing-avg");
+       const arrobaHeadEl = document.getElementById("lot-weighing-arroba-head");
+       const arrobaTotalEl = document.getElementById("lot-weighing-arroba-total");
+       const countHintEl = document.getElementById("lot-weighing-count-hint");
+       const prevBtn = document.getElementById("lot-weighing-prev-page");
+       const nextBtn = document.getElementById("lot-weighing-next-page");
+       const pageInd = document.getElementById("lot-weighing-page-indicator");
+
+       function renderPage() {
+         if (!listEl) return;
+         const start = currentPage * PAGE_SIZE;
+         const end = Math.min(start + PAGE_SIZE, weighableCount);
+         const rows = [];
+         for (let i = start; i < end; i++) {
+           const v = individualWeights[i];
+           rows.push(`
+             <input class="input" type="number" step="0.01" min="0" inputmode="decimal"
+                    placeholder="Peso ${i + 1} (kg)"
+                    data-role="individual-weight" data-index="${i}"
+                    value="${v != null ? v : ""}" />
+           `);
          }
-         calculatedAvg = values.reduce((sum, n) => sum + n, 0) / values.length;
-         calculatedAvgEl.textContent = `${fmtNum(calculatedAvg, 1)} kg (${values.length} pesagens)`;
+         listEl.innerHTML = rows.join("");
+         if (prevBtn) prevBtn.disabled = currentPage === 0;
+         if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
+         if (pageInd) pageInd.textContent = `Página ${currentPage + 1} de ${totalPages}`;
        }
 
-       document.getElementById("lot-weighing-add-individual").addEventListener("click", () => {
-         individualList.insertAdjacentHTML("beforeend", `
-           <div class="individual-weight-row" style="display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2);">
-             <input class="input" type="number" step="0.01" min="0" placeholder="Peso (kg)" data-role="individual-weight" style="flex: 1;" />
-             <button type="button" class="btn-icon pressable" data-role="remove-individual-weight" aria-label="Remover">✕</button>
-           </div>
-         `);
-         recomputeCalculatedAvg();
+       function updateArrobaDisplay(pesoKg) {
+         if (!arrobaHeadEl || !arrobaTotalEl) return;
+         if (!Number.isFinite(pesoKg) || pesoKg <= 0 || !Number.isFinite(yieldPct) || yieldPct <= 0) {
+           arrobaHeadEl.textContent = "—";
+           arrobaTotalEl.textContent = "—";
+           return;
+         }
+         const perHead = (pesoKg * yieldPct) / KG_PER_ARROBA;
+         arrobaHeadEl.textContent = `${formatArrobas(perHead)} @`;
+         arrobaTotalEl.textContent = `${formatArrobas(perHead * weighableCount)} @`;
+       }
+
+       function recomputeAverage() {
+         const valid = individualWeights.filter((w) => Number.isFinite(w) && w > 0);
+         if (countHintEl) countHintEl.textContent = `${valid.length} de ${weighableCount} pesados`;
+         if (valid.length === 0) {
+           updateArrobaDisplay(parseFloat(avgEl.value));
+           return;
+         }
+         const avg = valid.reduce((s, w) => s + w, 0) / valid.length;
+         avgEl.value = avg.toFixed(2);
+         updateArrobaDisplay(avg);
+       }
+
+       if (listEl) {
+         listEl.addEventListener("input", (e) => {
+           const t = e.target;
+           if (!t.matches('[data-role="individual-weight"]')) return;
+           const idx = parseInt(t.dataset.index, 10);
+           const val = parseFloat(t.value);
+           individualWeights[idx] = Number.isFinite(val) && val > 0 ? val : null;
+           recomputeAverage();
+         });
+
+         listEl.addEventListener("keydown", (e) => {
+           if (e.key !== "Enter" || !e.target.matches('[data-role="individual-weight"]')) return;
+           e.preventDefault();
+           const inputs = Array.from(listEl.querySelectorAll('[data-role="individual-weight"]'));
+           const idx = inputs.indexOf(e.target);
+           if (idx < inputs.length - 1) {
+             inputs[idx + 1].focus();
+           } else if (currentPage < totalPages - 1) {
+             currentPage++;
+             renderPage();
+             const first = listEl.querySelector('[data-role="individual-weight"]');
+             if (first) first.focus();
+           } else {
+             submitBtn.focus();
+           }
+         });
+       }
+
+       avgEl.addEventListener("input", () => updateArrobaDisplay(parseFloat(avgEl.value)));
+
+       if (prevBtn) prevBtn.addEventListener("click", () => {
+         if (currentPage > 0) {
+           currentPage--;
+           renderPage();
+           const first = listEl.querySelector('[data-role="individual-weight"]');
+           if (first) first.focus();
+         }
+       });
+       if (nextBtn) nextBtn.addEventListener("click", () => {
+         if (currentPage < totalPages - 1) {
+           currentPage++;
+           renderPage();
+           const first = listEl.querySelector('[data-role="individual-weight"]');
+           if (first) first.focus();
+         }
        });
 
-       individualList.addEventListener("click", (e) => {
-         const removeBtn = e.target.closest('[data-role="remove-individual-weight"]');
-         if (!removeBtn) return;
-         removeBtn.closest(".individual-weight-row").remove();
-         recomputeCalculatedAvg();
-       });
-
-       individualList.addEventListener("input", (e) => {
-         if (e.target.matches('[data-role="individual-weight"]')) recomputeCalculatedAvg();
-       });
-
-       document.getElementById("lot-weighing-use-calc").addEventListener("click", () => {
-         if (calculatedAvg == null) return;
-         document.getElementById("lot-weighing-avg").value = String(Math.round(calculatedAvg * 100) / 100);
-       });
+       if (weighableCount > 0) renderPage();
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
