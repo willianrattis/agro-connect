@@ -1681,6 +1681,27 @@
     dialog.sheet, dialog.sheet::backdrop { transition: none; }
     .slaughter-progress-fill { transition: none; }
   }
+
+  /* =====================================================
+     17. Print (weighing history / detail) — mirrored into #print-area
+     rather than printed from inside the <dialog>; see printHTML().
+     ===================================================== */
+  #print-area { display: none; }
+
+  @media print {
+    body > *:not(#print-area) { display: none !important; }
+    dialog.sheet { display: none !important; }
+    #print-area { display: block !important; }
+    @page { margin: 1.5cm; }
+    .print-doc { font-family: system-ui, sans-serif; color: #000; }
+    .print-doc h1 { font-size: 18pt; margin: 0 0 4pt; }
+    .print-doc .print-sub { font-size: 10pt; color: #444; margin: 0 0 16pt; }
+    .print-doc table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .print-doc th, .print-doc td { border: 1px solid #999; padding: 5pt 7pt; text-align: left; }
+    .print-doc th { background: #eee; font-weight: 600; }
+    .print-doc td.num, .print-doc th.num { text-align: right; }
+    .print-doc .print-foot { margin-top: 16pt; font-size: 8pt; color: #666; }
+  }
 </style>
 </head>
 <body data-auth="loading">
@@ -2009,6 +2030,9 @@
      </div>
      <div class="sheet-body" id="sheet-body"></div>
    </dialog>
+
+   <!-- Populated on demand by printHTML(); only visible in print media. -->
+   <div id="print-area" aria-hidden="true"></div>
 
   <!-- ===== Toast region (discreet auth feedback) ===== -->
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
@@ -2352,6 +2376,8 @@
       calving: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>`,
       finishing: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>`,
       transfer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>`,
+      history: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>`,
+      print: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>`,
     };
 
     // lots.category (SPEC 6.3) — distinct plural vocabulary from animals.category,
@@ -2480,6 +2506,20 @@
     }
     function formatArrobas(n) {
       return n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+    // Prints arbitrary HTML without involving the <dialog> — elements in the
+    // top layer print inconsistently across engines, so content is mirrored
+    // into a plain body-level container instead.
+    function printHTML(html) {
+      const area = document.getElementById("print-area");
+      if (!area) return;
+      area.innerHTML = html;
+      const cleanup = () => {
+        area.innerHTML = "";
+        window.removeEventListener("afterprint", cleanup);
+      };
+      window.addEventListener("afterprint", cleanup);
+      window.print();
     }
     // pt-BR percent with 1 decimal, trailing ",0" trimmed (13.5 → "13,5", 10 → "10").
     function formatPercentTrim(n) {
@@ -5147,6 +5187,27 @@
      // individual-tracking lots, propagates the same weight as a per-animal
      // "weighing" event so GMD/weighing-history keep working unchanged.
      // =====================================================
+
+     // Weighing sessions for one lot, newest first. The listener already orders
+     // by date desc, but re-sorting keeps this correct if the cache is ever
+     // populated from another path.
+     function lotWeighingsFor(lotId) {
+       return lotWeighingsCache
+         .filter((w) => w.lotId === lotId)
+         .slice()
+         .sort((a, b) => (toDateSafe(b.date) ?? 0) - (toDateSafe(a.date) ?? 0));
+     }
+
+     function weighingArrobas(lot, weighing) {
+       const yieldPct = resolveFarmYieldPct(lot);
+       if (!Number.isFinite(weighing.avgWeightKg) || !Number.isFinite(yieldPct) || yieldPct <= 0) {
+         return { perHead: null, total: null };
+       }
+       const perHead = (weighing.avgWeightKg * yieldPct) / KG_PER_ARROBA;
+       const head = weighing.headcountAtWeighing || 0;
+       return { perHead, total: head ? perHead * head : null };
+     }
+
      function buildLotWeighingFormHTML(lot) {
        const isIndividual = (lot.trackingMode || "individual") === "individual";
        const activeAnimals = isIndividual
@@ -5420,6 +5481,213 @@
      }
 
      // =====================================================
+     // 7d-ter. Lotes — read-only weighing history: list sheet, per-weighing
+     // detail sheet, and print support for both (no edit/delete here).
+     // =====================================================
+     function buildLotWeighingHistoryHTML(lot) {
+       const weighings = lotWeighingsFor(lot.id);
+       if (!weighings.length) {
+         return `
+           <div class="form-grid">
+             <div class="empty-state">
+               <span class="icon" aria-hidden="true">${ICONS.history}</span>
+               <h3>Nenhuma pesagem registrada</h3>
+               <p>Use "Pesar lote" no menu do lote para registrar a primeira. Pesagens feitas antes desta versão do app não aparecem aqui.</p>
+             </div>
+           </div>
+         `;
+       }
+       const rows = weighings.map((w, i) => {
+         const d = toDateSafe(w.date);
+         const { perHead } = weighingArrobas(lot, w);
+         const sampled = Array.isArray(w.individualWeights) ? w.individualWeights.length : 0;
+         return `
+           <div class="card pressable" data-role="weighing-row" data-id="${escapeHtml(w.id)}" style="margin-bottom: var(--space-3);">
+             <div class="card-top">
+               <span class="ear-tag">${d ? d.toLocaleDateString("pt-BR") : "—"}</span>
+               ${i === 0 ? `<span class="chip chip-success">Mais recente</span>` : ""}
+             </div>
+             <div class="card-stats" style="grid-template-columns: repeat(3, 1fr);">
+               <div class="mini-stat">
+                 <p class="mini-value">${formatKg(w.avgWeightKg)} kg</p>
+                 <p class="mini-label">Peso médio</p>
+               </div>
+               <div class="mini-stat">
+                 <p class="mini-value">${perHead != null ? `${formatArrobas(perHead)} @` : "—"}</p>
+                 <p class="mini-label">@ por cabeça</p>
+               </div>
+               <div class="mini-stat">
+                 <p class="mini-value">${sampled || "—"}</p>
+                 <p class="mini-label">Pesados</p>
+               </div>
+             </div>
+           </div>
+         `;
+       }).join("");
+       return `
+         <div class="form-grid">
+           <button type="button" id="weighing-history-print" class="btn-secondary pressable">
+             <span class="action-icon" aria-hidden="true">${ICONS.print}</span>
+             Imprimir histórico
+           </button>
+           ${rows}
+         </div>
+       `;
+     }
+
+     function openLotWeighingHistorySheet(lot) {
+       Sheet.open({
+         title: `Pesagens · ${escapeHtml(lot.name)}`,
+         content: buildLotWeighingHistoryHTML(lot),
+       });
+       const printBtn = document.getElementById("weighing-history-print");
+       if (printBtn) {
+         printBtn.addEventListener("click", () => printHTML(buildWeighingHistoryPrintHTML(lot)));
+       }
+       document.querySelectorAll('#sheet-body [data-role="weighing-row"]').forEach((row) => {
+         row.addEventListener("click", () => {
+           const w = lotWeighingsCache.find((x) => x.id === row.dataset.id);
+           if (w) openLotWeighingDetailSheet(lot, w);
+         });
+       });
+     }
+
+     function buildLotWeighingDetailHTML(lot, w) {
+       const d = toDateSafe(w.date);
+       const { perHead, total } = weighingArrobas(lot, w);
+       const weights = Array.isArray(w.individualWeights) ? w.individualWeights : [];
+       const grid = weights.length
+         ? `
+           <div class="field">
+             <label class="field-label">Pesagens individuais (${weights.length})</label>
+             <div class="card-stats" style="grid-template-columns: repeat(3, 1fr);">
+               ${weights.map((kg, i) => `
+                 <div class="mini-stat">
+                   <p class="mini-value">${formatKg(kg)}</p>
+                   <p class="mini-label">#${i + 1}</p>
+                 </div>
+               `).join("")}
+             </div>
+           </div>
+         `
+         : `<p class="field-hint">Peso médio informado diretamente, sem pesagens individuais.</p>`;
+       return `
+         <div class="form-grid">
+           <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+             <div class="mini-stat">
+               <p class="mini-value">${d ? d.toLocaleDateString("pt-BR") : "—"}</p>
+               <p class="mini-label">Data</p>
+             </div>
+             <div class="mini-stat">
+               <p class="mini-value">${w.headcountAtWeighing || "—"}</p>
+               <p class="mini-label">Cabeças</p>
+             </div>
+             <div class="mini-stat">
+               <p class="mini-value">${formatKg(w.avgWeightKg)} kg</p>
+               <p class="mini-label">Peso médio</p>
+             </div>
+             <div class="mini-stat">
+               <p class="mini-value">${perHead != null ? `${formatArrobas(perHead)} @` : "—"}</p>
+               <p class="mini-label">@ por cabeça</p>
+             </div>
+             <div class="mini-stat">
+               <p class="mini-value">${total != null ? `${formatArrobas(total)} @` : "—"}</p>
+               <p class="mini-label">@ total</p>
+             </div>
+           </div>
+           ${grid}
+           <button type="button" id="weighing-detail-print" class="btn-secondary pressable">
+             <span class="action-icon" aria-hidden="true">${ICONS.print}</span>
+             Imprimir esta pesagem
+           </button>
+           <button type="button" id="weighing-detail-back" class="btn-secondary pressable">← Voltar ao histórico</button>
+         </div>
+       `;
+     }
+
+     function openLotWeighingDetailSheet(lot, w) {
+       const d = toDateSafe(w.date);
+       Sheet.open({
+         title: `Pesagem · ${d ? d.toLocaleDateString("pt-BR") : ""}`,
+         content: buildLotWeighingDetailHTML(lot, w),
+       });
+       document.getElementById("weighing-detail-print")
+         ?.addEventListener("click", () => printHTML(buildWeighingDetailPrintHTML(lot, w)));
+       document.getElementById("weighing-detail-back")
+         ?.addEventListener("click", () => openLotWeighingHistorySheet(lot));
+     }
+
+     function printFooterHTML() {
+       return `<p class="print-foot">Agro Connect · emitido em ${new Date().toLocaleString("pt-BR")}</p>`;
+     }
+
+     function buildWeighingHistoryPrintHTML(lot) {
+       const weighings = lotWeighingsFor(lot.id);
+       const property = propertiesCache.find((p) => p.id === lot.propertyId);
+       const rows = weighings.map((w) => {
+         const d = toDateSafe(w.date);
+         const { perHead, total } = weighingArrobas(lot, w);
+         const sampled = Array.isArray(w.individualWeights) ? w.individualWeights.length : 0;
+         return `
+           <tr>
+             <td>${d ? d.toLocaleDateString("pt-BR") : "—"}</td>
+             <td class="num">${w.headcountAtWeighing || "—"}</td>
+             <td class="num">${formatKg(w.avgWeightKg)} kg</td>
+             <td class="num">${perHead != null ? `${formatArrobas(perHead)} @` : "—"}</td>
+             <td class="num">${total != null ? `${formatArrobas(total)} @` : "—"}</td>
+             <td class="num">${sampled || "—"}</td>
+           </tr>
+         `;
+       }).join("");
+       return `
+         <div class="print-doc">
+           <h1>Histórico de pesagens · ${escapeHtml(lot.name)}</h1>
+           <p class="print-sub">${property ? escapeHtml(property.name) : "Sem propriedade"} · ${weighings.length} pesagem(ns)</p>
+           <table>
+             <thead>
+               <tr>
+                 <th>Data</th><th class="num">Cabeças</th><th class="num">Peso médio</th>
+                 <th class="num">@/cab</th><th class="num">@ total</th><th class="num">Pesados</th>
+               </tr>
+             </thead>
+             <tbody>${rows || `<tr><td colspan="6">Nenhuma pesagem registrada.</td></tr>`}</tbody>
+           </table>
+           ${printFooterHTML()}
+         </div>
+       `;
+     }
+
+     function buildWeighingDetailPrintHTML(lot, w) {
+       const d = toDateSafe(w.date);
+       const property = propertiesCache.find((p) => p.id === lot.propertyId);
+       const { perHead, total } = weighingArrobas(lot, w);
+       const weights = Array.isArray(w.individualWeights) ? w.individualWeights : [];
+       const indivRows = weights.map((kg, i) => `<tr><td>#${i + 1}</td><td class="num">${formatKg(kg)} kg</td></tr>`).join("");
+       return `
+         <div class="print-doc">
+           <h1>Pesagem de lote · ${escapeHtml(lot.name)}</h1>
+           <p class="print-sub">${property ? escapeHtml(property.name) : "Sem propriedade"} · ${d ? d.toLocaleDateString("pt-BR") : "—"}</p>
+           <table>
+             <tbody>
+               <tr><th>Cabeças</th><td class="num">${w.headcountAtWeighing || "—"}</td></tr>
+               <tr><th>Peso médio</th><td class="num">${formatKg(w.avgWeightKg)} kg</td></tr>
+               <tr><th>@ por cabeça</th><td class="num">${perHead != null ? `${formatArrobas(perHead)} @` : "—"}</td></tr>
+               <tr><th>@ total</th><td class="num">${total != null ? `${formatArrobas(total)} @` : "—"}</td></tr>
+               <tr><th>Pesagens individuais</th><td class="num">${weights.length || "—"}</td></tr>
+             </tbody>
+           </table>
+           ${weights.length ? `
+             <table style="margin-top: 12pt;">
+               <thead><tr><th>#</th><th class="num">Peso</th></tr></thead>
+               <tbody>${indivRows}</tbody>
+             </table>
+           ` : ""}
+           ${printFooterHTML()}
+         </div>
+       `;
+     }
+
+     // =====================================================
      // 7e. Lotes — "..." action menu (Editar / Excluir)
      // =====================================================
      function buildLotActionMenuHTML(lot) {
@@ -5432,6 +5700,10 @@
            <button type="button" class="action-item pressable" data-menu-action="weigh-lot">
              <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
              Pesar lote
+           </button>
+           <button type="button" class="action-item pressable" data-menu-action="weighing-history">
+             <span class="action-icon" aria-hidden="true">${ICONS.history}</span>
+             Histórico de pesagens
            </button>
            ${isAggregate ? `
              <button type="button" class="action-item pressable" data-menu-action="movement">
@@ -5478,6 +5750,7 @@
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
            if (btn.dataset.menuAction === "weigh-lot") openLotWeighingSheet(lot);
+           else if (btn.dataset.menuAction === "weighing-history") openLotWeighingHistorySheet(lot);
            else if (btn.dataset.menuAction === "edit") openEditLotSheet(lot);
            else if (btn.dataset.menuAction === "delete") openDeleteLotSheet(lot);
            else if (btn.dataset.menuAction === "movement") openLotMovementSheet(lot);
