@@ -1228,6 +1228,14 @@
     padding-top: var(--space-3);
     border-top: 1px solid var(--border);
   }
+  .action-group-title {
+    padding: 0 var(--space-2);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
 
   .confirm-field {
     flex-direction: row !important;
@@ -5950,6 +5958,7 @@
        return `
          <div class="action-list">
            <div class="action-group">
+             <div class="action-group-title">Medição</div>
              <button type="button" class="action-item pressable" data-menu-action="weigh-lot">
                <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
                Pesar lote
@@ -5960,6 +5969,7 @@
              </button>
            </div>
            <div class="action-group">
+             <div class="action-group-title">Registros</div>
              ${isAggregate ? `
                <button type="button" class="action-item pressable" data-menu-action="movement">
                  <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
@@ -5990,12 +6000,11 @@
              </button>
            </div>
            <div class="action-group">
+             <div class="action-group-title">Gestão</div>
              <button type="button" class="action-item pressable" data-menu-action="edit">
                <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
                Editar
              </button>
-           </div>
-           <div class="action-group">
              <button type="button" class="action-item danger pressable" data-menu-action="delete">
                <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
                Excluir
