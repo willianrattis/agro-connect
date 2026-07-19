@@ -1738,6 +1738,23 @@
   .weighing-detail-table tbody tr:last-child td {
     border-bottom: none;
   }
+
+  /* Remove-row button inside the editable weighing table (compact, fits a
+     table cell — unlike a full-size action button). */
+  .btn-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: none;
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+    line-height: 1;
+  }
+  .btn-icon:hover { background: var(--accent-tint); color: var(--danger); }
 </style>
 </head>
 <body data-auth="loading">
@@ -5592,10 +5609,39 @@
        const d = toDateSafe(w.date);
        const { perHead, total } = weighingArrobas(lot, w);
        const weights = Array.isArray(w.individualWeights) ? w.individualWeights : [];
-       const grid = weights.length
-         ? `
+       const mostRecent = lotWeighingsFor(lot.id)[0];
+       const isEditable = mostRecent && mostRecent.id === w.id;
+
+       let grid;
+       if (isEditable) {
+         grid = `
+           <div class="field">
+             <label class="field-label">Pesagens individuais (<span id="weighing-edit-count">${weights.length}</span>)</label>
+             <p class="field-hint">Editar um valor recalcula o peso médio. As linhas são a amostra usada no cálculo — não representam animais específicos.</p>
+             <div class="weighing-detail-scroll">
+               <table class="weighing-detail-table">
+                 <thead><tr><th>#</th><th class="num">Peso (kg)</th><th></th></tr></thead>
+                 <tbody id="weighing-edit-body"></tbody>
+               </table>
+             </div>
+             <button type="button" id="weighing-edit-add" class="btn-secondary pressable" style="margin-top: var(--space-2);">+ Adicionar linha</button>
+           </div>
+           <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
+             <div class="mini-stat">
+               <p class="mini-value" id="weighing-edit-avg">${formatKg(w.avgWeightKg)} kg</p>
+               <p class="mini-label">Peso médio (recalculado)</p>
+             </div>
+             <div class="mini-stat">
+               <p class="mini-value" id="weighing-edit-arroba">—</p>
+               <p class="mini-label">@ por cabeça</p>
+             </div>
+           </div>
+         `;
+       } else if (weights.length) {
+         grid = `
            <div class="field">
              <label class="field-label">Pesagens individuais (${weights.length})</label>
+             <p class="field-hint">Somente a pesagem mais recente do lote pode ser editada.</p>
              <div class="weighing-detail-scroll">
                <table class="weighing-detail-table">
                  <thead>
@@ -5609,8 +5655,11 @@
                </table>
              </div>
            </div>
-         `
-         : `<p class="field-hint">Peso médio informado diretamente, sem pesagens individuais.</p>`;
+         `;
+       } else {
+         grid = `<p class="field-hint">Peso médio informado diretamente, sem pesagens individuais.</p>`;
+       }
+
        return `
          <div class="form-grid">
            <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
@@ -5636,6 +5685,10 @@
              </div>
            </div>
            ${grid}
+           ${isEditable ? `
+             <button type="button" id="weighing-edit-save" class="btn-primary pressable" hidden>Salvar alterações</button>
+             <p class="field-error" id="weighing-edit-error" role="alert"></p>
+           ` : ""}
            <button type="button" id="weighing-detail-print" class="btn-secondary pressable">
              <span class="action-icon" aria-hidden="true">${ICONS.print}</span>
              Imprimir esta pesagem
@@ -5655,6 +5708,160 @@
          ?.addEventListener("click", () => printHTML(buildWeighingDetailPrintHTML(lot, w)));
        document.getElementById("weighing-detail-back")
          ?.addEventListener("click", () => openLotWeighingHistorySheet(lot));
+
+       const mostRecent = lotWeighingsFor(lot.id)[0];
+       const isEditable = mostRecent && mostRecent.id === w.id;
+
+       if (isEditable) {
+         const yieldPct = resolveFarmYieldPct(lot);
+         let editedWeights = (Array.isArray(w.individualWeights) ? w.individualWeights : []).slice();
+         const original = JSON.stringify(editedWeights);
+
+         const bodyEl = document.getElementById("weighing-edit-body");
+         const countEl = document.getElementById("weighing-edit-count");
+         const avgEl = document.getElementById("weighing-edit-avg");
+         const arrobaEl = document.getElementById("weighing-edit-arroba");
+         const saveBtn = document.getElementById("weighing-edit-save");
+         const addBtn = document.getElementById("weighing-edit-add");
+         const errEl = document.getElementById("weighing-edit-error");
+
+         function currentAvg() {
+           const valid = editedWeights.filter((x) => Number.isFinite(x) && x > 0);
+           return valid.length ? valid.reduce((s, x) => s + x, 0) / valid.length : null;
+         }
+
+         function renderRows() {
+           bodyEl.innerHTML = editedWeights.map((kg, i) => `
+             <tr>
+               <td>#${i + 1}</td>
+               <td class="num">
+                 <input class="input" type="number" step="0.01" min="0" inputmode="decimal"
+                        data-role="edit-weight" data-index="${i}"
+                        value="${Number.isFinite(kg) ? kg : ""}" style="text-align: right; max-width: 120px;" />
+               </td>
+               <td class="num">
+                 <button type="button" class="btn-icon pressable" data-role="edit-remove" data-index="${i}" aria-label="Remover">✕</button>
+               </td>
+             </tr>
+           `).join("");
+           if (countEl) countEl.textContent = String(editedWeights.length);
+         }
+
+         function refreshDisplay() {
+           const avg = currentAvg();
+           if (avgEl) avgEl.textContent = avg != null ? `${formatKg(avg)} kg` : "—";
+           if (arrobaEl) {
+             arrobaEl.textContent = (avg != null && Number.isFinite(yieldPct) && yieldPct > 0)
+               ? `${formatArrobas((avg * yieldPct) / KG_PER_ARROBA)} @`
+               : "—";
+           }
+           const dirty = JSON.stringify(editedWeights) !== original;
+           if (saveBtn) saveBtn.hidden = !dirty;
+         }
+
+         renderRows();
+         refreshDisplay();
+
+         bodyEl.addEventListener("input", (e) => {
+           if (!e.target.matches('[data-role="edit-weight"]')) return;
+           const idx = parseInt(e.target.dataset.index, 10);
+           const val = parseFloat(e.target.value);
+           editedWeights[idx] = Number.isFinite(val) && val > 0 ? val : null;
+           refreshDisplay();
+         });
+
+         bodyEl.addEventListener("click", (e) => {
+           const btn = e.target.closest('[data-role="edit-remove"]');
+           if (!btn) return;
+           editedWeights.splice(parseInt(btn.dataset.index, 10), 1);
+           renderRows();
+           refreshDisplay();
+         });
+
+         addBtn?.addEventListener("click", () => {
+           editedWeights.push(null);
+           renderRows();
+           refreshDisplay();
+           const inputs = bodyEl.querySelectorAll('[data-role="edit-weight"]');
+           inputs[inputs.length - 1]?.focus();
+         });
+
+         saveBtn?.addEventListener("click", () => saveWeighingEdit(lot, w, editedWeights, saveBtn, errEl));
+       }
+     }
+
+     async function saveWeighingEdit(lot, w, editedWeights, saveBtn, errEl) {
+       if (!currentUid) return;
+       errEl.textContent = "";
+
+       const valid = editedWeights.filter((x) => Number.isFinite(x) && x > 0);
+       if (!valid.length) {
+         errEl.textContent = "Informe ao menos um peso válido.";
+         return;
+       }
+       const newAvg = valid.reduce((s, x) => s + x, 0) / valid.length;
+
+       saveBtn.disabled = true;
+       saveBtn.textContent = "Salvando…";
+
+       try {
+         const batch = writeBatch(db);
+         const weighingDate = toDateSafe(w.date);
+
+         // 1. Update the weighing session.
+         batch.update(doc(db, "lot_weighings", w.id), {
+           individualWeights: valid,
+           avgWeightKg: newAvg,
+           updatedAt: serverTimestamp(),
+         });
+
+         // 2. Delete previously propagated events for this session, then recreate
+         //    them with the new average over the lot's current active animals.
+         const isIndividual = (lot.trackingMode || "individual") === "individual";
+         if (isIndividual) {
+           const oldEvents = eventsCache.filter((ev) => ev.lotWeighingId === w.id);
+           oldEvents.forEach((ev) => batch.delete(doc(db, "events", ev.id)));
+
+           const activeAnimals = animalsCache.filter(
+             (a) => a.lotId === lot.id && (a.status || "active") === "active"
+           );
+           // TODO: > ~490 animals exceeds the 500-op batch limit — chunk as follow-up.
+           activeAnimals.forEach((animal) => {
+             const evRef = doc(collection(db, "events"));
+             batch.set(evRef, {
+               ownerId: currentUid,
+               type: "weighing",
+               animalId: animal.id,
+               lotId: lot.id,
+               date: weighingDate,
+               payload: { weightKg: newAvg },
+               source: "lot_weighing",
+               lotWeighingId: w.id,
+               createdAt: serverTimestamp(),
+             });
+           });
+         }
+
+         // 3. Re-anchor the lot — this is the most recent weighing by construction.
+         batch.update(doc(db, "lots", lot.id), {
+           avgWeightKg: newAvg,
+           lastWeighingDate: weighingDate,
+           updatedAt: serverTimestamp(),
+         });
+
+         await batch.commit();
+         showToast("Pesagem atualizada.");
+         // Reopen the detail fresh so the new baseline becomes the "original".
+         const updated = { ...w, individualWeights: valid, avgWeightKg: newAvg };
+         openLotWeighingDetailSheet(lot, updated);
+       } catch (err) {
+         console.warn("[Agro Connect] Falha ao editar pesagem:", err?.code ?? err);
+         errEl.textContent = err?.code === "permission-denied"
+           ? "Sem permissão para salvar."
+           : "Não foi possível salvar. Tente novamente.";
+         saveBtn.disabled = false;
+         saveBtn.textContent = "Salvar alterações";
+       }
      }
 
      function printFooterHTML() {
