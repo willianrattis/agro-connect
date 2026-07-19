@@ -7235,7 +7235,16 @@
 
      // --- "Nova movimentação" form ---
      function buildMovementFormHTML(lot) {
-       const typeOptions = MOVEMENT_TYPES.map((t) => `<option value="${t.value}">${t.label}</option>`).join("");
+       const MOVEMENT_TYPE_GROUPS = [
+         { label: "Entradas", values: ["entry", "birth", "confinement_return"] },
+         { label: "Saídas",   values: ["sale", "shipment", "death", "confinement_out"] },
+         { label: "Outros",   values: ["adjustment"] },
+       ];
+       const typeOptions = MOVEMENT_TYPE_GROUPS
+         .map((g) => `<optgroup label="${g.label}">${
+           g.values.map((v) => `<option value="${v}">${MOVEMENT_TYPE_LABEL[v]}</option>`).join("")
+         }</optgroup>`)
+         .join("");
        const confinamentoOptions = confinementsCache
          .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)
          .join("");
