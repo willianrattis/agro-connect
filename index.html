@@ -1702,6 +1702,42 @@
     .print-doc td.num, .print-doc th.num { text-align: right; }
     .print-doc .print-foot { margin-top: 16pt; font-size: 8pt; color: #666; }
   }
+
+  /* Weighing detail sheet — compact scrollable table for individual
+     weights, capped so the print/back buttons stay visible below it. */
+  .weighing-detail-scroll {
+    max-height: 40vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .weighing-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+  }
+  .weighing-detail-table th,
+  .weighing-detail-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .weighing-detail-table th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .weighing-detail-table td.num,
+  .weighing-detail-table th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .weighing-detail-table tbody tr:last-child td {
+    border-bottom: none;
+  }
 </style>
 </head>
 <body data-auth="loading">
@@ -5560,13 +5596,17 @@
          ? `
            <div class="field">
              <label class="field-label">Pesagens individuais (${weights.length})</label>
-             <div class="card-stats" style="grid-template-columns: repeat(3, 1fr);">
-               ${weights.map((kg, i) => `
-                 <div class="mini-stat">
-                   <p class="mini-value">${formatKg(kg)}</p>
-                   <p class="mini-label">#${i + 1}</p>
-                 </div>
-               `).join("")}
+             <div class="weighing-detail-scroll">
+               <table class="weighing-detail-table">
+                 <thead>
+                   <tr><th>#</th><th class="num">Peso</th></tr>
+                 </thead>
+                 <tbody>
+                   ${weights.map((kg, i) => `
+                     <tr><td>#${i + 1}</td><td class="num">${formatKg(kg)} kg</td></tr>
+                   `).join("")}
+                 </tbody>
+               </table>
              </div>
            </div>
          `
