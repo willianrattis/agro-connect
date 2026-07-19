@@ -1,0 +1,169 @@
+  /* Financeiro: year stepper + month chips + 3-up summary + amount coloring */
+  .year-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .year-nav-btn {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--fs-lg);
+    line-height: 1;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .year-nav-btn:hover:not(:disabled) { background: rgba(30, 70, 32, 0.08); }
+  .year-nav-btn:disabled { color: var(--text-muted); opacity: 0.4; }
+
+  .year-label {
+    min-width: 4.5ch;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .month-selector {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    padding-bottom: var(--space-1);
+    margin-bottom: var(--space-4);
+    scrollbar-width: none;
+  }
+  .month-selector::-webkit-scrollbar { display: none; }
+
+  @media (hover: hover) and (pointer: fine) {
+    .month-selector { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .month-selector::-webkit-scrollbar { display: block; height: 6px; }
+    .month-selector::-webkit-scrollbar-track { background: transparent; }
+    .month-selector::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: var(--radius-full);
+    }
+  }
+
+  .month-chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .month-chip.is-active {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: var(--on-brand);
+  }
+  .month-chip.in-range {
+    background: var(--accent-tint);
+    border-color: var(--accent-tint);
+    color: var(--brand);
+  }
+
+  .summary-strip.fin-summary {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .stat-value.fin-positive, .tx-amount.fin-positive { color: var(--success); }
+  .stat-value.fin-negative, .tx-amount.fin-negative { color: var(--danger); }
+
+
+  /* Financeiro: transaction list, grouped by day */
+  .tx-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .tx-day-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+  }
+
+  .tx-day-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .tx-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .tx-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .tx-tags {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .tx-category-chip { background: var(--accent-tint); color: var(--brand); }
+  .tx-link-chip {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .tx-desc {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tx-amount {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-base);
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .tx-row-end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+  }
+

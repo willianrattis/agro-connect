@@ -1,0 +1,72 @@
+  /* =====================================================
+     1. Design tokens (semantic, dark-mode ready)
+     ===================================================== */
+  :root {
+    /* Brand & feedback */
+    --brand: #1E4620;          /* deep forest green */
+    --brand-strong: #143317;
+    --accent: #2E7D32;         /* vivid pasture green — AA with white text */
+    --accent-tint: #E2F1DC;
+    --danger: #B3261E;
+    --success: #2E7D32;
+
+    /* Surfaces & text (warm sand neutrals, not gray) */
+    --bg: #F5F1E8;
+    --surface: #FFFEFA;
+    --surface-glass: rgba(247, 243, 234, 0.78);
+    --border: rgba(30, 70, 32, 0.14);
+    --text: #1A2418;
+    --text-muted: #56604F;
+    --on-brand: #FFFFFF;
+
+    /* Category chips (tinted bg + dark same-hue text) */
+    --chip-bezerro-bg: #FBEED3;  --chip-bezerro-text: #6F4E0E;
+    --chip-recria-bg:  #E3F2DC;  --chip-recria-text:  #2C5A2E;
+    --chip-engorda-bg: #DBEFE4;  --chip-engorda-text: #175243;
+    --chip-matriz-bg:  #F0E4D7;  --chip-matriz-text:  #6B4423;
+
+    /* Spacing scale */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+
+    /* Radii */
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 20px;
+    --radius-full: 999px;
+
+    /* Layered shadows */
+    --shadow-sm: 0 1px 2px rgba(20, 35, 18, 0.06), 0 1px 1px rgba(20, 35, 18, 0.04);
+    --shadow-md: 0 2px 4px rgba(20, 35, 18, 0.05), 0 10px 28px rgba(20, 35, 18, 0.09);
+    --shadow-lg: 0 4px 10px rgba(20, 35, 18, 0.08), 0 18px 44px rgba(20, 35, 18, 0.14);
+
+    /* Glass */
+    --blur: 14px;
+
+    /* Fluid typography */
+    --fs-xs: clamp(0.6875rem, 0.66rem + 0.15vw, 0.75rem);
+    --fs-sm: clamp(0.8125rem, 0.78rem + 0.2vw, 0.875rem);
+    --fs-base: clamp(0.9375rem, 0.9rem + 0.25vw, 1rem);
+    --fs-lg: clamp(1.0625rem, 1rem + 0.4vw, 1.1875rem);
+    --fs-xl: clamp(1.25rem, 1.15rem + 0.6vw, 1.5rem);
+    --fs-display: clamp(1.625rem, 1.4rem + 1.2vw, 2.125rem);
+
+    --font-display: "Sora", system-ui, sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+    /* Layout */
+    --container-max: 680px;
+    --tabbar-height: 64px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /*
+    Future dark mode: redefine ONLY the semantic surface/text tokens here.
+    @media (prefers-color-scheme: dark) { :root { --bg: …; --surface: …; } }
+  */
+

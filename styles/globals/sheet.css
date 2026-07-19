@@ -1,0 +1,132 @@
+  /* =====================================================
+      13. Bottom sheet / modal — native <dialog>
+      Centering, background scroll-lock, focus trap and ESC are all native
+      <dialog> behavior; only enter/exit animation is hand-rolled (via the
+      `.is-open` class, toggled a frame after showModal() so the transition
+      runs from the closed state below/scaled-down).
+      ===================================================== */
+   dialog.sheet {
+     position: fixed;
+     inset: 0;
+     border: 0;
+     padding: 0;
+     background: var(--surface);
+     color: inherit;
+     box-shadow: var(--shadow-lg);
+     display: flex;
+     flex-direction: column;
+     overflow: hidden;
+     /* Mobile: bottom sheet */
+     margin: auto auto 0;
+     width: 100%;
+     max-width: none;
+     max-height: 92dvh;
+     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+     transform: translateY(100%);
+     transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+   }
+   dialog.sheet.is-open {
+     transform: translateY(0);
+   }
+   dialog.sheet::backdrop {
+     background: rgba(20, 35, 18, 0.45);
+     -webkit-backdrop-filter: blur(6px) saturate(1.4);
+     backdrop-filter: blur(6px) saturate(1.4);
+     opacity: 0;
+     transition: opacity 0.22s ease-out;
+   }
+   dialog.sheet.is-open::backdrop {
+     opacity: 1;
+   }
+   dialog.sheet:not([open]) {
+     display: none;
+   }
+
+   /* Drag handle (mobile only) */
+   .sheet-drag-region {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     flex: none;
+     padding: var(--space-3) 0 var(--space-1);
+     cursor: grab;
+     touch-action: none;
+   }
+   .sheet-drag-region:active { cursor: grabbing; }
+   .sheet-drag-bar {
+     width: 36px;
+     height: 4px;
+     border-radius: var(--radius-full);
+     background: rgba(30, 70, 32, 0.22);
+   }
+
+   .sheet-header {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: var(--space-3);
+     padding: var(--space-2) var(--space-4) var(--space-3);
+     border-bottom: 1px solid var(--border);
+     flex: none;
+   }
+   .sheet-title {
+     font-family: var(--font-display);
+     font-size: var(--fs-lg);
+     font-weight: 700;
+     color: var(--brand);
+     letter-spacing: -0.01em;
+     margin: 0;
+   }
+   .sheet-close {
+     display: grid;
+     place-items: center;
+     width: 44px;
+     height: 44px;
+     border-radius: var(--radius-full);
+     color: var(--text-muted);
+     flex: none;
+     transition: background-color 0.15s ease, color 0.15s ease;
+   }
+   .sheet-close:hover {
+     background: rgba(30, 70, 32, 0.08);
+     color: var(--text);
+   }
+
+   .sheet-body {
+     flex: 1 1 auto;
+     overflow-y: auto;
+     overscroll-behavior-y: contain;
+     padding: var(--space-4);
+     -webkit-overflow-scrolling: touch;
+   }
+
+   /* Desktop ≥768px: centered dialog, sized to content up to max-height.
+      Native <dialog> centers via margin:auto within its fixed inset:0 box —
+      no transform-translate centering, so a transform is free to use for
+      the enter/exit scale animation alone. */
+   @media (min-width: 768px) {
+     dialog.sheet {
+       margin: auto;
+       width: min(94vw, 720px);
+       max-width: none;
+       max-height: 85vh;
+       border-radius: var(--radius-lg);
+       transform: scale(0.96);
+       opacity: 0;
+       transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                   opacity 0.22s ease-out;
+     }
+     dialog.sheet.is-open {
+       transform: scale(1);
+       opacity: 1;
+     }
+     .sheet-drag-region { display: none; }
+   }
+
+   /* Background scroll-lock is native: a modal <dialog> already blocks
+      interaction with the rest of the page; this just stops the page
+      underneath from scrolling too. */
+   html:has(dialog.sheet[open]) {
+     overflow: hidden;
+   }
+

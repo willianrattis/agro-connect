@@ -1,0 +1,320 @@
+  /* =====================================================
+     5. Summary strip (stat tiles)
+     ===================================================== */
+  .summary-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+
+  .stat-tile {
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-4);
+    box-shadow: var(--shadow-md);
+  }
+
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: var(--fs-display);
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--brand);
+    letter-spacing: -0.02em;
+  }
+
+  .stat-value small {
+    font-size: 0.5em;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .stat-label {
+    margin-top: var(--space-1);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+
+  /* =====================================================
+     6. Cattle cards
+     ===================================================== */
+  .herd-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-md);
+  }
+
+  .card.enter {
+    animation: card-in 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .card-top-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .card-menu-btn {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-full);
+    color: var(--text-muted);
+    flex: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .card-menu-btn:hover { background: rgba(30, 70, 32, 0.08); color: var(--text); }
+
+  .ear-tag {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .ear-tag .hash { color: var(--text-muted); font-weight: 600; }
+
+  .chip {
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .chip-bezerro { background: var(--chip-bezerro-bg); color: var(--chip-bezerro-text); }
+  .chip-recria  { background: var(--chip-recria-bg);  color: var(--chip-recria-text); }
+  .chip-engorda { background: var(--chip-engorda-bg); color: var(--chip-engorda-text); }
+  .chip-matriz  { background: var(--chip-matriz-bg);  color: var(--chip-matriz-text); }
+
+  .card-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .mini-stat .mini-value {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-base);
+  }
+  .mini-stat .mini-label {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .mini-stat .mini-value.is-meta {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+  }
+
+  .confinement-strip {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--chip-engorda-bg);
+    color: var(--chip-engorda-text);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-sm);
+    line-height: 1.4;
+  }
+  .confinement-strip svg { flex: none; margin-top: 1px; }
+  .confinement-strip strong { font-weight: 700; }
+
+  .sale-result {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  .sale-result strong { color: var(--brand); font-weight: 700; }
+
+  /* =====================================================
+     7. Skeleton loading (shimmer)
+     ===================================================== */
+  .skeleton { pointer-events: none; }
+
+  .sk-block {
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+      100deg,
+      rgba(30, 70, 32, 0.07) 40%,
+      rgba(30, 70, 32, 0.13) 50%,
+      rgba(30, 70, 32, 0.07) 60%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+  @keyframes shimmer {
+    to { background-position: -200% 0; }
+  }
+
+  .sk-tag   { width: 42%; height: 22px; }
+  .sk-chip  { width: 72px; height: 22px; border-radius: var(--radius-full); }
+  .sk-stat  { height: 34px; }
+
+  /* =====================================================
+     8. Empty states (placeholder views)
+     ===================================================== */
+  .empty-state {
+    margin-top: var(--space-6);
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-7) var(--space-5);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .empty-state .icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius-full);
+    background: var(--accent-tint);
+    color: var(--brand);
+  }
+  .empty-state h3 {
+    font-family: var(--font-display);
+    font-size: var(--fs-lg);
+    color: var(--brand);
+  }
+  .empty-state p {
+    margin-top: var(--space-2);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+
+
+  /* Animal detail sheet */
+  .detail-section {
+    margin-top: var(--space-5);
+  }
+  .detail-section-title {
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+  }
+  .result-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+  .result-tile {
+    background: var(--accent-tint);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    text-align: center;
+  }
+  .result-tile .result-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--fs-lg);
+    color: var(--brand);
+  }
+  .result-tile .result-label {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+  .weighing-list { display: flex; flex-direction: column; gap: var(--space-2); }
+  .weighing-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: var(--fs-sm);
+  }
+  .weighing-row .weighing-gain { color: var(--text-muted); font-size: var(--fs-xs); }
+
+  /* Pins date/peso médio + @ stats + count hint to the top of the
+     "Pesar lote" sheet while the paginated individual inputs scroll under it. */
+  .lot-weighing-sticky-top {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 2;
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+
+  /* Weighing detail sheet — compact scrollable table for individual
+     weights, capped so the print/back buttons stay visible below it. */
+  .weighing-detail-scroll {
+    max-height: 40vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .weighing-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-sm);
+  }
+  .weighing-detail-table th,
+  .weighing-detail-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .weighing-detail-table th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .weighing-detail-table td.num,
+  .weighing-detail-table th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .weighing-detail-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
