@@ -701,6 +701,7 @@
      ===================================================== */
   @media (min-width: 768px) {
     body { padding-left: 96px; }
+    body:not([data-auth="in"]) { padding-left: 0; }
 
     .tabbar {
       inset: 0 auto 0 0;
@@ -912,6 +913,7 @@
   body[data-auth="loading"] .view,
   body[data-auth="error"]   .view { display: none; }   /* no data flash before auth resolves */
   body:not([data-auth="in"]) .fab { display: none; }   /* FAB is a protected action */
+  body:not([data-auth="in"]) .tabbar { display: none; }
 
   /* =====================================================
       13. Bottom sheet / modal — native <dialog>
