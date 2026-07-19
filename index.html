@@ -171,6 +171,35 @@
     box-shadow: var(--shadow-sm);
   }
 
+  .sync-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: var(--accent-tint);
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    white-space: nowrap;
+    flex: none;
+  }
+  .sync-indicator[hidden] { display: none; }
+
+  .sync-indicator-icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    animation: sync-spin 1s linear infinite;
+  }
+  @keyframes sync-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 380px) {
+    .sync-indicator-text { display: none; }
+  }
+
   /* =====================================================
      4. Main / views
      ===================================================== */
@@ -1693,6 +1722,7 @@
     .session-menu, .toast, .toast.leaving { animation: none; }
     dialog.sheet, dialog.sheet::backdrop { transition: none; }
     .slaughter-progress-fill { transition: none; }
+    .sync-indicator-icon { animation: none; }
   }
 
   /* =====================================================
@@ -1785,6 +1815,12 @@
         </span>
         Agro Connect
       </h1>
+      <div class="sync-indicator" id="sync-indicator" hidden title="Sincronizando">
+        <svg class="sync-indicator-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+        </svg>
+        <span class="sync-indicator-text">Sincronizando…</span>
+      </div>
       <div class="session" id="session">
         <!-- Loading: header skeleton while initial auth resolves (no UI flash) -->
         <div class="session-skeleton" aria-hidden="true">
@@ -2114,7 +2150,8 @@
       onAuthStateChanged, signOut,
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
     import {
-      getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
+      getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+      doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
       collection, addDoc, query, where, orderBy, onSnapshot, getDocs, writeBatch,
     } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
@@ -2130,7 +2167,19 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+
+    // Persistent local cache (IndexedDB): cached snapshots render instantly
+    // on cold start, and the SDK reconciles with the server automatically.
+    // Falls back to memory-only when unsupported (e.g. private browsing).
+    let db;
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch (err) {
+      console.warn("[Agro Connect] Persistência local indisponível:", err?.code ?? err);
+      db = getFirestore(app); // memory-only fallback (private mode / unsupported browser)
+    }
 
     const googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: "select_account" });
@@ -2490,6 +2539,7 @@
     // =====================================================
     // 2. DOM references
     // =====================================================
+    const syncIndicatorEl = document.getElementById("sync-indicator");
     const herdListEl = document.getElementById("herd-list");
     const herdCountEl = document.getElementById("herd-count");
     const lotListEl = document.getElementById("lot-list");
@@ -9729,6 +9779,18 @@
     let unsubMovements = null;
     let unsubLotWeighings = null;
 
+    // Collections whose latest snapshot is cache-only (metadata.fromCache);
+    // drives the header "Sincronizando" indicator.
+    const syncPending = new Set();
+    function updateSyncState(name, fromCache) {
+      if (fromCache) syncPending.add(name);
+      else syncPending.delete(name);
+      const show = syncPending.size > 0 && currentUid != null;
+      syncIndicatorEl.hidden = !show;
+      if (show) syncIndicatorEl.setAttribute("aria-hidden", "false");
+      else syncIndicatorEl.removeAttribute("aria-hidden");
+    }
+
     // Indicadores needs all four caches to have resolved at least once before
     // it can tell "no data yet" apart from "still loading" (skeleton vs. hint).
     let loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
@@ -9751,7 +9813,9 @@
       );
       unsubAnimals = onSnapshot(
         animalsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("animals", snap.metadata.fromCache);
           animalsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           if (animalsCache.length === 0) renderHerdEmpty();
           else renderHerd(animalsCache);
@@ -9761,6 +9825,7 @@
           renderIndicadores();
         },
         (err) => {
+          updateSyncState("animals", false);
           console.warn("[Agro Connect] animals onSnapshot error:", err?.code ?? err);
           renderHerdError(err);
           loadedFlags.animals = true;
@@ -9775,7 +9840,9 @@
       );
       unsubLots = onSnapshot(
         lotsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("lots", snap.metadata.fromCache);
           lotsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           renderLots();
           renderHerdSummary();
@@ -9786,6 +9853,7 @@
           renderIndicadores();
         },
         (err) => {
+          updateSyncState("lots", false);
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
           lotsCache = [];
           renderLotsError();
@@ -9807,12 +9875,15 @@
       );
       unsubMovements = onSnapshot(
         movementsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("movements", snap.metadata.fromCache);
           movementsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           refreshLotDetailSheetIfOpen();
           renderIndicadores();
         },
         (err) => {
+          updateSyncState("movements", false);
           console.warn("[Agro Connect] movements onSnapshot error:", err?.code ?? err);
           movementsCache = [];
           renderIndicadores();
@@ -9828,10 +9899,13 @@
       );
       unsubLotWeighings = onSnapshot(
         lotWeighingsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("lot_weighings", snap.metadata.fromCache);
           lotWeighingsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         },
         (err) => {
+          updateSyncState("lot_weighings", false);
           console.warn("[Agro Connect] lot_weighings onSnapshot error:", err?.code ?? err);
           lotWeighingsCache = [];
         }
@@ -9846,7 +9920,9 @@
       );
       unsubTransactions = onSnapshot(
         transactionsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("transactions", snap.metadata.fromCache);
           transactionsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           if (animalsCache.length) renderHerd(animalsCache);
           renderMonthChips();
@@ -9855,6 +9931,7 @@
           renderIndicadores();
         },
         (err) => {
+          updateSyncState("transactions", false);
           console.warn("[Agro Connect] transactions onSnapshot error:", err?.code ?? err);
           transactionsCache = [];
           renderFinError();
@@ -9872,12 +9949,15 @@
       );
       unsubEvents = onSnapshot(
         eventsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("events", snap.metadata.fromCache);
           eventsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           loadedFlags.events = true;
           renderIndicadores();
         },
         (err) => {
+          updateSyncState("events", false);
           console.warn("[Agro Connect] events onSnapshot error:", err?.code ?? err);
           eventsCache = [];
           showToast("Não foi possível carregar os eventos. Verifique sua conexão.");
@@ -9888,7 +9968,9 @@
 
       unsubSettings = onSnapshot(
         doc(db, "settings", uid),
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("settings", snap.metadata.fromCache);
           settingsCache = snap.exists() ? snap.data() : {};
           renderSettingsCard();
           loadedFlags.settings = true;
@@ -9896,6 +9978,7 @@
           renderIndicadores();
         },
         (err) => {
+          updateSyncState("settings", false);
           console.warn("[Agro Connect] settings onSnapshot error:", err?.code ?? err);
           settingsCache = {};
           showToast("Não foi possível carregar suas configurações. Verifique sua conexão.");
@@ -9911,7 +9994,9 @@
       );
       unsubProperties = onSnapshot(
         propertiesQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("properties", snap.metadata.fromCache);
           propertiesCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           renderPropertiesCard();
           renderSettingsCard();
@@ -9921,6 +10006,7 @@
           renderEstoque();
         },
         (err) => {
+          updateSyncState("properties", false);
           console.warn("[Agro Connect] properties onSnapshot error:", err?.code ?? err);
           propertiesCache = [];
           renderSettingsCard();
@@ -9937,11 +10023,14 @@
       );
       unsubSuppliers = onSnapshot(
         suppliersQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("suppliers", snap.metadata.fromCache);
           suppliersCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           renderSuppliersCard();
         },
         (err) => {
+          updateSyncState("suppliers", false);
           console.warn("[Agro Connect] suppliers onSnapshot error:", err?.code ?? err);
           suppliersCache = [];
         }
@@ -9954,10 +10043,13 @@
       );
       unsubConfinements = onSnapshot(
         confinementsQuery,
+        { includeMetadataChanges: true },
         (snap) => {
+          updateSyncState("confinements", snap.metadata.fromCache);
           confinementsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         },
         (err) => {
+          updateSyncState("confinements", false);
           console.warn("[Agro Connect] confinements onSnapshot error:", err?.code ?? err);
           confinementsCache = [];
         }
@@ -10008,6 +10100,9 @@
       unsubMovements = null;
       unsubLotWeighings = null;
       currentUid = null;
+      syncPending.clear();
+      syncIndicatorEl.hidden = true;
+      syncIndicatorEl.removeAttribute("aria-hidden");
       lotsCache = [];
       animalsCache = [];
       transactionsCache = [];
