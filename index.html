@@ -799,6 +799,13 @@
     color: var(--text-muted);
     overflow-wrap: anywhere;
   }
+  .session-shared-badge {
+    display: block;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .session-shared-badge[hidden] { display: none; }
 
   .session-menu-item {
     display: flex;
@@ -1838,6 +1845,7 @@
             <div class="session-menu-head">
               <p class="session-name" id="menu-name"></p>
               <p class="session-email" id="menu-email"></p>
+              <span class="session-shared-badge" id="menu-shared-badge" hidden>Conta compartilhada</span>
             </div>
             <button type="button" class="session-menu-item" id="btn-signout" role="menuitem">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -9756,7 +9764,14 @@
     // 8. Firestore listeners (animals + lots + transactions + settings)
     //    — lifecycle tied to auth
     // =====================================================
+    // currentAuthUid = the authenticated Firebase user; currentUid = the
+    // active account's owner uid (the data scope for all queries/writes).
+    // They differ when the signed-in user is operating in a shared account.
+    let currentAuthUid = null;
     let currentUid = null;
+    function isSharedSession() {
+      return currentAuthUid != null && currentUid != null && currentAuthUid !== currentUid;
+    }
     let lotsCache = [];
     let animalsCache = [];
     // transactionsCache is declared earlier (near renderMonthChips) — see
@@ -10100,6 +10115,7 @@
       unsubMovements = null;
       unsubLotWeighings = null;
       currentUid = null;
+      currentAuthUid = null;
       syncPending.clear();
       syncIndicatorEl.hidden = true;
       syncIndicatorEl.removeAttribute("aria-hidden");
@@ -10156,6 +10172,7 @@
     const sessionMenu = document.getElementById("session-menu");
     const menuName = document.getElementById("menu-name");
     const menuEmail = document.getElementById("menu-email");
+    const menuSharedBadge = document.getElementById("menu-shared-badge");
     const signoutBtn = document.getElementById("btn-signout");
     const toastRegion = document.getElementById("toast-region");
 
@@ -10262,6 +10279,30 @@
       }
     }
 
+    // --- Resolve which account (owner uid) the signed-in user operates in ---
+    // A member's email being listed in an owner's accounts/{ownerUid}.memberEmails
+    // routes all data access to that owner's uid; otherwise the user is their
+    // own account owner. Discovery failures (offline, permission) must never
+    // lock the user out of their own data — fall back to their own uid.
+    async function resolveActiveAccount(user) {
+      const email = (user.email || "").trim().toLowerCase();
+      if (!email) return user.uid;
+      try {
+        const snap = await getDocs(
+          query(collection(db, "accounts"), where("memberEmails", "array-contains", email))
+        );
+        if (!snap.empty) return snap.docs[0].id;
+        return user.uid;
+      } catch (err) {
+        console.warn("[Agro Connect] Falha ao resolver conta compartilhada:", err?.code ?? err);
+        return user.uid;
+      }
+    }
+
+    function updateSharedSessionBadge() {
+      menuSharedBadge.hidden = !isSharedSession();
+    }
+
     // --- Complete any redirect-based sign-in on load ---
     getRedirectResult(auth).catch((err) => {
       showToast(friendlyAuthError(err?.code));
@@ -10290,32 +10331,41 @@
       window.location.reload();
     });
 
+    async function handleAuthStateChanged(user) {
+      window.clearTimeout(authInitTimeout);
+      if (user) {
+        avatarFallback.textContent = initialOf(user);
+        if (user.photoURL) {
+          avatarFallback.hidden = true;
+          avatarImg.hidden = false;
+          avatarImg.src = user.photoURL;
+        } else {
+          avatarImg.hidden = true;
+          avatarFallback.hidden = false;
+        }
+        menuName.textContent = user.displayName || "Produtor(a)";
+        menuEmail.textContent = user.email || "";
+        document.body.dataset.auth = "in";
+        currentAuthUid = user.uid;
+        upsertUserDoc(user);
+        const accountId = await resolveActiveAccount(user);
+        // A sign-out (or a different user signing in) may have raced the
+        // await above — abort so we don't start listeners for a stale user.
+        if (auth.currentUser?.uid !== user.uid) return;
+        startFirestoreListeners(accountId);
+        updateSharedSessionBadge();
+      } else {
+        setMenu(false);
+        avatarImg.removeAttribute("src");
+        document.body.dataset.auth = "out";
+        stopFirestoreListeners();
+        updateSharedSessionBadge();
+      }
+    }
+
     onAuthStateChanged(
       auth,
-      (user) => {
-        window.clearTimeout(authInitTimeout);
-        if (user) {
-          avatarFallback.textContent = initialOf(user);
-          if (user.photoURL) {
-            avatarFallback.hidden = true;
-            avatarImg.hidden = false;
-            avatarImg.src = user.photoURL;
-          } else {
-            avatarImg.hidden = true;
-            avatarFallback.hidden = false;
-          }
-          menuName.textContent = user.displayName || "Produtor(a)";
-          menuEmail.textContent = user.email || "";
-          document.body.dataset.auth = "in";
-          upsertUserDoc(user);
-          startFirestoreListeners(user.uid);
-        } else {
-          setMenu(false);
-          avatarImg.removeAttribute("src");
-          document.body.dataset.auth = "out";
-          stopFirestoreListeners();
-        }
-      },
+      (user) => { handleAuthStateChanged(user); },
       (err) => {
         console.warn("[Agro Connect] Auth state error:", err?.code ?? err);
         window.clearTimeout(authInitTimeout);
