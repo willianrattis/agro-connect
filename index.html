@@ -3514,10 +3514,27 @@
        const dragRegion = document.getElementById("sheet-drag");
 
        let _onClose = null;
+       let _onBack = null;
        let _isOpen = false;
        let _closing = false;
        let _fallbackTimer = null;
        let _onTransitionEnd = null;
+
+       // Swaps the header button between "back" (child sheet, returns to
+       // parent) and "close" (root sheet, closes to the base screen).
+       const CLOSE_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+           <path d="M18 6 6 18"/><path d="M6 6l12 12"/>
+         </svg>`;
+       const BACK_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>`;
+       function applyHeaderAffordance() {
+         if (_onBack) {
+           closeBtn.innerHTML = BACK_ICON;
+           closeBtn.setAttribute("aria-label", "Voltar");
+         } else {
+           closeBtn.innerHTML = CLOSE_ICON;
+           closeBtn.setAttribute("aria-label", "Fechar");
+         }
+       }
 
        // Cancels any in-flight close (pending transitionend listener + fallback
        // timer) without touching _isOpen. Used both when a new open() interrupts
@@ -3613,10 +3630,12 @@
        // no-ops on others — neither path should be relied on), and we cancel
        // any pending close so its stale finish() can't fire later and call
        // sheet.close() on the sheet we just swapped in.
-       function openSheet({ title = "", content = "", onClose = null } = {}) {
+       function openSheet({ title = "", content = "", onClose = null, onBack = null } = {}) {
          cancelPendingClose();
          _closing = false;
          _onClose = onClose;
+         _onBack = onBack;
+         applyHeaderAffordance();
 
          titleEl.textContent = title;
          if (typeof content === "string") {
@@ -3680,11 +3699,26 @@
          _fallbackTimer = setTimeout(finishClose, FALLBACK_MS);
        }
 
-       // -- Close via X button --
-       closeBtn.addEventListener("click", closeSheet);
+       // Lets a child sheet register where "back" should go without going
+       // through a full openSheet() call (used right after opening it).
+       function setBack(fn) {
+         _onBack = typeof fn === "function" ? fn : null;
+         applyHeaderAffordance();
+       }
+
+       // -- Header button: back to parent when set, otherwise full close --
+       closeBtn.addEventListener("click", () => {
+         if (_onBack) {
+           const back = _onBack;
+           _onBack = null;
+           back();
+           return;
+         }
+         closeSheet();
+       });
 
        // Expose public API
-       return { open: openSheet, close: closeSheet };
+       return { open: openSheet, close: closeSheet, setBack };
      })();
 
      // Make globally available for other modules
@@ -6016,17 +6050,18 @@
 
      function openLotActionSheet(lot) {
        Sheet.open({ title: `Ações · ${escapeHtml(lot.name)}`, content: buildLotActionMenuHTML(lot) });
+       const back = () => openLotActionSheet(lot);
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
-           if (btn.dataset.menuAction === "weigh-lot") openLotWeighingSheet(lot);
-           else if (btn.dataset.menuAction === "weighing-history") openLotWeighingHistorySheet(lot);
-           else if (btn.dataset.menuAction === "edit") openEditLotSheet(lot);
-           else if (btn.dataset.menuAction === "delete") openDeleteLotSheet(lot);
-           else if (btn.dataset.menuAction === "movement") openLotMovementSheet(lot);
-           else if (btn.dataset.menuAction === "wean") openLotWeaningSheet(lot);
-           else if (btn.dataset.menuAction === "calving") openLotCalvingSheet(lot);
-           else if (btn.dataset.menuAction === "finishing") openLotFinishingSheet(lot);
-           else if (btn.dataset.menuAction === "transfer") openTransferSheet(lot);
+           if (btn.dataset.menuAction === "weigh-lot") { openLotWeighingSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "weighing-history") { openLotWeighingHistorySheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "edit") { openEditLotSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "delete") { openDeleteLotSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "movement") { openLotMovementSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "wean") { openLotWeaningSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "calving") { openLotCalvingSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "finishing") { openLotFinishingSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "transfer") { openTransferSheet(lot); Sheet.setBack(back); }
            else Sheet.close();
          });
        });
