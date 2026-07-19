@@ -1,0 +1,45 @@
+    // =====================================================
+    // 2. DOM references
+    // =====================================================
+    export const syncIndicatorEl = document.getElementById("sync-indicator");
+    export const herdListEl = document.getElementById("herd-list");
+    export const herdCountEl = document.getElementById("herd-count");
+    export const lotListEl = document.getElementById("lot-list");
+    export const lotCountEl = document.getElementById("lot-count");
+    export const statHeadEl = document.getElementById("stat-head");
+    export const statArrobasEl = document.getElementById("stat-arrobas");
+    export const fabBtn = document.getElementById("fab-add");
+    export const tabs = Array.from(document.querySelectorAll(".tab"));
+    export const views = Array.from(document.querySelectorAll(".view"));
+
+    export const yearPrevBtn = document.getElementById("year-prev");
+    export const yearNextBtn = document.getElementById("year-next");
+    export const yearLabelEl = document.getElementById("year-label");
+    export const monthSelectorEl = document.getElementById("month-selector");
+    export const finReceitasEl = document.getElementById("fin-receitas");
+    export const finDespesasEl = document.getElementById("fin-despesas");
+    export const finSaldoEl = document.getElementById("fin-saldo");
+    export const finCountEl = document.getElementById("fin-count");
+    export const txListEl = document.getElementById("tx-list");
+
+    export const settingsTargetValueEl = document.getElementById("settings-target-value");
+    export const settingsFarmYieldValueEl = document.getElementById("settings-farmyield-value");
+    export const settingsConfYieldValueEl = document.getElementById("settings-confyield-value");
+    export const settingsEditBtn3 = document.getElementById("settings-edit-btn-3");
+
+    export const accountMembersCardEl = document.getElementById("account-members-card");
+    export const accountMembersListEl = document.getElementById("account-members-list");
+    export const accountMemberAddBtn = document.getElementById("account-member-add-btn");
+    export const sharedAccessCardEl = document.getElementById("shared-access-card");
+    export const sharedAccessEmailEl = document.getElementById("shared-access-email");
+
+    export const propertiesCountValueEl = document.getElementById("properties-count-value");
+    export const propertiesAreaValueEl = document.getElementById("properties-area-value");
+    export const propertiesPriceValueEl = document.getElementById("properties-price-value");
+    export const propertiesCapitalValueEl = document.getElementById("properties-capital-value");
+    export const propertiesManageBtn = document.getElementById("properties-manage-btn");
+
+    export const suppliersCountValueEl = document.getElementById("suppliers-count-value");
+    export const suppliersWithDocValueEl = document.getElementById("suppliers-with-doc-value");
+    export const suppliersManageBtn = document.getElementById("suppliers-manage-btn");
+

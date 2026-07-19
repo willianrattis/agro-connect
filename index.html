@@ -385,865 +385,66 @@
   <!-- ===== Toast region (discreet auth feedback) ===== -->
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
 
+  <script type="module" src="./js/main.js"></script>
   <script type="module">
-    // =====================================================
-    // 0. Firebase (modular SDK v12 via CDN)
-    // =====================================================
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
     import {
-      getAuth, GoogleAuthProvider,
-      signInWithPopup, signInWithRedirect, getRedirectResult,
-      onAuthStateChanged, signOut,
-    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-    import {
-      getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+      db, auth, onAuthStateChanged,
       doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp,
       collection, addDoc, query, where, orderBy, onSnapshot, getDocs, writeBatch,
       arrayUnion, arrayRemove,
-    } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+    } from "./js/core/firebase.js";
+    import {
+      CARCASS_YIELD, KG_PER_ARROBA, PASTURE_QUALITY, DEFAULT_PASTURE_QUALITY,
+      FEMALE_GMD_FACTOR, CONFINEMENT_GMD_KG_PER_DAY, DEFAULT_TARGET_ARROBAS_PER_HEAD,
+      DEFAULT_FARM_YIELD_PCT, DEFAULT_CONFINEMENT_YIELD_PCT, CATTLE_CATEGORIES,
+      CATEGORY_CHIP_CLASS, categoriesForSex, MIGRATE_CATEGORY, resolveCategoryKey,
+      categoryLabelFor, categoryChipClassFor, ageMonthsBetween, deriveStage,
+      STAGE_RANK, stageRank, clampStageFloor, displayCategoryKeyForAnimal,
+      displayCategoryKeyForLot, LOT_CATEGORY_BUCKET, LOT_FIELDS_V2, ANIMAL_FIELDS_V2,
+      SUPPLIER_FIELDS_V2, statusLabel, TX_CATEGORIES, TX_CATEGORY_LABEL,
+      MOVEMENT_TYPES, MOVEMENT_TYPE_LABEL, MOVEMENT_TYPE_BY_VALUE, MONTH_ABBR,
+      WEEKDAY_ABBR, ICONS, lotCategoryLabel, LOT_CHIP_CLASS, animalStageLabel,
+      animalStageChipClass, lotStageLabel, lotStageChipClass,
+    } from "./js/core/constants.js";
+    import {
+      syncIndicatorEl, herdListEl, herdCountEl, lotListEl, lotCountEl, statHeadEl,
+      statArrobasEl, fabBtn, tabs, views, yearPrevBtn, yearNextBtn, yearLabelEl,
+      monthSelectorEl, finReceitasEl, finDespesasEl, finSaldoEl, finCountEl, txListEl,
+      settingsTargetValueEl, settingsFarmYieldValueEl, settingsConfYieldValueEl,
+      settingsEditBtn3, accountMembersCardEl, accountMembersListEl, accountMemberAddBtn,
+      sharedAccessCardEl, sharedAccessEmailEl, propertiesCountValueEl, propertiesAreaValueEl,
+      propertiesPriceValueEl, propertiesCapitalValueEl, propertiesManageBtn,
+      suppliersCountValueEl, suppliersWithDocValueEl, suppliersManageBtn,
+    } from "./js/core/dom.js";
+    import {
+      escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, totalArrobas, formatKg,
+      formatArrobas, printHTML, formatPercentTrim, fractionToPercentDisplay,
+      formatMonthsDuration, lotAgeMetaLabel, lotTenureMetaLabel, resolveLotPastureQualityKey,
+      movementDeltas, lotProjectionAnchors, getSlaughterConfig, resolveFarmYieldPct,
+      resolveConfinementYieldPct, lotWeightProjection, lotConfinedProjection,
+      confinementStripHTML, formatCurrencyInput, parseBRLToNumber, formatBRL,
+      formatCPFInput, formatCNPJNumericInput, formatCNPJAlnumInput, formatUFInput,
+      formatPhoneInput, saleDaysHeld, computeSaleResult, monthKey, monthChipLabel,
+      buildRecentMonthKeys, getAvailableYears, formatDayLabel, categoryDisplayLabel,
+    } from "./js/core/helpers.js";
+    import {
+      currentAuthUid, setCurrentAuthUid, currentUid, setCurrentUid,
+      lotsCache, setLotsCache, animalsCache, setAnimalsCache,
+      transactionsCache, setTransactionsCache, eventsCache, setEventsCache,
+      settingsCache, setSettingsCache, propertiesCache, setPropertiesCache,
+      suppliersCache, setSuppliersCache, confinementsCache, setConfinementsCache,
+      movementsCache, setMovementsCache, lotWeighingsCache, setLotWeighingsCache,
+      accountMembersCache, setAccountMembersCache,
+    } from "./js/core/state.js";
+    import { Sheet } from "./js/core/sheet.js";
+    import { activateTab } from "./js/core/tabs.js";
+    import { isSharedSession } from "./js/core/listeners.js";
+    import {
+      avatarImg, avatarFallback, menuName, menuEmail, showToast, setMenu,
+      upsertUserDoc, resolveActiveAccount, updateSharedSessionBadge, initialOf,
+      authInitTimeout,
+    } from "./js/core/auth.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyB_rY85_SSBNjQtbHFHY7Ms8EI9RYsHfsA",
-      authDomain: "agro-connect-78e69.firebaseapp.com",
-      projectId: "agro-connect-78e69",
-      storageBucket: "agro-connect-78e69.firebasestorage.app",
-      messagingSenderId: "217525649901",
-      appId: "1:217525649901:web:a4bdf756fab68b1d1f27e4",
-      measurementId: "G-7JNSSZ4R1G",
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-
-    // Persistent local cache (IndexedDB): cached snapshots render instantly
-    // on cold start, and the SDK reconciles with the server automatically.
-    // Falls back to memory-only when unsupported (e.g. private browsing).
-    let db;
-    try {
-      db = initializeFirestore(app, {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-      });
-    } catch (err) {
-      console.warn("[Agro Connect] Persistência local indisponível:", err?.code ?? err);
-      db = getFirestore(app); // memory-only fallback (private mode / unsupported browser)
-    }
-
-    const googleProvider = new GoogleAuthProvider();
-    googleProvider.setCustomParameters({ prompt: "select_account" });
-
-    // Analytics is optional and only works over http(s); guard so a file://
-    // open or a blocked import can't break initialization.
-    try {
-      const { getAnalytics, isSupported } = await import(
-        "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js"
-      );
-      if (await isSupported()) getAnalytics(app);
-    } catch (err) {
-      console.warn("[Agro Connect] Analytics indisponível:", err?.message ?? err);
-    }
-
-    // =====================================================
-    // 1. Domain constants
-    // =====================================================
-    const CARCASS_YIELD = 0.5;   // live → carcass approximation for the @ estimate
-    const KG_PER_ARROBA = 15;
-
-    // Embrapa annual average daily gain for pasture-only systems (mineral
-    // salt only) — already nets out dry-season losses.
-    const PASTURE_QUALITY = {
-      degradada: { label: "Degradada", gmdKgPerDay: 0.205 },
-      fraca:     { label: "Fraca",     gmdKgPerDay: 0.288 },
-      regular:   { label: "Regular",   gmdKgPerDay: 0.383 },
-      boa:       { label: "Boa",       gmdKgPerDay: 0.480 },
-    };
-    const DEFAULT_PASTURE_QUALITY = "regular";
-    // Embrapa GMD figures are for males. Females gain 12–15% less on the same
-    // pasture; 0.865 is the midpoint of that band. Single tunable knob.
-    const FEMALE_GMD_FACTOR = 0.865;
-    const CONFINEMENT_GMD_KG_PER_DAY = 1.7; // typical feedlot GMD 1.6–1.8 kg/day
-
-    // Ponto de abate — global target/yield defaults, overridable per lot and
-    // per Perfil settings (settings/{uid}.targetArrobasPerHead/defaultFarmYieldPct/
-    // defaultConfinementYieldPct). These constants are the final fallback for
-    // docs that predate the feature or never set the settings doc.
-    const DEFAULT_TARGET_ARROBAS_PER_HEAD = 21;
-    const DEFAULT_FARM_YIELD_PCT = CARCASS_YIELD;  // ~50% at pasture
-    const DEFAULT_CONFINEMENT_YIELD_PCT = 0.54;    // feedlot runs higher, up to ~57%
-
-    // Single source of truth for cattle category taxonomy (key → label/sex).
-    // Order matters: it drives select option order everywhere it's rendered.
-    const CATTLE_CATEGORIES = {
-      bezerro_lactente:  { label: "Bezerro (mamando)", sex: "M" },
-      bezerra_lactente:  { label: "Bezerra (mamando)", sex: "F" },
-      bezerro_desmamado: { label: "Bezerro desmamado", sex: "M" },
-      bezerra_desmamada: { label: "Bezerra desmamada", sex: "F" },
-      garrote:           { label: "Garrote",           sex: "M" },
-      boi_magro:         { label: "Boi magro",          sex: "M" },
-      boi_gordo:         { label: "Boi gordo",          sex: "M" },
-      novilha:           { label: "Novilha",            sex: "F" },
-      vaca:              { label: "Vaca",               sex: "F" },
-    };
-
-    // Reuses the existing 4-hue chip palette (SPEC chip-bezerro/recria/engorda/matriz)
-    // by bucketing the finer taxonomy into the same visual families.
-    const CATEGORY_CHIP_CLASS = {
-      bezerro_lactente: "chip-bezerro",
-      bezerra_lactente: "chip-bezerro",
-      bezerro_desmamado: "chip-recria",
-      bezerra_desmamada: "chip-recria",
-      garrote: "chip-recria",
-      novilha: "chip-recria",
-      boi_magro: "chip-engorda",
-      boi_gordo: "chip-engorda",
-      vaca: "chip-matriz",
-    };
-
-    // CATTLE_CATEGORIES entries whose sex matches, in taxonomy order — feeds
-    // any category <select> that's scoped to a chosen sex.
-    function categoriesForSex(sex) {
-      return Object.entries(CATTLE_CATEGORIES)
-        .filter(([, c]) => c.sex === sex)
-        .map(([value, c]) => ({ value, label: c.label }));
-    }
-
-    // Legacy (pre-taxonomy) category values → CATTLE_CATEGORIES key, resolved
-    // against the animal's sex where the old value was sex-ambiguous. Existing
-    // stored docs keep their legacy value; this only runs at read time.
-    function MIGRATE_CATEGORY(oldKey, sex) {
-      switch (oldKey) {
-        case "bezerro": return sex === "F" ? "bezerra_lactente" : "bezerro_lactente";
-        case "recria":  return sex === "F" ? "novilha" : "garrote";
-        case "engorda": return "boi_magro";
-        case "matriz":  return "vaca";
-        default: return null;
-      }
-    }
-
-    // Stored category → current taxonomy key, migrating legacy values on the fly.
-    function resolveCategoryKey(rawCategory, sex) {
-      if (rawCategory && CATTLE_CATEGORIES[rawCategory]) return rawCategory;
-      return MIGRATE_CATEGORY(rawCategory, sex);
-    }
-
-    function categoryLabelFor(rawCategory, sex) {
-      const key = resolveCategoryKey(rawCategory, sex);
-      return key ? CATTLE_CATEGORIES[key].label : (rawCategory || "—");
-    }
-
-    function categoryChipClassFor(rawCategory, sex) {
-      const key = resolveCategoryKey(rawCategory, sex);
-      return (key && CATEGORY_CHIP_CLASS[key]) || "chip-recria";
-    }
-
-    // Whole months between two dates, floored (a day short of the month
-    // anniversary doesn't count yet). Used only for stage derivation below.
-    function ageMonthsBetween(birthDate, now) {
-      const b = toDateSafe(birthDate);
-      const n = toDateSafe(now) || now;
-      if (!b || !n) return null;
-      let months = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
-      if (n.getDate() < b.getDate()) months -= 1;
-      return Math.max(0, months);
-    }
-
-    // Chronological stage engine (derived, not stored). Age is the primary
-    // driver — a stage never stalls waiting on an event stamp — and events
-    // (weaning/1st-calving/finishing) only pull the stage forward EARLIER
-    // than the age thresholds would (e.g. an early-weaned 9mo calf, or a
-    // terminal finishing/calving flag). A null event date never holds an
-    // animal back below what its age already implies.
-    // Returns null when there's no birthDate to compute from — callers must
-    // fall back to the stored entry category (no auto-advance) in that case.
-    function deriveStage({ sex, birthDate, weaningDate, firstCalvingDate, finishingStartDate, now = new Date() }) {
-      const age = ageMonthsBetween(birthDate, now);
-      if (age == null) return null;
-
-      const nowDate = toDateSafe(now) || now;
-      const weanedEarly = !!(weaningDate && toDateSafe(weaningDate) && toDateSafe(weaningDate) <= nowDate);
-
-      if (sex === "F") {
-        if (firstCalvingDate) return "vaca";
-        if (age >= 12) return "novilha";
-        if (age >= 8 || weanedEarly) return "bezerra_desmamada";
-        return "bezerra_lactente";
-      }
-
-      // Male
-      if (finishingStartDate) return "boi_gordo";
-      if (age >= 24) return "boi_magro";
-      if (age >= 12) return "garrote";
-      if (age >= 8 || weanedEarly) return "bezerro_desmamado";
-      return "bezerro_lactente";
-    }
-
-    // Chronological rank per sex — later stage = higher index. Used to floor
-    // the derived stage at the stored/entry category so a lot or animal
-    // registered mid-life (e.g. bought in as bezerro_desmamado) can only ever
-    // move forward, never regress to an earlier stage the derivation might
-    // otherwise imply (e.g. missing birthDateRef precision).
-    const STAGE_RANK = {
-      M: ["bezerro_lactente", "bezerro_desmamado", "garrote", "boi_magro", "boi_gordo"],
-      F: ["bezerra_lactente", "bezerra_desmamada", "novilha", "vaca"],
-    };
-    function stageRank(key, sex) {
-      const order = STAGE_RANK[sex];
-      return order ? order.indexOf(key) : -1;
-    }
-    // Never lets `derivedKey` rank below `floorKey` (the stored/entry
-    // category) — a floor, not a ceiling, so later stages still win.
-    function clampStageFloor(derivedKey, floorKey, sex) {
-      const derivedRank = stageRank(derivedKey, sex);
-      const floorRank = stageRank(floorKey, sex);
-      if (derivedRank === -1 || floorRank === -1) return derivedKey;
-      return derivedRank < floorRank ? floorKey : derivedKey;
-    }
-
-    // animal.birthDate falls back to its lot's birthDateRef (untagged/aggregate
-    // reference age); with neither, the stored entry category wins as-is.
-    function displayCategoryKeyForAnimal(animal, lot) {
-      const birthDate = animal.birthDate || lot?.birthDateRef || null;
-      const storedKey = resolveCategoryKey(animal.category, animal.sex);
-      if (!birthDate) return storedKey;
-      const derivedKey = deriveStage({
-        sex: animal.sex,
-        birthDate,
-        weaningDate: animal.weaningDate,
-        firstCalvingDate: animal.firstCalvingDate,
-        finishingStartDate: animal.finishingStartDate,
-      });
-      if (!derivedKey) return storedKey;
-      return clampStageFloor(derivedKey, storedKey, animal.sex);
-    }
-
-    // lot.entryCategory-based lots (Phase 2+) derive their stage from
-    // birthDateRef; lots predating that field simply have no entryCategory
-    // and the caller should fall back to the legacy coarse category display.
-    function displayCategoryKeyForLot(lot) {
-      if (!lot.entryCategory) return null;
-      const floorKey = resolveCategoryKey(lot.entryCategory, lot.sex);
-      if (!lot.birthDateRef) return floorKey;
-      const derivedKey = deriveStage({
-        sex: lot.sex,
-        birthDate: lot.birthDateRef,
-        weaningDate: lot.weaningDate,
-        firstCalvingDate: lot.firstCalvingDate,
-        finishingStartDate: lot.finishingStartDate,
-      });
-      if (!derivedKey) return floorKey;
-      return clampStageFloor(derivedKey, floorKey, lot.sex);
-    }
-
-    // CATTLE_CATEGORIES key (lots.entryCategory) → legacy coarse lots.category
-    // bucket, kept alongside entryCategory on every new lot so the existing
-    // lot-list chip/label rendering (lotCategoryLabel/LOT_CHIP_CLASS) keeps
-    // working without a migration.
-    const LOT_CATEGORY_BUCKET = {
-      bezerro_lactente: "bezerros",
-      bezerra_lactente: "bezerros",
-      bezerro_desmamado: "recria",
-      bezerra_desmamada: "recria",
-      garrote: "recria",
-      novilha: "recria",
-      boi_magro: "engorda",
-      boi_gordo: "engorda",
-      vaca: "matrizes",
-    };
-
-    // ---- Lot-centric rework foundation (data shape only, Phase 1) ----
-    // These fields are not written yet — the next phases wire up the forms
-    // that populate them. Readers must treat any field absent on a stored
-    // doc as null (Firestore just omits the key; `doc.field` reads undefined,
-    // which every `??`/`|| null` fallback in this file already treats as null).
-    const LOT_FIELDS_V2 = [
-      "origin",                  // "purchased" | "born"
-      "sex",                     // "M" | "F"
-      "entryCategory",           // CATTLE_CATEGORIES key
-      "headcount",               // int — source of truth for lot size
-      "birthDateRef",            // Date | null
-      "birthDateRefIsEstimated", // bool
-      "weaningDate",             // Date | null
-      "firstCalvingDate",        // Date | null — stamped at lot level for homogeneous female lots
-      "finishingStartDate",      // Date | null
-      // propertyId already exists on lots; becomes REQUIRED starting Phase 2.
-    ];
-    const ANIMAL_FIELDS_V2 = [
-      "weaningDate",       // Date | null
-      "finishingStartDate", // Date | null
-      "firstCalvingDate",  // Date | null
-      // A tagged animal is an OPTIONAL SUBSET of its lot — it NEVER adds to lot.headcount.
-    ];
-    const SUPPLIER_FIELDS_V2 = [
-      "municipio", // string | null
-      "estado",    // UF string | null
-    ];
-
-    const statusLabel = {
-      active: "Ativo",
-      sold: "Vendido",
-      dead: "Morto",
-    };
-
-    // Predefined transaction categories per kind (SPEC 6.6), plus a free "outra".
-    const TX_CATEGORIES = {
-      receita: [
-        { value: "venda-animal", label: "Venda de animal" },
-        { value: "outra", label: "Outra" },
-      ],
-      despesa: [
-        { value: "compra-animal", label: "Compra de animal" },
-        { value: "frete", label: "Frete" },
-        { value: "alimentação", label: "Alimentação" },
-        { value: "sanidade", label: "Sanidade" },
-        { value: "mão-de-obra", label: "Mão de obra" },
-        { value: "arrendamento", label: "Arrendamento" },
-        { value: "depreciação", label: "Depreciação" },
-        { value: "outra", label: "Outra" },
-      ],
-    };
-    const TX_CATEGORY_LABEL = Object.fromEntries(
-      [...TX_CATEGORIES.receita, ...TX_CATEGORIES.despesa].map((c) => [c.value, c.label])
-    );
-
-    // movements.type → ledger vocabulary (aggregate lots), with the sign and
-    // "gerar lançamento financeiro" defaults each type starts the form with —
-    // both stay user-editable (SPEC: allow manual adjustment / opt-out).
-    const MOVEMENT_TYPES = [
-      { value: "entry", label: "Entrada", defaultSign: "+", defaultFinance: true },
-      { value: "birth", label: "Nascimento", defaultSign: "+", defaultFinance: false },
-      { value: "transfer", label: "Transferência", defaultSign: "+", defaultFinance: false },
-      { value: "adjustment", label: "Ajuste", defaultSign: "+", defaultFinance: false },
-      { value: "death", label: "Morte", defaultSign: "-", defaultFinance: false },
-      { value: "shipment", label: "Embarque", defaultSign: "-", defaultFinance: true },
-      { value: "sale", label: "Venda", defaultSign: "-", defaultFinance: true },
-      { value: "confinement_out", label: "Envio p/ confinamento", defaultSign: "-", defaultFinance: false },
-      { value: "confinement_return", label: "Retorno de confinamento", defaultSign: "+", defaultFinance: false },
-    ];
-    const MOVEMENT_TYPE_LABEL = Object.fromEntries(MOVEMENT_TYPES.map((t) => [t.value, t.label]));
-    const MOVEMENT_TYPE_BY_VALUE = Object.fromEntries(MOVEMENT_TYPES.map((t) => [t.value, t]));
-
-    const MONTH_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-    const WEEKDAY_ABBR = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-
-    // Inline icons shared by the card kebab menu and its action sheet.
-    const ICONS = {
-      menu: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>`,
-      sell: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      weigh: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
-      wean: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M5 22c0-5 3-9 7-9s7 4 7 9"/></svg>`,
-      death: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg>`,
-      edit: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
-      delete: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`,
-      warning: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
-      movement: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v18"/><path d="m3 7 4-4 4 4"/><path d="M17 21V3"/><path d="m21 17-4 4-4-4"/></svg>`,
-      calving: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>`,
-      finishing: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>`,
-      transfer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>`,
-      history: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>`,
-      print: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>`,
-    };
-
-    // lots.category (SPEC 6.3) — distinct plural vocabulary from animals.category,
-    // reusing the same chip color set where the concept overlaps.
-    const lotCategoryLabel = {
-      recria: "Recria",
-      engorda: "Engorda",
-      matrizes: "Matrizes",
-      bezerros: "Bezerros",
-      outro: "Outro",
-    };
-    const LOT_CHIP_CLASS = {
-      recria: "chip-recria",
-      engorda: "chip-engorda",
-      matrizes: "chip-matriz",
-      bezerros: "chip-bezerro",
-      outro: "chip-recria",
-    };
-
-    // Chip label/class for an animal card: the chronologically DERIVED stage
-    // when there's enough data to compute one, falling back to the stored
-    // (possibly legacy) category otherwise. Never writes back.
-    function animalStageLabel(animal, lot) {
-      const key = displayCategoryKeyForAnimal(animal, lot);
-      return key ? CATTLE_CATEGORIES[key].label : categoryLabelFor(animal.category, animal.sex);
-    }
-    function animalStageChipClass(animal, lot) {
-      const key = displayCategoryKeyForAnimal(animal, lot);
-      return key ? (CATEGORY_CHIP_CLASS[key] || "chip-recria") : categoryChipClassFor(animal.category, animal.sex);
-    }
-
-    // Same idea for a lot card: derived stage when the lot has entryCategory
-    // (Phase 2+) and enough data to compute one; legacy lots (no
-    // entryCategory) fall back to the old coarse lots.category chip as before.
-    function lotStageLabel(lot) {
-      const key = displayCategoryKeyForLot(lot);
-      return key ? CATTLE_CATEGORIES[key].label : (lotCategoryLabel[lot.category] || lot.category || "—");
-    }
-    function lotStageChipClass(lot) {
-      const key = displayCategoryKeyForLot(lot);
-      return key ? (CATEGORY_CHIP_CLASS[key] || "chip-recria") : (LOT_CHIP_CLASS[lot.category] || "chip-recria");
-    }
-
-    // =====================================================
-    // 2. DOM references
-    // =====================================================
-    const syncIndicatorEl = document.getElementById("sync-indicator");
-    const herdListEl = document.getElementById("herd-list");
-    const herdCountEl = document.getElementById("herd-count");
-    const lotListEl = document.getElementById("lot-list");
-    const lotCountEl = document.getElementById("lot-count");
-    const statHeadEl = document.getElementById("stat-head");
-    const statArrobasEl = document.getElementById("stat-arrobas");
-    const fabBtn = document.getElementById("fab-add");
-    const tabs = Array.from(document.querySelectorAll(".tab"));
-    const views = Array.from(document.querySelectorAll(".view"));
-
-    const yearPrevBtn = document.getElementById("year-prev");
-    const yearNextBtn = document.getElementById("year-next");
-    const yearLabelEl = document.getElementById("year-label");
-    const monthSelectorEl = document.getElementById("month-selector");
-    const finReceitasEl = document.getElementById("fin-receitas");
-    const finDespesasEl = document.getElementById("fin-despesas");
-    const finSaldoEl = document.getElementById("fin-saldo");
-    const finCountEl = document.getElementById("fin-count");
-    const txListEl = document.getElementById("tx-list");
-
-    const settingsTargetValueEl = document.getElementById("settings-target-value");
-    const settingsFarmYieldValueEl = document.getElementById("settings-farmyield-value");
-    const settingsConfYieldValueEl = document.getElementById("settings-confyield-value");
-    const settingsEditBtn3 = document.getElementById("settings-edit-btn-3");
-
-    const accountMembersCardEl = document.getElementById("account-members-card");
-    const accountMembersListEl = document.getElementById("account-members-list");
-    const accountMemberAddBtn = document.getElementById("account-member-add-btn");
-    const sharedAccessCardEl = document.getElementById("shared-access-card");
-    const sharedAccessEmailEl = document.getElementById("shared-access-email");
-
-    const propertiesCountValueEl = document.getElementById("properties-count-value");
-    const propertiesAreaValueEl = document.getElementById("properties-area-value");
-    const propertiesPriceValueEl = document.getElementById("properties-price-value");
-    const propertiesCapitalValueEl = document.getElementById("properties-capital-value");
-    const propertiesManageBtn = document.getElementById("properties-manage-btn");
-
-    const suppliersCountValueEl = document.getElementById("suppliers-count-value");
-    const suppliersWithDocValueEl = document.getElementById("suppliers-with-doc-value");
-    const suppliersManageBtn = document.getElementById("suppliers-manage-btn");
-
-    // =====================================================
-    // 3. Helpers
-    // =====================================================
-    function escapeHtml(str) {
-      return String(str ?? "").replace(/[&<>"']/g, (c) => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-      }[c]));
-    }
-
-    // Firestore Timestamp | Date | date-string → Date, or null.
-    function toDateSafe(value) {
-      if (!value) return null;
-      if (typeof value.toDate === "function") return value.toDate();
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? null : d;
-    }
-
-    // Date | Timestamp | null → "YYYY-MM-DD" for prefilling <input type="date">.
-    function toDateInputValue(value) {
-      const d = toDateSafe(value);
-      if (!d) return "";
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    }
-
-    // Always derived from purchaseDate/birthDate — never from weight records.
-    function daysOnFarm(animal) {
-      const ref = animal.acquisitionType === "purchased" ? animal.purchaseDate : animal.birthDate;
-      const d = toDateSafe(ref);
-      if (!d) return null;
-      const ms = Date.now() - d.getTime();
-      return Math.max(0, Math.round(ms / 86_400_000));
-    }
-
-    function totalArrobas(animals) {
-      const kg = animals.reduce((sum, a) => sum + (a.currentWeightKg || 0), 0);
-      return (kg * CARCASS_YIELD) / KG_PER_ARROBA;
-    }
-
-    // pt-BR display helpers: kg as whole numbers, @ (arroba) with 1 decimal.
-    function formatKg(n) {
-      return Math.round(n).toLocaleString("pt-BR");
-    }
-    function formatArrobas(n) {
-      return n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-    }
-    // Prints arbitrary HTML without involving the <dialog> — elements in the
-    // top layer print inconsistently across engines, so content is mirrored
-    // into a plain body-level container instead.
-    function printHTML(html) {
-      const area = document.getElementById("print-area");
-      if (!area) return;
-      area.innerHTML = html;
-      const cleanup = () => {
-        area.innerHTML = "";
-        window.removeEventListener("afterprint", cleanup);
-      };
-      window.addEventListener("afterprint", cleanup);
-      window.print();
-    }
-    // pt-BR percent with 1 decimal, trailing ",0" trimmed (13.5 → "13,5", 10 → "10").
-    function formatPercentTrim(n) {
-      return n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
-    }
-    // Yield fraction (0.53) → plain 1-decimal percent number for number-input
-    // value/placeholder attributes (53, not a pt-BR locale string with a comma).
-    function fractionToPercentDisplay(fraction) {
-      return Math.round(fraction * 1000) / 10;
-    }
-
-    // pt-BR duration phrase for a whole month count: "X meses" under a year,
-    // "X anos" or "X anos e Y meses" at 12+.
-    function formatMonthsDuration(totalMonths) {
-      if (totalMonths == null || !Number.isFinite(totalMonths)) return null;
-      const months = Math.max(0, Math.round(totalMonths));
-      if (months < 12) return `${months} ${months === 1 ? "mês" : "meses"}`;
-      const years = Math.floor(months / 12);
-      const rem = months % 12;
-      const yearsLabel = `${years} ${years === 1 ? "ano" : "anos"}`;
-      return rem === 0 ? yearsLabel : `${yearsLabel} e ${rem} ${rem === 1 ? "mês" : "meses"}`;
-    }
-
-    // Lot card meta: reference age from birthDateRef, flagged "(est.)" when
-    // the stamped date is an estimate rather than a known birth date.
-    function lotAgeMetaLabel(lot) {
-      const months = ageMonthsBetween(lot.birthDateRef, new Date());
-      const duration = formatMonthsDuration(months);
-      if (!duration) return "—";
-      return lot.birthDateRefIsEstimated ? `${duration} (est.)` : duration;
-    }
-
-    // Lot card meta: time on the property since acquisitionDate, with the
-    // absolute date alongside since "1 ano e 4 meses" alone is hard to anchor.
-    function lotTenureMetaLabel(lot) {
-      const months = ageMonthsBetween(lot.acquisitionDate, new Date());
-      const duration = formatMonthsDuration(months);
-      if (!duration) return "—";
-      const d = toDateSafe(lot.acquisitionDate);
-      return d ? `${duration} (desde ${d.toLocaleDateString("pt-BR")})` : duration;
-    }
-
-    // Resolves a lot's pasture quality key, falling back to the default
-    // when the lot has no property, the property is missing from cache,
-    // or its pastureQuality value isn't a known PASTURE_QUALITY key.
-    function resolveLotPastureQualityKey(lot) {
-      const property = lot?.propertyId ? propertiesCache.find((p) => p.id === lot.propertyId) : null;
-      const key = property?.pastureQuality;
-      return key && Object.prototype.hasOwnProperty.call(PASTURE_QUALITY, key) ? key : DEFAULT_PASTURE_QUALITY;
-    }
-
-    // A movement's effect on the lot's two balances (on-farm headcount vs.
-    // confined headcount) — shared by the ledger replay and the submit-time
-    // counter update, so the two can never drift apart.
-    function movementDeltas(m) {
-      const magnitude = Math.abs(m.qty || 0);
-      if (m.type === "confinement_out") return { farmDelta: -magnitude, confinedDelta: magnitude };
-      if (m.type === "confinement_return") return { farmDelta: magnitude, confinedDelta: -magnitude };
-      if (m.fromConfinement) return { farmDelta: 0, confinedDelta: -magnitude };
-      return { farmDelta: m.qty || 0, confinedDelta: 0 };
-    }
-
-    // Each location (farm pasture / feedlot) has its own weight-projection
-    // anchor: a base weight + base date the GMD is applied from. Leaving a
-    // location freezes that location's projection for the animals that left;
-    // entering the other re-anchors it. One anchor per location, most-recent
-    // movement wins — no per-batch cohort tracking.
-    //
-    // Confined anchor: the most recent confinement_out movement's shipping
-    // weight/date. That weight is user-editable (e.g. once the feedlot
-    // reports the post-transport arrival weight), so the projection
-    // automatically re-bases when it's updated.
-    //
-    // Farm anchor: the most recent confinement_return movement with a
-    // recorded weight; absent that (never confined, or still out), falls
-    // back to the lot's stored avgWeightKg/acquisitionDate — identical to
-    // this function's pre-confinement behavior.
-    function lotProjectionAnchors(lot) {
-      const movements = movementsCache.filter((m) => m.lotId === lot.id);
-
-      const outs = movements
-        .filter((m) => m.type === "confinement_out")
-        .map((m) => ({ ...m, _date: toDateSafe(m.date) }))
-        .filter((m) => m._date)
-        .sort((a, b) => b._date - a._date);
-      const latestOut = outs[0] ?? null;
-
-      const returns = movements
-        .filter((m) => m.type === "confinement_return" && Number.isFinite(m.avgWeightKg))
-        .map((m) => ({ ...m, _date: toDateSafe(m.date) }))
-        .filter((m) => m._date)
-        .sort((a, b) => b._date - a._date);
-      const latestReturn = returns[0] ?? null;
-
-      // Farm anchor: most-recent-wins between a confinement return and a
-      // manual lot weighing ("Pesar lote") — whichever happened last is the
-      // freshest known weight/date pair to project from.
-      const candidates = [];
-      if (latestReturn) {
-        candidates.push({ baseWeightKg: latestReturn.avgWeightKg, baseDate: latestReturn._date });
-      }
-      const lastWeighingDate = toDateSafe(lot.lastWeighingDate);
-      if (lastWeighingDate && Number.isFinite(lot.avgWeightKg)) {
-        candidates.push({ baseWeightKg: lot.avgWeightKg, baseDate: lastWeighingDate });
-      }
-      const farm = candidates.length
-        ? candidates.sort((a, b) => b.baseDate - a.baseDate)[0]
-        : { baseWeightKg: lot.avgWeightKg, baseDate: toDateSafe(lot.acquisitionDate) };
-
-      return {
-        confined: latestOut
-          ? {
-              baseWeightKg: Number.isFinite(latestOut.avgWeightKg) ? latestOut.avgWeightKg : lot.avgWeightKg,
-              baseDate: latestOut._date,
-              confinementName: latestOut.confinementName || "—",
-            }
-          : null,
-        farm,
-      };
-    }
-
-    // Perfil-level targets/yields (settings/{uid}), each with its own
-    // hardcoded fallback so the feature works before the settings doc has
-    // ever been saved.
-    function getSlaughterConfig() {
-      return {
-        targetArrobasPerHead: Number.isFinite(settingsCache.targetArrobasPerHead)
-          ? settingsCache.targetArrobasPerHead
-          : DEFAULT_TARGET_ARROBAS_PER_HEAD,
-        defaultFarmYieldPct: Number.isFinite(settingsCache.defaultFarmYieldPct)
-          ? settingsCache.defaultFarmYieldPct
-          : DEFAULT_FARM_YIELD_PCT,
-        defaultConfinementYieldPct: Number.isFinite(settingsCache.defaultConfinementYieldPct)
-          ? settingsCache.defaultConfinementYieldPct
-          : DEFAULT_CONFINEMENT_YIELD_PCT,
-      };
-    }
-
-    // Farm-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
-    function resolveFarmYieldPct(lot) {
-      if (Number.isFinite(lot.carcassYieldPct)) return lot.carcassYieldPct;
-      return getSlaughterConfig().defaultFarmYieldPct;
-    }
-
-    // Confined-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
-    function resolveConfinementYieldPct(lot) {
-      if (Number.isFinite(lot.confinementYieldPct)) return lot.confinementYieldPct;
-      return getSlaughterConfig().defaultConfinementYieldPct;
-    }
-
-    // Projects a lot's on-farm weight/@ from its farm anchor using the
-    // property's pasture-quality GMD (Embrapa averages), reduced for females
-    // (they gain slower than the male-referenced Embrapa figures) —
-    // read-time only, never persisted.
-    function lotWeightProjection(lot) {
-      const { baseWeightKg, baseDate } = lotProjectionAnchors(lot).farm;
-      if (!Number.isFinite(baseWeightKg) || baseWeightKg <= 0) return null;
-      if (!baseDate) return null;
-
-      const days = Math.max(0, Math.floor((Date.now() - baseDate.getTime()) / 86_400_000));
-      const qualityKey = resolveLotPastureQualityKey(lot);
-      const { label: qualityLabel, gmdKgPerDay: baseGmdKgPerDay } = PASTURE_QUALITY[qualityKey];
-
-      // Legacy lots predate the `sex` field, so fall back to the category
-      // taxonomy's sex, then default to male.
-      const sex = lot.sex ?? CATTLE_CATEGORIES[resolveCategoryKey(lot.entryCategory, null)]?.sex ?? "M";
-      const isFemale = sex === "F";
-      const gmdKgPerDay = isFemale ? baseGmdKgPerDay * FEMALE_GMD_FACTOR : baseGmdKgPerDay;
-
-      const gainKg = days * gmdKgPerDay;
-      const projectedWeightKg = baseWeightKg + gainKg;
-      const yieldPct = resolveFarmYieldPct(lot);
-      const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
-
-      return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
-    }
-
-    // Feedlot day-counter + weight projection for a lot's confined head,
-    // from the confined anchor — read-time only, never persisted. Null when
-    // the lot holds no confined head, or none of its movements is a
-    // confinement_out (so there's no anchor to project from).
-    function lotConfinedProjection(lot) {
-      if (!((lot.confinedHeadcount ?? 0) > 0)) return null;
-      const { confined } = lotProjectionAnchors(lot);
-      if (!confined || !Number.isFinite(confined.baseWeightKg) || confined.baseWeightKg <= 0) return null;
-
-      const days = Math.max(0, Math.floor((Date.now() - confined.baseDate.getTime()) / 86_400_000));
-      const projectedWeightKg = confined.baseWeightKg + days * CONFINEMENT_GMD_KG_PER_DAY;
-      return { days, projectedWeightKg, confinementName: confined.confinementName };
-    }
-
-    // Tinted single-line strip summarizing a lot's confined head — shared by
-    // the lot card and the lot detail sheet. Returns "" when the lot holds
-    // no confined head.
-    function confinementStripHTML(lot) {
-      const confinedHeadcount = lot.confinedHeadcount ?? 0;
-      if (confinedHeadcount <= 0) return "";
-      const projection = lotConfinedProjection(lot);
-      const parts = [`<strong>${confinedHeadcount} no confinamento</strong>`];
-      if (projection) {
-        const gmd = CONFINEMENT_GMD_KG_PER_DAY.toLocaleString("pt-BR", { minimumFractionDigits: 1 });
-        parts.push(escapeHtml(projection.confinementName));
-        parts.push(`${projection.days.toLocaleString("pt-BR")} dias`);
-        parts.push(`peso est. ${formatKg(projection.projectedWeightKg)} kg (+${gmd} kg/dia)`);
-      }
-      return `
-        <div class="confinement-strip">
-          ${ICONS.transfer}
-          <span>${parts.join(" · ")}</span>
-        </div>
-      `;
-    }
-
-    // pt-BR currency mask: keeps digits only, formats as R$ on every keystroke.
-    function formatCurrencyInput(input) {
-      const digits = input.value.replace(/\D/g, "");
-      if (!digits) { input.value = ""; return; }
-      const amount = parseInt(digits, 10) / 100;
-      input.value = amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    }
-
-    function parseBRLToNumber(str) {
-      const digits = String(str || "").replace(/\D/g, "");
-      if (!digits) return NaN;
-      return parseInt(digits, 10) / 100;
-    }
-
-    function formatBRL(n) {
-      return (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-    }
-
-    // Brazilian document/phone masks: strip to raw chars, then reformat on
-    // every keystroke — same approach as formatCurrencyInput above.
-    function formatCPFInput(input) {
-      const digits = input.value.replace(/\D/g, "").slice(0, 11);
-      let out = digits.slice(0, 3);
-      if (digits.length > 3) out += "." + digits.slice(3, 6);
-      if (digits.length > 6) out += "." + digits.slice(6, 9);
-      if (digits.length > 9) out += "-" + digits.slice(9, 11);
-      input.value = out;
-    }
-
-    function formatCNPJNumericInput(input) {
-      const digits = input.value.replace(/\D/g, "").slice(0, 14);
-      let out = digits.slice(0, 2);
-      if (digits.length > 2) out += "." + digits.slice(2, 5);
-      if (digits.length > 5) out += "." + digits.slice(5, 8);
-      if (digits.length > 8) out += "/" + digits.slice(8, 12);
-      if (digits.length > 12) out += "-" + digits.slice(12, 14);
-      input.value = out;
-    }
-
-    // Alphanumeric CNPJ (Receita Federal's newer format): first 12 chars are
-    // A–Z/0–9, the last 2 (check digits) stay numeric.
-    // TODO: check-digit validation — not implemented, only shape/length.
-    function formatCNPJAlnumInput(input) {
-      const raw = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14);
-      const chars = raw.slice(0, 12) + raw.slice(12, 14).replace(/\D/g, "");
-      let out = chars.slice(0, 2);
-      if (chars.length > 2) out += "." + chars.slice(2, 5);
-      if (chars.length > 5) out += "." + chars.slice(5, 8);
-      if (chars.length > 8) out += "/" + chars.slice(8, 12);
-      if (chars.length > 12) out += "-" + chars.slice(12, 14);
-      input.value = out;
-    }
-
-    // UF: 2 letters, uppercased as typed.
-    function formatUFInput(input) {
-      input.value = input.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
-    }
-
-    // Auto-detects landline (10 digits) vs. mobile (11 digits) as the user
-    // types, rather than requiring an explicit toggle.
-    function formatPhoneInput(input) {
-      const digits = input.value.replace(/\D/g, "").slice(0, 11);
-      if (!digits) { input.value = ""; return; }
-      let out = "(" + digits.slice(0, 2);
-      if (digits.length >= 2) out += ") ";
-      if (digits.length > 2) {
-        if (digits.length <= 10) {
-          out += digits.slice(2, 6);
-          if (digits.length > 6) out += "-" + digits.slice(6, 10);
-        } else {
-          out += digits.slice(2, 3) + " " + digits.slice(3, 7) + "-" + digits.slice(7, 11);
-        }
-      }
-      input.value = out;
-    }
-
-    // Days between purchaseDate|birthDate and saleDate — the sold-animal
-    // counterpart of daysOnFarm(), which measures against "now" instead.
-    function saleDaysHeld(animal) {
-      const startRef = animal.acquisitionType === "purchased" ? animal.purchaseDate : animal.birthDate;
-      const start = toDateSafe(startRef);
-      const end = toDateSafe(animal.saleDate);
-      if (!start || !end) return null;
-      return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
-    }
-
-    // profit = saleRevenueBRL − purchaseCostBRL − despesas linked to this animal.
-    function computeSaleResult(animal, transactions) {
-      if (animal.status !== "sold" || animal.saleRevenueBRL == null) return null;
-      const days = saleDaysHeld(animal);
-      if (days == null) return null;
-      const linkedDespesas = transactions
-        .filter((t) => t.linkedAnimalId === animal.id && t.kind === "despesa")
-        .reduce((sum, t) => sum + (t.amountBRL || 0), 0);
-      const profit = animal.saleRevenueBRL - (animal.purchaseCostBRL || 0) - linkedDespesas;
-      const dailyProfit = days > 0 ? profit / days : profit;
-      return { days, profit, dailyProfit };
-    }
-
-    function monthKey(date) {
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    }
-
-    function monthChipLabel(key) {
-      const [y, m] = key.split("-").map(Number);
-      return `${MONTH_ABBR[m - 1]}/${String(y).slice(2)}`;
-    }
-
-    // Trailing N months ending at the current month, oldest first.
-    function buildRecentMonthKeys(count) {
-      const now = new Date();
-      const keys = [];
-      for (let i = count - 1; i >= 0; i--) {
-        keys.push(monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1)));
-      }
-      return keys;
-    }
-
-    // Calendar years spanning from the earliest transaction on record through
-    // the current year, ascending — so retroactive entries always have a
-    // reachable year in the stepper.
-    function getAvailableYears() {
-      const cy = new Date().getFullYear();
-      let earliest = cy;
-      for (const t of transactionsCache) {
-        const d = toDateSafe(t.date);
-        if (d && d.getFullYear() < earliest) earliest = d.getFullYear();
-      }
-      const years = [];
-      for (let y = earliest; y <= cy; y++) years.push(y);
-      return years;
-    }
-
-    function formatDayLabel(date) {
-      return `${WEEKDAY_ABBR[date.getDay()]}, ${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
-    }
-
-    function categoryDisplayLabel(category) {
-      return TX_CATEGORY_LABEL[category] || category;
-    }
-
-    // =====================================================
     // 4. Render: skeletons → cattle cards (staggered)
     // =====================================================
     function renderSkeletons(count) {
@@ -1564,10 +765,6 @@
     // =====================================================
     // 4b. Render: Financeiro (month-filtered ledger)
     // =====================================================
-    // Declared early (ahead of the other Firestore caches below) because
-    // renderMonthChips() reads it during the module's initial synchronous
-    // render, before the "Firestore listeners" section runs.
-    let transactionsCache = [];
     let selectedYear = new Date().getFullYear();
     let monthRange = null; // null = whole year; else { start, end }, 1<=start<=end<=12
 
@@ -1789,18 +986,6 @@
     renderMonthChips();
 
     // =====================================================
-    // 5. Tab navigation (simple view switcher)
-    // =====================================================
-    function activateTab(tab) {
-      tabs.forEach((t) => {
-        const active = t === tab;
-        if (active) t.setAttribute("aria-current", "page");
-        else t.removeAttribute("aria-current");
-      });
-      views.forEach((v) => {
-        v.hidden = v.id !== tab.dataset.view;
-      });
-    }
 
     tabs.forEach((tab) => {
       tab.addEventListener("click", () => {
@@ -1808,227 +993,6 @@
         if (tab.dataset.view === "view-perfil") renderAccountMembersCard();
       });
     });
-
-     // =====================================================
-     // 6. Bottom sheet / modal framework
-     // =====================================================
-     const Sheet = (() => {
-       const sheet   = document.getElementById("sheet");
-       const titleEl = document.getElementById("sheet-title");
-       const bodyEl  = document.getElementById("sheet-body");
-       const closeBtn = document.getElementById("sheet-close-btn");
-       const dragRegion = document.getElementById("sheet-drag");
-
-       let _onClose = null;
-       let _onBack = null;
-       let _isOpen = false;
-       let _closing = false;
-       let _fallbackTimer = null;
-       let _onTransitionEnd = null;
-
-       // Swaps the header button between "back" (child sheet, returns to
-       // parent) and "close" (root sheet, closes to the base screen).
-       const CLOSE_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-           <path d="M18 6 6 18"/><path d="M6 6l12 12"/>
-         </svg>`;
-       const BACK_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>`;
-       function applyHeaderAffordance() {
-         if (_onBack) {
-           closeBtn.innerHTML = BACK_ICON;
-           closeBtn.setAttribute("aria-label", "Voltar");
-         } else {
-           closeBtn.innerHTML = CLOSE_ICON;
-           closeBtn.setAttribute("aria-label", "Fechar");
-         }
-       }
-
-       // Cancels any in-flight close (pending transitionend listener + fallback
-       // timer) without touching _isOpen. Used both when a new open() interrupts
-       // a close, and internally once a close actually finishes.
-       function cancelPendingClose() {
-         if (_onTransitionEnd) {
-           sheet.removeEventListener("transitionend", _onTransitionEnd);
-           _onTransitionEnd = null;
-         }
-         if (_fallbackTimer !== null) {
-           clearTimeout(_fallbackTimer);
-           _fallbackTimer = null;
-         }
-       }
-
-       // Native <dialog> traps Tab itself; this is only for picking where to
-       // land initial focus on open.
-       const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-       function firstFocusable() {
-         return Array.from(sheet.querySelectorAll(FOCUSABLE)).find((el) => el.offsetParent !== null) || closeBtn;
-       }
-
-       function prefersReducedMotion() {
-         return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-       }
-
-       // -- Swipe-down gesture (pointer events, mobile only) --
-       let _dragStartY = 0;
-       let _dragging = false;
-
-       function onDragStart(e) {
-         // Only allow on mobile (sheet is bottom-positioned)
-         if (window.matchMedia("(min-width: 768px)").matches) return;
-         _dragging = true;
-         _dragStartY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
-         sheet.style.transition = "none";
-         dragRegion.setPointerCapture(e.pointerId);
-       }
-
-       function onDragMove(e) {
-         if (!_dragging) return;
-         const currentY = e.clientY ?? 0;
-         const dy = Math.max(0, currentY - _dragStartY);
-         sheet.style.transform = `translateY(${dy}px)`;
-       }
-
-       function onDragEnd(e) {
-         if (!_dragging) return;
-         _dragging = false;
-         sheet.style.transition = "";
-         const currentY = e.clientY ?? 0;
-         const dy = currentY - _dragStartY;
-         if (dy > 80) {
-           // Fling-close: finish animation from current position
-           closeSheet();
-         } else {
-           sheet.style.transform = "";
-         }
-       }
-
-       dragRegion.addEventListener("pointerdown", onDragStart);
-       dragRegion.addEventListener("pointermove", onDragMove);
-       dragRegion.addEventListener("pointerup", onDragEnd);
-       dragRegion.addEventListener("pointercancel", onDragEnd);
-
-       // -- ESC: the native dialog fires a cancelable `cancel` event before
-       //    closing itself immediately — preventDefault it and route through
-       //    our own close() instead, so the exit animation gets to play. --
-       sheet.addEventListener("cancel", (e) => {
-         e.preventDefault();
-         closeSheet();
-       });
-
-       // -- Light-dismiss: there's no separate backdrop element anymore
-       //    (native ::backdrop can't take JS listeners), so we rely on
-       //    e.target instead. Padding/border are 0 on the dialog, so its own
-       //    box is fully covered by sheet-header/sheet-body — a click can
-       //    only land with e.target === sheet itself if it hit the backdrop
-       //    area outside that content. (A coordinate/rect check instead of
-       //    this was tried first, but clientX/clientY are 0 for keyboard-
-       //    activated clicks — e.g. pressing Space on a focused segmented
-       //    label — which made Tab+Space anywhere in the sheet close it.)
-       sheet.addEventListener("click", (e) => {
-         if (e.target === sheet) closeSheet();
-       });
-
-       // -- Open --
-       // Idempotent when already open: a chained sheet-to-sheet transition
-       // (e.g. action menu -> "Vender") or a re-open that races an in-flight
-       // close both land here with _isOpen already true. In that case we swap
-       // content/title/onClose and refocus without calling showModal() again
-       // (calling it on an already-open <dialog> throws on some engines and
-       // no-ops on others — neither path should be relied on), and we cancel
-       // any pending close so its stale finish() can't fire later and call
-       // sheet.close() on the sheet we just swapped in.
-       function openSheet({ title = "", content = "", onClose = null, onBack = null } = {}) {
-         cancelPendingClose();
-         _closing = false;
-         _onClose = onClose;
-         _onBack = onBack;
-         applyHeaderAffordance();
-
-         titleEl.textContent = title;
-         if (typeof content === "string") {
-           bodyEl.innerHTML = content;
-         } else if (content instanceof Node) {
-           bodyEl.innerHTML = "";
-           bodyEl.appendChild(content);
-         }
-
-         // Reset transform in case a previous close was interrupted by a drag
-         sheet.style.transform = "";
-
-         if (!_isOpen) {
-           sheet.showModal();
-           _isOpen = true;
-         }
-
-         requestAnimationFrame(() => {
-           sheet.classList.add("is-open");
-           firstFocusable().focus({ preventScroll: true });
-         });
-       }
-
-       // -- Close --
-       // The exit transition is 0.22s (desktop) / 0.24s (mobile); FALLBACK_MS
-       // is a safety net slightly above both in case transitionend doesn't
-       // fire (e.g. the sheet was closed again mid-drag with no property
-       // actually changing) — without it, a missed event would leave the
-       // dialog stuck open forever.
-       const FALLBACK_MS = 320;
-
-       function finishClose() {
-         cancelPendingClose();
-         sheet.close();
-         _isOpen = false;
-         _closing = false;
-         sheet.style.transform = "";
-         if (typeof _onClose === "function") {
-           const cb = _onClose;
-           _onClose = null;
-           cb();
-         }
-       }
-
-       function closeSheet() {
-         if (!_isOpen || _closing) return;
-         _closing = true;
-
-         sheet.classList.remove("is-open");
-
-         if (prefersReducedMotion()) {
-           finishClose();
-           return;
-         }
-
-         _onTransitionEnd = (e) => {
-           if (e.target !== sheet) return;
-           finishClose();
-         };
-         sheet.addEventListener("transitionend", _onTransitionEnd);
-         _fallbackTimer = setTimeout(finishClose, FALLBACK_MS);
-       }
-
-       // Lets a child sheet register where "back" should go without going
-       // through a full openSheet() call (used right after opening it).
-       function setBack(fn) {
-         _onBack = typeof fn === "function" ? fn : null;
-         applyHeaderAffordance();
-       }
-
-       // -- Header button: back to parent when set, otherwise full close --
-       closeBtn.addEventListener("click", () => {
-         if (_onBack) {
-           const back = _onBack;
-           _onBack = null;
-           back();
-           return;
-         }
-         closeSheet();
-       });
-
-       // Expose public API
-       return { open: openSheet, close: closeSheet, setBack };
-     })();
-
-     // Make globally available for other modules
-     window.Sheet = Sheet;
 
      // =====================================================
      // 7. Animal edit form ("Editar" on an existing animal's action menu).
@@ -6355,7 +5319,6 @@
      //     One-time getDoc on Perfil render (no onSnapshot — this doc is
      //     read rarely and re-fetched explicitly after each mutation).
      // =====================================================
-     let accountMembersCache = [];
 
      async function renderAccountMembersCard() {
        if (!currentAuthUid) return;
@@ -6371,10 +5334,10 @@
        accountMembersCardEl.hidden = false;
        try {
          const snap = await getDoc(doc(db, "accounts", currentAuthUid));
-         accountMembersCache = snap.exists() ? (snap.data().memberEmails || []) : [];
+         setAccountMembersCache(snap.exists() ? (snap.data().memberEmails || []) : []);
        } catch (err) {
          console.warn("[Agro Connect] Falha ao carregar membros da conta:", err?.code ?? err);
-         accountMembersCache = [];
+         setAccountMembersCache([]);
        }
        renderAccountMembersList();
      }
@@ -8157,25 +7120,6 @@
     // 8. Firestore listeners (animals + lots + transactions + settings)
     //    — lifecycle tied to auth
     // =====================================================
-    // currentAuthUid = the authenticated Firebase user; currentUid = the
-    // active account's owner uid (the data scope for all queries/writes).
-    // They differ when the signed-in user is operating in a shared account.
-    let currentAuthUid = null;
-    let currentUid = null;
-    function isSharedSession() {
-      return currentAuthUid != null && currentUid != null && currentAuthUid !== currentUid;
-    }
-    let lotsCache = [];
-    let animalsCache = [];
-    // transactionsCache is declared earlier (near renderMonthChips) — see
-    // note there.
-    let eventsCache = [];
-    let settingsCache = {};
-    let propertiesCache = [];
-    let suppliersCache = [];
-    let confinementsCache = [];
-    let movementsCache = [];
-    let lotWeighingsCache = [];
     let unsubAnimals = null;
     let unsubLots = null;
     let unsubTransactions = null;
@@ -8208,7 +7152,7 @@
     let propertyMigrationAttempted = false;
 
     function startFirestoreListeners(uid) {
-      currentUid = uid;
+      setCurrentUid(uid);
       renderSkeletons(4);
       herdCountEl.textContent = "Carregando…";
       loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
@@ -8224,7 +7168,7 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("animals", snap.metadata.fromCache);
-          animalsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setAnimalsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           if (animalsCache.length === 0) renderHerdEmpty();
           else renderHerd(animalsCache);
           renderLots();
@@ -8251,7 +7195,7 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("lots", snap.metadata.fromCache);
-          lotsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setLotsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           renderLots();
           renderHerdSummary();
           renderFinanceiro();
@@ -8263,7 +7207,7 @@
         (err) => {
           updateSyncState("lots", false);
           console.warn("[Agro Connect] lots onSnapshot error:", err?.code ?? err);
-          lotsCache = [];
+          setLotsCache([]);
           renderLotsError();
           statHeadEl.textContent = "—";
           statArrobasEl.textContent = "—";
@@ -8286,14 +7230,14 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("movements", snap.metadata.fromCache);
-          movementsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setMovementsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           refreshLotDetailSheetIfOpen();
           renderIndicadores();
         },
         (err) => {
           updateSyncState("movements", false);
           console.warn("[Agro Connect] movements onSnapshot error:", err?.code ?? err);
-          movementsCache = [];
+          setMovementsCache([]);
           renderIndicadores();
         }
       );
@@ -8310,12 +7254,12 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("lot_weighings", snap.metadata.fromCache);
-          lotWeighingsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setLotWeighingsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         },
         (err) => {
           updateSyncState("lot_weighings", false);
           console.warn("[Agro Connect] lot_weighings onSnapshot error:", err?.code ?? err);
-          lotWeighingsCache = [];
+          setLotWeighingsCache([]);
         }
       );
 
@@ -8331,7 +7275,7 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("transactions", snap.metadata.fromCache);
-          transactionsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setTransactionsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           if (animalsCache.length) renderHerd(animalsCache);
           renderMonthChips();
           renderFinanceiro();
@@ -8341,7 +7285,7 @@
         (err) => {
           updateSyncState("transactions", false);
           console.warn("[Agro Connect] transactions onSnapshot error:", err?.code ?? err);
-          transactionsCache = [];
+          setTransactionsCache([]);
           renderFinError();
           loadedFlags.transactions = true;
           renderIndicadores();
@@ -8360,14 +7304,14 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("events", snap.metadata.fromCache);
-          eventsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setEventsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           loadedFlags.events = true;
           renderIndicadores();
         },
         (err) => {
           updateSyncState("events", false);
           console.warn("[Agro Connect] events onSnapshot error:", err?.code ?? err);
-          eventsCache = [];
+          setEventsCache([]);
           showToast("Não foi possível carregar os eventos. Verifique sua conexão.");
           loadedFlags.events = true;
           renderIndicadores();
@@ -8379,7 +7323,7 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("settings", snap.metadata.fromCache);
-          settingsCache = snap.exists() ? snap.data() : {};
+          setSettingsCache(snap.exists() ? snap.data() : {});
           renderSettingsCard();
           loadedFlags.settings = true;
           maybeMigratePropertyArea();
@@ -8388,7 +7332,7 @@
         (err) => {
           updateSyncState("settings", false);
           console.warn("[Agro Connect] settings onSnapshot error:", err?.code ?? err);
-          settingsCache = {};
+          setSettingsCache({});
           showToast("Não foi possível carregar suas configurações. Verifique sua conexão.");
           loadedFlags.settings = true;
           renderIndicadores();
@@ -8405,7 +7349,7 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("properties", snap.metadata.fromCache);
-          propertiesCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setPropertiesCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           renderPropertiesCard();
           renderSettingsCard();
           loadedFlags.properties = true;
@@ -8416,7 +7360,7 @@
         (err) => {
           updateSyncState("properties", false);
           console.warn("[Agro Connect] properties onSnapshot error:", err?.code ?? err);
-          propertiesCache = [];
+          setPropertiesCache([]);
           renderSettingsCard();
           loadedFlags.properties = true;
           renderIndicadores();
@@ -8434,13 +7378,13 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("suppliers", snap.metadata.fromCache);
-          suppliersCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setSuppliersCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           renderSuppliersCard();
         },
         (err) => {
           updateSyncState("suppliers", false);
           console.warn("[Agro Connect] suppliers onSnapshot error:", err?.code ?? err);
-          suppliersCache = [];
+          setSuppliersCache([]);
         }
       );
 
@@ -8454,12 +7398,12 @@
         { includeMetadataChanges: true },
         (snap) => {
           updateSyncState("confinements", snap.metadata.fromCache);
-          confinementsCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setConfinementsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         },
         (err) => {
           updateSyncState("confinements", false);
           console.warn("[Agro Connect] confinements onSnapshot error:", err?.code ?? err);
-          confinementsCache = [];
+          setConfinementsCache([]);
         }
       );
     }
@@ -8507,21 +7451,21 @@
       unsubConfinements = null;
       unsubMovements = null;
       unsubLotWeighings = null;
-      currentUid = null;
-      currentAuthUid = null;
+      setCurrentUid(null);
+      setCurrentAuthUid(null);
       syncPending.clear();
       syncIndicatorEl.hidden = true;
       syncIndicatorEl.removeAttribute("aria-hidden");
-      lotsCache = [];
-      animalsCache = [];
-      transactionsCache = [];
-      eventsCache = [];
-      settingsCache = {};
-      propertiesCache = [];
-      suppliersCache = [];
-      confinementsCache = [];
-      movementsCache = [];
-      lotWeighingsCache = [];
+      setLotsCache([]);
+      setAnimalsCache([]);
+      setTransactionsCache([]);
+      setEventsCache([]);
+      setSettingsCache({});
+      setPropertiesCache([]);
+      setSuppliersCache([]);
+      setConfinementsCache([]);
+      setMovementsCache([]);
+      setLotWeighingsCache([]);
       openLotDetailLotId = null;
       estoqueSelectedPropertyId = null;
       loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
@@ -8548,185 +7492,12 @@
       settingsFarmYieldValueEl.textContent = "—";
       settingsConfYieldValueEl.textContent = "—";
       renderIndicadoresLoading();
-      accountMembersCache = [];
+      setAccountMembersCache([]);
       accountMembersListEl.innerHTML = "";
       accountMembersCardEl.hidden = true;
       sharedAccessCardEl.hidden = true;
     }
 
-    // =====================================================
-    // 9. Auth — Google sign-in / session-aware UI
-    // =====================================================
-    // Desktop uses a popup; mobile (or coarse pointers, e.g. DevTools device
-    // mode) falls back to a full-page redirect, which popups handle poorly.
-    const isMobile = window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
-
-    const signinButtons = document.querySelectorAll("[data-action='signin']");
-    const avatarWrap = document.getElementById("avatar-wrap");
-    const avatarBtn = document.getElementById("avatar-btn");
-    const avatarImg = document.getElementById("avatar-img");
-    const avatarFallback = document.getElementById("avatar-fallback");
-    const sessionMenu = document.getElementById("session-menu");
-    const menuName = document.getElementById("menu-name");
-    const menuEmail = document.getElementById("menu-email");
-    const menuSharedBadge = document.getElementById("menu-shared-badge");
-    const signoutBtn = document.getElementById("btn-signout");
-    const toastRegion = document.getElementById("toast-region");
-
-    // --- Toast (discreet, auto-dismissing; never alert()) ---
-    function showToast(message) {
-      const el = document.createElement("div");
-      el.className = "toast";
-      el.setAttribute("role", "status");
-      el.textContent = message;
-      toastRegion.appendChild(el);
-      window.setTimeout(() => {
-        el.classList.add("leaving");
-        el.addEventListener("animationend", () => el.remove(), { once: true });
-        // Fallback if animations are disabled (reduced motion).
-        window.setTimeout(() => el.remove(), 250);
-      }, 4200);
-    }
-
-    function friendlyAuthError(code) {
-      switch (code) {
-        case "auth/popup-closed-by-user":
-        case "auth/cancelled-popup-request":
-          return "Login cancelado.";
-        case "auth/popup-blocked":
-          return "O pop-up foi bloqueado pelo navegador.";
-        case "auth/network-request-failed":
-          return "Falha de rede. Verifique a conexão.";
-        case "auth/unauthorized-domain":
-          return "Este domínio ainda não está autorizado no Firebase.";
-        default:
-          return "Não foi possível entrar. Tente novamente.";
-      }
-    }
-
-    // --- Sign in / out ---
-    async function signIn() {
-      try {
-        if (isMobile) {
-          await signInWithRedirect(auth, googleProvider);
-        } else {
-          await signInWithPopup(auth, googleProvider);
-        }
-      } catch (err) {
-        // A blocked popup is recoverable — retry once via redirect.
-        if (err?.code === "auth/popup-blocked") {
-          try { await signInWithRedirect(auth, googleProvider); return; } catch { /* fall through */ }
-        }
-        // Silent, self-inflicted cancellations don't deserve a toast.
-        if (err?.code !== "auth/cancelled-popup-request" && err?.code !== "auth/popup-closed-by-user") {
-          showToast(friendlyAuthError(err?.code));
-        }
-        console.warn("[Agro Connect] Sign-in error:", err?.code ?? err);
-      }
-    }
-
-    async function doSignOut() {
-      try {
-        await signOut(auth);
-      } catch (err) {
-        showToast("Não foi possível sair. Tente novamente.");
-        console.warn("[Agro Connect] Sign-out error:", err?.code ?? err);
-      }
-    }
-
-    // --- Account dropdown ---
-    function setMenu(open) {
-      sessionMenu.hidden = !open;
-      avatarBtn.setAttribute("aria-expanded", String(open));
-    }
-    avatarBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      setMenu(sessionMenu.hidden);
-    });
-    document.addEventListener("click", (e) => {
-      if (!sessionMenu.hidden && !avatarWrap.contains(e.target)) setMenu(false);
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") setMenu(false);
-    });
-
-    signinButtons.forEach((b) => b.addEventListener("click", signIn));
-    signoutBtn.addEventListener("click", () => { setMenu(false); doSignOut(); });
-
-    // --- users/{uid} upsert on login ---
-    // NOTE: deny-all rules block these writes until Phase 7 — we catch and keep
-    // the session alive rather than surfacing an error to the user.
-    async function upsertUserDoc(user) {
-      try {
-        const ref = doc(db, "users", user.uid);
-        const snap = await getDoc(ref);
-        const data = {
-          displayName: user.displayName ?? null,
-          email: user.email ?? null,
-          photoURL: user.photoURL ?? null,
-          lastLoginAt: serverTimestamp(),
-        };
-        if (!snap.exists()) data.createdAt = serverTimestamp();  // set once, on create
-        await setDoc(ref, data, { merge: true });
-      } catch (err) {
-        console.warn(
-          "[Agro Connect] users/{uid} não gravado (regras deny-all até a Fase 7):",
-          err?.code ?? err
-        );
-      }
-    }
-
-    // --- Resolve which account (owner uid) the signed-in user operates in ---
-    // A member's email being listed in an owner's accounts/{ownerUid}.memberEmails
-    // routes all data access to that owner's uid; otherwise the user is their
-    // own account owner. Discovery failures (offline, permission) must never
-    // lock the user out of their own data — fall back to their own uid.
-    async function resolveActiveAccount(user) {
-      const email = (user.email || "").trim().toLowerCase();
-      if (!email) return user.uid;
-      try {
-        const snap = await getDocs(
-          query(collection(db, "accounts"), where("memberEmails", "array-contains", email))
-        );
-        if (!snap.empty) return snap.docs[0].id;
-        return user.uid;
-      } catch (err) {
-        console.warn("[Agro Connect] Falha ao resolver conta compartilhada:", err?.code ?? err);
-        return user.uid;
-      }
-    }
-
-    function updateSharedSessionBadge() {
-      menuSharedBadge.hidden = !isSharedSession();
-    }
-
-    // --- Complete any redirect-based sign-in on load ---
-    getRedirectResult(auth).catch((err) => {
-      showToast(friendlyAuthError(err?.code));
-      console.warn("[Agro Connect] Redirect result error:", err?.code ?? err);
-    });
-
-    function initialOf(user) {
-      const src = (user.displayName || user.email || "?").trim();
-      return src.charAt(0).toUpperCase();
-    }
-
-    // Photo can fail to load (expired/blocked URL) — show initials instead.
-    avatarImg.addEventListener("error", () => {
-      avatarImg.hidden = true;
-      avatarFallback.hidden = false;
-    });
-
-    // --- Single source of truth for session-aware UI ---
-    // If Firebase Auth can't resolve the session (offline, network failure)
-    // onAuthStateChanged never fires — fall back to a retry screen instead of
-    // leaving the loading skeleton up forever.
-    const authInitTimeout = window.setTimeout(() => {
-      document.body.dataset.auth = "error";
-    }, 12000);
-    document.getElementById("auth-retry-btn").addEventListener("click", () => {
-      window.location.reload();
-    });
 
     async function handleAuthStateChanged(user) {
       window.clearTimeout(authInitTimeout);
@@ -8743,7 +7514,7 @@
         menuName.textContent = user.displayName || "Produtor(a)";
         menuEmail.textContent = user.email || "";
         document.body.dataset.auth = "in";
-        currentAuthUid = user.uid;
+        setCurrentAuthUid(user.uid);
         upsertUserDoc(user);
         const accountId = await resolveActiveAccount(user);
         // A sign-out (or a different user signing in) may have raced the
