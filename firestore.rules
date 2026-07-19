@@ -2,9 +2,11 @@ rules_version = '2';
 
 // Owner-based ruleset: every collection below is scoped by an `ownerId`
 // field (or, for /users and /settings, by the document id itself) that
-// must match the signed-in uid on every read/write. `ownerImmutable()`
-// blocks an update from ever reassigning a document to a different owner,
-// so cross-owner access is denied both at creation and thereafter.
+// must match the signed-in uid, OR belong to a verified-email member of
+// that owner's account (see `accounts/{ownerUid}.memberEmails`), on every
+// read/write. `ownerImmutable()` blocks an update from ever reassigning a
+// document to a different owner, so cross-owner access is denied both at
+// creation and thereafter.
 //
 // Deliberately deferred / out of scope for these rules:
 //   - serverTimestamp enforcement (createdAt/updatedAt aren't checked
@@ -16,8 +18,19 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function owns(rsc)  { return signedIn() && rsc.data.ownerId == request.auth.uid; }
-    function ownsNew()  { return signedIn() && request.resource.data.ownerId == request.auth.uid; }
+
+    // A signed-in, verified-email user whose email is listed as a member
+    // of `ownerId`'s account has the same access as the owner.
+    function memberOf(ownerId) {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in
+           get(/databases/$(database)/documents/accounts/$(ownerId)).data.memberEmails;
+    }
+    function canAccess(ownerId) { return signedIn() && (request.auth.uid == ownerId || memberOf(ownerId)); }
+
+    function owns(rsc)  { return canAccess(rsc.data.ownerId); }
+    function ownsNew()  { return canAccess(request.resource.data.ownerId); }
     function ownerImmutable() { return request.resource.data.ownerId == resource.data.ownerId; }
 
     // Profile & per-user settings: keyed by uid (no ownerId field — the
@@ -26,7 +39,24 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
     match /settings/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read, write: if canAccess(uid);
+    }
+
+    // Shared-account membership: accountId is always the owner's uid.
+    // Owner manages membership; members (and the owner) can read it to
+    // discover their own access.
+    match /accounts/{accountId} {
+      allow read:   if signedIn()
+                    && (request.auth.uid == accountId
+                        || (request.auth.token.email_verified == true
+                            && request.auth.token.email.lower() in resource.data.memberEmails));
+      allow create: if request.auth.uid == accountId
+                    && request.resource.data.ownerId == accountId
+                    && request.resource.data.memberEmails is list;
+      allow update: if request.auth.uid == accountId
+                    && request.resource.data.ownerId == resource.data.ownerId
+                    && request.resource.data.memberEmails is list;
+      allow delete: if request.auth.uid == accountId;
     }
 
     // Animals — always created as an optional tagged subset of a lot (the
