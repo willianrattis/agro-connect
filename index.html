@@ -1223,6 +1223,11 @@
   .action-item.danger { color: var(--danger); }
   .action-item.danger .action-icon { background: rgba(179, 38, 30, 0.1); color: var(--danger); }
   .action-item.danger:hover { background: rgba(179, 38, 30, 0.08); }
+  .action-group { display: flex; flex-direction: column; gap: var(--space-2); }
+  .action-group + .action-group {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
 
   .confirm-field {
     flex-direction: row !important;
@@ -5944,50 +5949,58 @@
        const hasStages = !!lot.sex;
        return `
          <div class="action-list">
-           <button type="button" class="action-item pressable" data-menu-action="weigh-lot">
-             <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
-             Pesar lote
-           </button>
-           <button type="button" class="action-item pressable" data-menu-action="weighing-history">
-             <span class="action-icon" aria-hidden="true">${ICONS.history}</span>
-             Histórico de pesagens
-           </button>
-           ${isAggregate ? `
-             <button type="button" class="action-item pressable" data-menu-action="movement">
-               <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
-               Nova movimentação
+           <div class="action-group">
+             <button type="button" class="action-item pressable" data-menu-action="weigh-lot">
+               <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
+               Pesar lote
              </button>
-           ` : ""}
-           ${hasStages ? `
-             <button type="button" class="action-item pressable" data-menu-action="wean">
-               <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
-               Registrar desmama
+             <button type="button" class="action-item pressable" data-menu-action="weighing-history">
+               <span class="action-icon" aria-hidden="true">${ICONS.history}</span>
+               Histórico de pesagens
              </button>
-           ` : ""}
-           ${hasStages && lot.sex === "F" ? `
-             <button type="button" class="action-item pressable" data-menu-action="calving">
-               <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
-               Registrar 1º parto
+           </div>
+           <div class="action-group">
+             ${isAggregate ? `
+               <button type="button" class="action-item pressable" data-menu-action="movement">
+                 <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
+                 Nova movimentação
+               </button>
+             ` : ""}
+             ${hasStages ? `
+               <button type="button" class="action-item pressable" data-menu-action="wean">
+                 <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
+                 Registrar desmama
+               </button>
+             ` : ""}
+             ${hasStages && lot.sex === "F" ? `
+               <button type="button" class="action-item pressable" data-menu-action="calving">
+                 <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
+                 Registrar 1º parto
+               </button>
+             ` : ""}
+             ${hasStages && lot.sex === "M" ? `
+               <button type="button" class="action-item pressable" data-menu-action="finishing">
+                 <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
+                 Iniciar terminação
+               </button>
+             ` : ""}
+             <button type="button" class="action-item pressable" data-menu-action="transfer">
+               <span class="action-icon" aria-hidden="true">${ICONS.transfer}</span>
+               Transferir propriedade
              </button>
-           ` : ""}
-           ${hasStages && lot.sex === "M" ? `
-             <button type="button" class="action-item pressable" data-menu-action="finishing">
-               <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
-               Iniciar terminação
+           </div>
+           <div class="action-group">
+             <button type="button" class="action-item pressable" data-menu-action="edit">
+               <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
+               Editar
              </button>
-           ` : ""}
-           <button type="button" class="action-item pressable" data-menu-action="transfer">
-             <span class="action-icon" aria-hidden="true">${ICONS.transfer}</span>
-             Transferir propriedade
-           </button>
-           <button type="button" class="action-item pressable" data-menu-action="edit">
-             <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
-             Editar
-           </button>
-           <button type="button" class="action-item danger pressable" data-menu-action="delete">
-             <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
-             Excluir
-           </button>
+           </div>
+           <div class="action-group">
+             <button type="button" class="action-item danger pressable" data-menu-action="delete">
+               <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
+               Excluir
+             </button>
+           </div>
          </div>
        `;
      }
