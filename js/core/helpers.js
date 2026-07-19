@@ -2,7 +2,7 @@ import {
   CARCASS_YIELD, KG_PER_ARROBA, PASTURE_QUALITY, DEFAULT_PASTURE_QUALITY,
   DEFAULT_TARGET_ARROBAS_PER_HEAD, DEFAULT_FARM_YIELD_PCT, DEFAULT_CONFINEMENT_YIELD_PCT,
   CATTLE_CATEGORIES, FEMALE_GMD_FACTOR, CONFINEMENT_GMD_KG_PER_DAY, ICONS,
-  MONTH_ABBR, WEEKDAY_ABBR, TX_CATEGORY_LABEL, resolveCategoryKey,
+  MONTH_ABBR, WEEKDAY_ABBR, TX_CATEGORY_LABEL, resolveCategoryKey, ageMonthsBetween,
 } from "./constants.js";
 import { propertiesCache, movementsCache, settingsCache, transactionsCache } from "./state.js";
 

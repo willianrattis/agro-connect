@@ -11,3 +11,10 @@ import "./core/sheet.js";
 import "./core/tabs.js";
 import "./core/listeners.js";
 import "./core/auth.js";
+
+// Rebanho feature modules, in the order their code first appeared inline.
+import "../features/rebanho/render.js";
+import "../features/rebanho/animals.js";
+import "../features/rebanho/weighing.js";
+import "../features/rebanho/lots.js";
+import "../features/rebanho/movements.js";
