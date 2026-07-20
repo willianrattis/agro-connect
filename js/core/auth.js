@@ -59,7 +59,11 @@ import { isSharedSession, startFirestoreListeners, stopFirestoreListeners } from
     // --- Sign in / out ---
     async function signIn() {
       try {
-        await signInWithPopup(auth, googleProvider);
+        if (isMobile) {
+          await signInWithRedirect(auth, googleProvider);
+        } else {
+          await signInWithPopup(auth, googleProvider);
+        }
       } catch (err) {
         // A blocked popup is recoverable — retry once via redirect.
         if (err?.code === "auth/popup-blocked") {
