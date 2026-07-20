@@ -18,3 +18,38 @@ import "../features/rebanho/animals.js";
 import "../features/rebanho/weighing.js";
 import "../features/rebanho/lots.js";
 import "../features/rebanho/movements.js";
+
+// Financeiro, Perfil and Indicadores feature modules, in the order their
+// code first appeared inline.
+import "../features/financeiro/financeiro.js";
+import "../features/perfil/settings.js";
+import "../features/perfil/members.js";
+import "../features/perfil/properties.js";
+import "../features/perfil/suppliers.js";
+import "../features/indicadores/indicadores.js";
+
+// --- Bootstrap wiring that spans multiple features (tab clicks, the FAB) ---
+import { tabs, views, fabBtn } from "./core/dom.js";
+import { activateTab } from "./core/tabs.js";
+import { showToast } from "./core/auth.js";
+import { renderAccountMembersCard } from "../features/perfil/members.js";
+import { openNewLotSheet } from "../features/rebanho/lots.js";
+import { openNewTransactionSheet } from "../features/financeiro/financeiro.js";
+
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    activateTab(tab);
+    if (tab.dataset.view === "view-perfil") renderAccountMembersCard();
+  });
+});
+
+fabBtn.addEventListener("click", () => {
+  const activeView = views.find((v) => !v.hidden);
+  if (activeView?.id === "view-rebanho") {
+    openNewLotSheet();
+  } else if (activeView?.id === "view-financeiro") {
+    openNewTransactionSheet();
+  } else {
+    showToast("Em breve nesta aba.");
+  }
+});

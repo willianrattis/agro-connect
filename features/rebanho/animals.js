@@ -8,7 +8,7 @@ import {
   parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel,
 } from "../../js/core/helpers.js";
 import {
-  currentUid, lotsCache, animalsCache, transactionsCache, settingsCache, propertiesCache,
+  currentUid, lotsCache, animalsCache, transactionsCache, settingsCache, propertiesCache, eventsCache,
 } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";

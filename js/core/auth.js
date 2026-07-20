@@ -1,9 +1,10 @@
 import {
-  signInWithPopup, signInWithRedirect, getRedirectResult, signOut,
+  signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
   auth, googleProvider, db,
   doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs,
 } from "./firebase.js";
-import { isSharedSession } from "./listeners.js";
+import { setCurrentAuthUid } from "./state.js";
+import { isSharedSession, startFirestoreListeners, stopFirestoreListeners } from "./listeners.js";
 
     // =====================================================
     // 9. Auth — Google sign-in / session-aware UI
@@ -179,3 +180,44 @@ import { isSharedSession } from "./listeners.js";
       window.location.reload();
     });
 
+    async function handleAuthStateChanged(user) {
+      window.clearTimeout(authInitTimeout);
+      if (user) {
+        avatarFallback.textContent = initialOf(user);
+        if (user.photoURL) {
+          avatarFallback.hidden = true;
+          avatarImg.hidden = false;
+          avatarImg.src = user.photoURL;
+        } else {
+          avatarImg.hidden = true;
+          avatarFallback.hidden = false;
+        }
+        menuName.textContent = user.displayName || "Produtor(a)";
+        menuEmail.textContent = user.email || "";
+        document.body.dataset.auth = "in";
+        setCurrentAuthUid(user.uid);
+        upsertUserDoc(user);
+        const accountId = await resolveActiveAccount(user);
+        // A sign-out (or a different user signing in) may have raced the
+        // await above — abort so we don't start listeners for a stale user.
+        if (auth.currentUser?.uid !== user.uid) return;
+        startFirestoreListeners(accountId);
+        updateSharedSessionBadge();
+      } else {
+        setMenu(false);
+        avatarImg.removeAttribute("src");
+        document.body.dataset.auth = "out";
+        stopFirestoreListeners();
+        updateSharedSessionBadge();
+      }
+    }
+
+    onAuthStateChanged(
+      auth,
+      (user) => { handleAuthStateChanged(user); },
+      (err) => {
+        console.warn("[Agro Connect] Auth state error:", err?.code ?? err);
+        window.clearTimeout(authInitTimeout);
+        document.body.dataset.auth = "error";
+      }
+    );
