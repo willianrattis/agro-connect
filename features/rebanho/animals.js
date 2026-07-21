@@ -5,7 +5,7 @@ import { CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, s
 import { herdListEl } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
-  parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel,
+  parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel, fmtNum,
 } from "../../js/core/helpers.js";
 import {
   currentUid, lotsCache, animalsCache, transactionsCache, settingsCache, propertiesCache, eventsCache,

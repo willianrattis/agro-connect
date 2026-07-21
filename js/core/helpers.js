@@ -298,6 +298,10 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
       return (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
+    export function fmtNum(n, decimals = 0) {
+      return n.toLocaleString("pt-BR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
     // Brazilian document/phone masks: strip to raw chars, then reformat on
     // every keystroke — same approach as formatCurrencyInput above.
     export function formatCPFInput(input) {
