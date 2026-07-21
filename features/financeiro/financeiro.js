@@ -6,10 +6,11 @@ import {
 import {
   yearPrevBtn, yearNextBtn, yearLabelEl, monthSelectorEl, finReceitasEl, finDespesasEl,
   finSaldoEl, finSaldoAnteriorEl, finSaldoResultadoEl, finCountEl, txListEl,
+  finFunruralEl, finFunruralHintEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatCurrencyInput, parseBRLToNumber, formatBRL,
-  getAvailableYears, formatDayLabel, categoryDisplayLabel,
+  getAvailableYears, formatDayLabel, categoryDisplayLabel, getFunruralConfig, formatPercentTrim,
 } from "../../js/core/helpers.js";
 import { currentUid, lotsCache, animalsCache, transactionsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
@@ -159,6 +160,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finSaldoAnteriorEl.textContent = "—";
       finSaldoResultadoEl.textContent = "—";
       finCountEl.textContent = "";
+      finFunruralEl.textContent = "—";
+      finFunruralHintEl.textContent = "";
     }
 
     export function renderFinEmpty() {
@@ -192,9 +195,10 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
         (acc, t) => {
           if (t.kind === "receita") acc.receitas += t.amountBRL || 0;
           else if (t.kind === "despesa") acc.despesas += t.amountBRL || 0;
+          if (t.kind === "receita" && t.category === "venda-animal") acc.funruralBase += t.amountBRL || 0;
           return acc;
         },
-        { receitas: 0, despesas: 0 }
+        { receitas: 0, despesas: 0, funruralBase: 0 }
       );
       const resultadoPeriodo = totals.receitas - totals.despesas;
 
@@ -220,6 +224,17 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finSaldoAnteriorEl.textContent = formatBRL(saldoAnterior);
       finSaldoResultadoEl.textContent = formatBRL(resultadoPeriodo);
       finCountEl.textContent = `${scopedTx.length} lançamento${scopedTx.length === 1 ? "" : "s"}`;
+
+      const fun = getFunruralConfig();
+      if (fun.regime === "receita") {
+        const est = totals.funruralBase * (fun.receitaRatePct / 100);
+        finFunruralEl.textContent = formatBRL(est);
+        finFunruralHintEl.textContent =
+          `${formatPercentTrim(fun.receitaRatePct)}% sobre ${formatBRL(totals.funruralBase)} em vendas de gado no período`;
+      } else {
+        finFunruralEl.textContent = "—";
+        finFunruralHintEl.textContent = "Cálculo por folha disponível em breve.";
+      }
 
       if (scopedTx.length === 0) {
         renderFinEmpty();

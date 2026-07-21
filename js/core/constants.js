@@ -383,6 +383,19 @@ import { toDateSafe } from "./helpers.js";
     export const MOVEMENT_TYPE_LABEL = Object.fromEntries(MOVEMENT_TYPES.map((t) => [t.value, t.label]));
     export const MOVEMENT_TYPE_BY_VALUE = Object.fromEntries(MOVEMENT_TYPES.map((t) => [t.value, t]));
 
+    // Funrural — alíquotas sobre receita bruta (LC 224/2025, vigência 01/04/2026).
+    export const FUNRURAL_PRODUCER_TYPES = [
+      { value: "pf",                label: "Pessoa Física" },
+      { value: "segurado-especial", label: "Segurado especial" },
+      { value: "pj",                label: "Pessoa Jurídica" },
+    ];
+    export const FUNRURAL_DEFAULTS = {
+      producerType: "pf",
+      regime: "receita",                                  // "receita" | "folha"
+      receitaRateByType: { "pf": 1.63, "segurado-especial": 1.5, "pj": 2.23 },
+      folhaRatePct: 23,                                   // stored for Fase 2, not applied yet
+    };
+
     export const MONTH_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
     export const WEEKDAY_ABBR = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 

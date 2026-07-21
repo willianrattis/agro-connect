@@ -3,6 +3,7 @@ import {
   DEFAULT_TARGET_ARROBAS_PER_HEAD, DEFAULT_FARM_YIELD_PCT, DEFAULT_CONFINEMENT_YIELD_PCT,
   CATTLE_CATEGORIES, FEMALE_GMD_FACTOR, CONFINEMENT_GMD_KG_PER_DAY, ICONS,
   MONTH_ABBR, WEEKDAY_ABBR, TX_CATEGORY_LABEL, resolveCategoryKey, ageMonthsBetween,
+  FUNRURAL_DEFAULTS,
 } from "./constants.js";
 import { propertiesCache, movementsCache, settingsCache, transactionsCache } from "./state.js";
 
@@ -203,6 +204,21 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
           ? settingsCache.defaultConfinementYieldPct
           : DEFAULT_CONFINEMENT_YIELD_PCT,
       };
+    }
+
+    // Perfil-level Funrural config (settings/{uid}), mirroring getSlaughterConfig()'s
+    // read-with-fallback shape — the receita rate falls back per producer type, not
+    // to a single flat default.
+    export function getFunruralConfig() {
+      const s = settingsCache || {};
+      const producerType = s.funruralProducerType || FUNRURAL_DEFAULTS.producerType;
+      const regime = s.funruralRegime || FUNRURAL_DEFAULTS.regime;
+      const receitaRatePct = s.funruralReceitaRatePct != null
+        ? s.funruralReceitaRatePct
+        : FUNRURAL_DEFAULTS.receitaRateByType[producerType];
+      const folhaRatePct = s.funruralFolhaRatePct != null
+        ? s.funruralFolhaRatePct : FUNRURAL_DEFAULTS.folhaRatePct;
+      return { producerType, regime, receitaRatePct, folhaRatePct };
     }
 
     // Farm-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
