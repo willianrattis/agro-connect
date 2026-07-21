@@ -5,6 +5,7 @@ import { currentUid, confinementsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
 import { clearFieldError, setFieldError } from "./animals.js";
+import { fmtNum } from "../indicadores/indicadores.js";
 
      // --- "Nova movimentação" form ---
      export function buildMovementFormHTML(lot) {
