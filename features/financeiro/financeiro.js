@@ -6,10 +6,12 @@ import {
 import {
   yearPrevBtn, yearNextBtn, yearLabelEl, monthSelectorEl, finReceitasEl, finDespesasEl,
   finSaldoEl, finSaldoAnteriorEl, finSaldoResultadoEl, finCountEl, txListEl,
+  finFunruralEl, finFunruralHintEl, finFunruralSplitEl, finFunruralRetidoEl, finFunruralRecolherEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatCurrencyInput, parseBRLToNumber, formatBRL,
-  getAvailableYears, formatDayLabel, categoryDisplayLabel,
+  getAvailableYears, formatDayLabel, categoryDisplayLabel, getFunruralConfig, formatPercentTrim,
+  applyFunruralRetention,
 } from "../../js/core/helpers.js";
 import { currentUid, lotsCache, animalsCache, transactionsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
@@ -159,6 +161,11 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finSaldoAnteriorEl.textContent = "—";
       finSaldoResultadoEl.textContent = "—";
       finCountEl.textContent = "";
+      finFunruralEl.textContent = "—";
+      finFunruralHintEl.textContent = "";
+      finFunruralRetidoEl.textContent = "—";
+      finFunruralRecolherEl.textContent = "—";
+      finFunruralSplitEl.hidden = true;
     }
 
     export function renderFinEmpty() {
@@ -192,9 +199,16 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
         (acc, t) => {
           if (t.kind === "receita") acc.receitas += t.amountBRL || 0;
           else if (t.kind === "despesa") acc.despesas += t.amountBRL || 0;
+          if (t.kind === "receita" && t.category === "venda-animal") {
+            const base = t.grossBRL != null ? t.grossBRL : (t.amountBRL || 0);
+            acc.funruralBase += base;
+            if (t.buyerType === "pf") acc.funruralBasePf += base;
+            else acc.funruralBasePj += base;
+          }
+          if (t.kind === "despesa" && t.category === "mo-salarios") acc.funruralFolhaBase += t.amountBRL || 0;
           return acc;
         },
-        { receitas: 0, despesas: 0 }
+        { receitas: 0, despesas: 0, funruralBase: 0, funruralBasePj: 0, funruralBasePf: 0, funruralFolhaBase: 0 }
       );
       const resultadoPeriodo = totals.receitas - totals.despesas;
 
@@ -220,6 +234,25 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finSaldoAnteriorEl.textContent = formatBRL(saldoAnterior);
       finSaldoResultadoEl.textContent = formatBRL(resultadoPeriodo);
       finCountEl.textContent = `${scopedTx.length} lançamento${scopedTx.length === 1 ? "" : "s"}`;
+
+      const fun = getFunruralConfig();
+      if (fun.regime === "receita") {
+        const rate = fun.receitaRatePct / 100;
+        const est = totals.funruralBase * rate;
+        finFunruralEl.textContent = formatBRL(est);
+        finFunruralHintEl.textContent =
+          `${formatPercentTrim(fun.receitaRatePct)}% sobre ${formatBRL(totals.funruralBase)} em vendas de gado no período`;
+        finFunruralRetidoEl.textContent = formatBRL(totals.funruralBasePj * rate);
+        finFunruralRecolherEl.textContent = formatBRL(totals.funruralBasePf * rate);
+        finFunruralSplitEl.hidden = false;
+      } else {
+        const rate = fun.folhaRatePct / 100;
+        const est = totals.funruralFolhaBase * rate;
+        finFunruralEl.textContent = formatBRL(est);
+        finFunruralHintEl.textContent =
+          `${formatPercentTrim(fun.folhaRatePct)}% sobre ${formatBRL(totals.funruralFolhaBase)} de folha (salários) no período`;
+        finFunruralSplitEl.hidden = true;
+      }
 
       if (scopedTx.length === 0) {
         renderFinEmpty();
@@ -299,6 +332,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const linkedAnimalId = transaction?.linkedAnimalId || null;
        const linkedLotId = transaction?.linkedLotId || null;
        const irDeduct = transaction?.irDeductible || categoryDefaultDeduct(transaction?.category);
+       const buyerType = transaction?.buyerType || "pj";
        // Keep the currently-linked animal selectable even if it's no longer
        // active (sold/dead), so editing an old transaction doesn't lose its link.
        const animalOptions = animals
@@ -345,6 +379,17 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
                <input type="radio" id="tx-ir-depreciavel" name="tx-ir-deduct" value="${IR_DEDUCT.DEPRECIAVEL}" ${irDeduct === IR_DEDUCT.DEPRECIAVEL ? "checked" : ""} />
                <label for="tx-ir-depreciavel">Depreciável</label>
              </div>
+           </div>
+
+           <div class="field" id="tx-buyer-field" ${(kind === "receita" && transaction?.category === "venda-animal") ? "" : "hidden"}>
+             <label class="field-label">Comprador</label>
+             <div class="segmented">
+               <input type="radio" id="tx-buyer-pj" name="tx-buyer-type" value="pj" ${buyerType === "pj" ? "checked" : ""} />
+               <label for="tx-buyer-pj">PJ (frigorífico)</label>
+               <input type="radio" id="tx-buyer-pf" name="tx-buyer-type" value="pf" ${buyerType === "pf" ? "checked" : ""} />
+               <label for="tx-buyer-pf">Pessoa Física</label>
+             </div>
+             <p class="field-hint">PJ retém o Funrural na fonte; PF exige que você recolha.</p>
            </div>
 
            <div class="field">
@@ -401,6 +446,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const scopeAnimalField = document.getElementById("tx-animal-field");
        const scopeLotField = document.getElementById("tx-lot-field");
        const irField = document.getElementById("tx-ir-field");
+       const buyerField = document.getElementById("tx-buyer-field");
        const submitBtn = document.getElementById("tx-submit");
        const formError = document.getElementById("tx-form-error");
        const allFieldIds = ["tx-category", "tx-amount", "tx-date", "tx-animal", "tx-lot"];
@@ -419,6 +465,9 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        function syncIrVisibility() {
          irField.hidden = kindValue() !== "despesa";
        }
+       function syncBuyerVisibility() {
+         buyerField.hidden = !(kindValue() === "receita" && categorySelect.value === "venda-animal");
+       }
 
        // preselect is only honored on the initial call (edit prefill); a
        // manual kind toggle always resets the category, since the two
@@ -433,10 +482,15 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        form.querySelectorAll('input[name="tx-kind"]').forEach((r) => r.addEventListener("change", () => {
          syncCategoryOptions();
          syncIrVisibility();
+         syncBuyerVisibility();
        }));
-       categorySelect.addEventListener("change", () => setIrDeduct(categoryDefaultDeduct(categorySelect.value)));
+       categorySelect.addEventListener("change", () => {
+         setIrDeduct(categoryDefaultDeduct(categorySelect.value));
+         syncBuyerVisibility();
+       });
        syncCategoryOptions(transaction?.category, false);
        syncIrVisibility();
+       syncBuyerVisibility();
 
        function syncScope() {
          const scope = scopeValue();
@@ -481,6 +535,9 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
 
          const date = new Date(`${dateStr}T00:00:00`);
          const irDeductible = kind === "despesa" ? form.querySelector('input[name="tx-ir-deduct"]:checked').value : null;
+         const isVendaAnimal = kind === "receita" && category === "venda-animal";
+         const buyerType = isVendaAnimal
+           ? form.querySelector('input[name="tx-buyer-type"]:checked').value : null;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
@@ -490,6 +547,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
            category,
            costNature: null,
            irDeductible,
+           buyerType,
            amountBRL: amount,
            date,
            linkedScope: scope,
@@ -500,11 +558,17 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
 
          try {
            if (transaction) {
-             // Editar: updateDoc on the existing document — never recreate.
+             // Editar: updateDoc on the existing document — never recreate,
+             // and never re-nets a value that may already be net (no
+             // grossBRL/funruralRetidoBRL override here).
              await updateDoc(doc(db, "transactions", transaction.id), { ...payload, updatedAt: serverTimestamp() });
              showToast("Lançamento atualizado.");
            } else {
-             await addDoc(collection(db, "transactions"), { ownerId: currentUid, ...payload, createdAt: serverTimestamp() });
+             const r = isVendaAnimal ? applyFunruralRetention(amount, buyerType) : null;
+             const createPayload = r
+               ? { ...payload, amountBRL: r.netBRL, grossBRL: r.grossBRL, funruralRetidoBRL: r.funruralRetidoBRL }
+               : payload;
+             await addDoc(collection(db, "transactions"), { ownerId: currentUid, ...createPayload, createdAt: serverTimestamp() });
              showToast("Lançamento salvo.");
            }
            Sheet.close();

@@ -1,6 +1,6 @@
 import { db, doc, updateDoc, serverTimestamp, collection, addDoc } from "../../js/core/firebase.js";
 import { MOVEMENT_TYPE_LABEL, MOVEMENT_TYPE_BY_VALUE } from "../../js/core/constants.js";
-import { escapeHtml, toDateInputValue, movementDeltas, formatCurrencyInput, parseBRLToNumber, formatBRL } from "../../js/core/helpers.js";
+import { escapeHtml, toDateInputValue, movementDeltas, formatCurrencyInput, parseBRLToNumber, formatBRL, getFunruralConfig, formatPercentTrim, applyFunruralRetention } from "../../js/core/helpers.js";
 import { currentUid, confinementsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
@@ -103,6 +103,8 @@ import { fmtNum } from "../indicadores/indicadores.js";
              <input class="input" id="mv-description" type="text" placeholder="Ex: retorno de confinamento" autocomplete="off" />
            </div>
 
+           <p class="field-hint" id="mv-funrural-hint" hidden></p>
+
            <label class="field checkbox-field" id="mv-gen-finance-field" for="mv-gen-finance" hidden>
              <input type="checkbox" id="mv-gen-finance" checked />
              <span class="field-label" id="mv-gen-finance-label">Gerar lançamento financeiro</span>
@@ -126,6 +128,7 @@ import { fmtNum } from "../indicadores/indicadores.js";
        const yieldPctField = document.getElementById("mv-yield-pct-field");
        const yieldPctInput = document.getElementById("mv-yield-pct");
        const arrobaHint = document.getElementById("mv-arroba-hint");
+       const funruralHint = document.getElementById("mv-funrural-hint");
        const genFinanceField = document.getElementById("mv-gen-finance-field");
        const genFinanceCheckbox = document.getElementById("mv-gen-finance");
        const genFinanceLabel = document.getElementById("mv-gen-finance-label");
@@ -170,12 +173,28 @@ import { fmtNum } from "../indicadores/indicadores.js";
          const amount = parseBRLToNumber(amountInput.value);
          genFinanceField.hidden = !(Number.isFinite(amount) && amount > 0);
          syncFinanceLabel();
+         syncFunruralHint();
        }
 
        // --- Venda/Embarque: valor da @ × aproveitamento derivam o Valor
        //     automaticamente, até o usuário editar o campo Valor manualmente. ---
        function isArrobaSaleType() {
          return typeSelect.value === "sale" || typeSelect.value === "shipment";
+       }
+
+       // Display-only: this form's sales are always PJ buyers, so in the
+       // receita regime the frigorífico retains Funrural at source — shows
+       // the producer what actually lands net. Never touches amountBRL.
+       function syncFunruralHint() {
+         const fun = getFunruralConfig();
+         const gross = parseBRLToNumber(amountInput.value);
+         const show = isArrobaSaleType() && fun.regime === "receita"
+           && Number.isFinite(gross) && gross > 0;
+         if (!show) { funruralHint.hidden = true; return; }
+         const retido = gross * (fun.receitaRatePct / 100);
+         funruralHint.hidden = false;
+         funruralHint.textContent =
+           `Funrural retido na fonte (${formatPercentTrim(fun.receitaRatePct)}%): −${formatBRL(retido)} · Líquido a receber: ${formatBRL(gross - retido)}`;
        }
 
        let amountManuallyEdited = false;
@@ -366,12 +385,16 @@ import { fmtNum } from "../indicadores/indicadores.js";
            if (genFinance) {
              const kind = financeKindForType(type, qty);
              const category = kind === "receita" ? "venda-animal" : type === "entry" ? "compra-animal" : "outra";
+             const buyerType = category === "venda-animal" ? "pj" : null;
+             const r = category === "venda-animal" ? applyFunruralRetention(amountBRL, buyerType) : null;
              const txRef = await addDoc(collection(db, "transactions"), {
                ownerId: currentUid,
                kind,
                category,
                costNature: null,
-               amountBRL,
+               buyerType,
+               amountBRL: r ? r.netBRL : amountBRL,
+               ...(r ? { grossBRL: r.grossBRL, funruralRetidoBRL: r.funruralRetidoBRL } : {}),
                date,
                linkedScope: "lot",
                linkedAnimalId: null,

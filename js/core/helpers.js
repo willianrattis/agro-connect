@@ -3,6 +3,7 @@ import {
   DEFAULT_TARGET_ARROBAS_PER_HEAD, DEFAULT_FARM_YIELD_PCT, DEFAULT_CONFINEMENT_YIELD_PCT,
   CATTLE_CATEGORIES, FEMALE_GMD_FACTOR, CONFINEMENT_GMD_KG_PER_DAY, ICONS,
   MONTH_ABBR, WEEKDAY_ABBR, TX_CATEGORY_LABEL, resolveCategoryKey, ageMonthsBetween,
+  FUNRURAL_DEFAULTS,
 } from "./constants.js";
 import { propertiesCache, movementsCache, settingsCache, transactionsCache } from "./state.js";
 
@@ -203,6 +204,35 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
           ? settingsCache.defaultConfinementYieldPct
           : DEFAULT_CONFINEMENT_YIELD_PCT,
       };
+    }
+
+    // Perfil-level Funrural config (settings/{uid}), mirroring getSlaughterConfig()'s
+    // read-with-fallback shape — the receita rate falls back per producer type, not
+    // to a single flat default.
+    export function getFunruralConfig() {
+      const s = settingsCache || {};
+      const producerType = s.funruralProducerType || FUNRURAL_DEFAULTS.producerType;
+      const regime = s.funruralRegime || FUNRURAL_DEFAULTS.regime;
+      const receitaRatePct = s.funruralReceitaRatePct != null
+        ? s.funruralReceitaRatePct
+        : FUNRURAL_DEFAULTS.receitaRateByType[producerType];
+      const folhaRatePct = s.funruralFolhaRatePct != null
+        ? s.funruralFolhaRatePct : FUNRURAL_DEFAULTS.folhaRatePct;
+      return { producerType, regime, receitaRatePct, folhaRatePct };
+    }
+
+    // Splits a gado sale's gross value into what's retained at source vs. the
+    // net the producer actually receives. Only PJ buyers retain (frigoríficos
+    // withhold Funrural at source); PF buyers and the folha regime pass the
+    // gross through untouched — the producer collects Funrural separately.
+    export function applyFunruralRetention(grossBRL, buyerType) {
+      const fun = getFunruralConfig();
+      const applies = fun.regime === "receita" && buyerType === "pj"
+        && Number.isFinite(grossBRL) && grossBRL > 0;
+      if (!applies) return { grossBRL, funruralRetidoBRL: 0, netBRL: grossBRL };
+      const retido = Math.round(grossBRL * (fun.receitaRatePct / 100) * 100) / 100;
+      return { grossBRL, funruralRetidoBRL: retido,
+               netBRL: Math.round((grossBRL - retido) * 100) / 100 };
     }
 
     // Farm-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
