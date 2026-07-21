@@ -19,6 +19,8 @@
     export const finReceitasEl = document.getElementById("fin-receitas");
     export const finDespesasEl = document.getElementById("fin-despesas");
     export const finSaldoEl = document.getElementById("fin-saldo");
+    export const finSaldoAnteriorEl = document.getElementById("fin-saldo-anterior");
+    export const finSaldoResultadoEl = document.getElementById("fin-saldo-resultado");
     export const finCountEl = document.getElementById("fin-count");
     export const txListEl = document.getElementById("tx-list");
 

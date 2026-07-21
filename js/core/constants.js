@@ -242,25 +242,129 @@ import { toDateSafe } from "./helpers.js";
     };
 
     // Predefined transaction categories per kind (SPEC 6.6), plus a free "outra".
+    // Receita stays a flat list; despesa is modeled as grouped taxonomy below
+    // (accounting/IR groupings, SPEC Fase 1a) and flattened back into
+    // TX_CATEGORIES.despesa so existing flat-list consumers keep working.
+    export const TX_CATEGORIES_RECEITA = [
+      { value: "venda-animal", label: "Venda de animal" },
+      { value: "outra", label: "Outra" },
+    ];
+
+    // Tri-state IR deductibility. `dedutivel`/`nao-dedutivel` are self
+    // explanatory; `depreciavel` marks capital items written off via
+    // depreciation rather than deducted in the period incurred.
+    export const IR_DEDUCT = {
+      DEDUTIVEL: "dedutivel",
+      NAO_DEDUTIVEL: "nao-dedutivel",
+      DEPRECIAVEL: "depreciavel",
+    };
+
+    // Ordered groups → items, feeds the despesa category <optgroup> picker.
+    // `deduct` is the DEFAULT deductibility per item — user-overridable per
+    // launch via tx-ir-deduct, not a source of truth once a launch is saved.
+    export const TX_EXPENSE_GROUPS = [
+      { id: "insumos", label: "Insumos e produção animal", items: [
+        { value: "insumo-racao",         label: "Ração, silagem e suplementos",      deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "insumo-sal-mineral",   label: "Sal mineral e minerais",            deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "insumo-sanidade",      label: "Medicamentos, vacinas e vermífugos",deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "insumo-compra-animal", label: "Compra de animais",                 deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "insumo-exames-gta",    label: "Exames laboratoriais e GTAs",       deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "insumo-reproducao",    label: "Inseminação e embriões",            deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "mao-de-obra", label: "Mão de obra e encargos", items: [
+        { value: "mo-salarios",   label: "Salários (13º, férias, rescisões)",   deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "mo-encargos",   label: "Encargos trabalhistas (INSS, FGTS)",  deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "mo-diaristas",  label: "Diaristas e temporários",             deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "mo-alimentacao",label: "Alimentação e alojamento de pessoal", deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "infraestrutura", label: "Infraestrutura, máquinas e manutenção", items: [
+        { value: "infra-manut-maquinas",     label: "Manutenção de máquinas",             deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "infra-manut-benfeitorias", label: "Manutenção de cercas, currais, galpões", deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "infra-manut-irrigacao",    label: "Manutenção de irrigação",            deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "infra-deprec-maquinas",    label: "Depreciação de máquinas",            deduct: IR_DEDUCT.DEPRECIAVEL },
+        { value: "infra-deprec-veiculos",    label: "Depreciação de veículos (uso exclusivo)", deduct: IR_DEDUCT.DEPRECIAVEL },
+        { value: "infra-deprec-benfeitorias",label: "Depreciação de benfeitorias",        deduct: IR_DEDUCT.DEPRECIAVEL },
+      ]},
+      { id: "combustivel-energia", label: "Combustíveis, energia e água", items: [
+        { value: "energia-combustivel", label: "Combustíveis e lubrificantes", deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "energia-eletrica",    label: "Energia elétrica",             deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "energia-agua",        label: "Água (consumo e irrigação)",   deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "servicos", label: "Serviços de terceiros", items: [
+        { value: "serv-assistencia",  label: "Assistência técnica (vet, agrônomo)", deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "serv-contabil",     label: "Serviços contábeis",                  deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "serv-solo-plantio", label: "Preparo do solo, plantio, colheita",  deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "serv-frete",        label: "Fretes e transportes",                deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "serv-aluguel-maq",  label: "Aluguel de máquinas",                 deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "serv-armazenagem",  label: "Armazenagem",                         deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "tributos", label: "Tributos, taxas e financeiro", items: [
+        { value: "trib-itr",           label: "ITR",                         deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "trib-fiscalizacao",  label: "Taxas de fiscalização",       deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "trib-sindical",      label: "Contribuição sindical rural", deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "trib-seguro",        label: "Seguro rural",                deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "trib-juros",         label: "Juros de financiamentos rurais", deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "trib-taxas-banc",    label: "Taxas bancárias (crédito rural)", deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "operacionais", label: "Outros operacionais", items: [
+        { value: "oper-arrendamento", label: "Arrendamento de terras",     deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "oper-embalagens",   label: "Embalagens",                 deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "oper-publicidade",  label: "Publicidade e comercialização", deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "confinamento", label: "Confinamento e manejo", items: [
+        { value: "confin-diaria",     label: "Diária de confinamento", deduct: IR_DEDUCT.DEDUTIVEL },
+        { value: "confin-transporte", label: "Transporte de animais",  deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+      { id: "nao-dedutiveis", label: "Não dedutíveis / pessoais", items: [
+        { value: "nd-prolabore",     label: "Pró-labore / retirada",   deduct: IR_DEDUCT.NAO_DEDUTIVEL },
+        { value: "nd-irpf",          label: "Imposto de Renda (IRPF)", deduct: IR_DEDUCT.NAO_DEDUTIVEL },
+        { value: "nd-multas",        label: "Multas e juros de mora",  deduct: IR_DEDUCT.NAO_DEDUTIVEL },
+        { value: "nd-pessoal",       label: "Gastos pessoais",         deduct: IR_DEDUCT.NAO_DEDUTIVEL },
+        { value: "nd-veiculo-misto", label: "Veículo de uso misto",    deduct: IR_DEDUCT.NAO_DEDUTIVEL },
+      ]},
+      { id: "outros", label: "Outros", items: [
+        { value: "outra", label: "Outra", deduct: IR_DEDUCT.DEDUTIVEL },
+      ]},
+    ];
+
     export const TX_CATEGORIES = {
-      receita: [
-        { value: "venda-animal", label: "Venda de animal" },
-        { value: "outra", label: "Outra" },
-      ],
-      despesa: [
-        { value: "compra-animal", label: "Compra de animal" },
-        { value: "frete", label: "Frete" },
-        { value: "alimentação", label: "Alimentação" },
-        { value: "sanidade", label: "Sanidade" },
-        { value: "mão-de-obra", label: "Mão de obra" },
-        { value: "arrendamento", label: "Arrendamento" },
-        { value: "depreciação", label: "Depreciação" },
-        { value: "outra", label: "Outra" },
-      ],
+      receita: TX_CATEGORIES_RECEITA,
+      despesa: TX_EXPENSE_GROUPS.flatMap((g) => g.items.map(({ value, label }) => ({ value, label }))),
+    };
+
+    // Legacy (pre-taxonomy) despesa category values → current group/deduct
+    // metadata, resolved at read time only. Never shown in the picker; a
+    // stored doc keeps its legacy value forever.
+    export const TX_LEGACY_CATEGORIES = {
+      "compra-animal": { label: "Compra de animal", group: "insumos",        deduct: IR_DEDUCT.DEDUTIVEL },
+      "frete":         { label: "Frete",            group: "servicos",       deduct: IR_DEDUCT.DEDUTIVEL },
+      "alimentação":   { label: "Alimentação",      group: "insumos",        deduct: IR_DEDUCT.DEDUTIVEL },
+      "sanidade":      { label: "Sanidade",         group: "insumos",        deduct: IR_DEDUCT.DEDUTIVEL },
+      "mão-de-obra":   { label: "Mão de obra",      group: "mao-de-obra",    deduct: IR_DEDUCT.DEDUTIVEL },
+      "arrendamento":  { label: "Arrendamento",     group: "operacionais",   deduct: IR_DEDUCT.DEDUTIVEL },
+      "depreciação":   { label: "Depreciação",      group: "infraestrutura", deduct: IR_DEDUCT.DEPRECIAVEL },
+    };
+
+    // value -> { label, group, deduct }, covering receita, every despesa
+    // taxonomy item, and legacy aliases — the single source TX_CATEGORY_LABEL
+    // and the categoryDefaultDeduct/categoryGroupId helpers read from.
+    export const TX_CATEGORY_META = {
+      ...Object.fromEntries(TX_CATEGORIES_RECEITA.map((c) => [c.value, { label: c.label, group: "receita", deduct: null }])),
+      ...Object.fromEntries(
+        TX_EXPENSE_GROUPS.flatMap((g) => g.items.map((item) => [item.value, { label: item.label, group: g.id, deduct: item.deduct }]))
+      ),
+      ...TX_LEGACY_CATEGORIES,
     };
     export const TX_CATEGORY_LABEL = Object.fromEntries(
-      [...TX_CATEGORIES.receita, ...TX_CATEGORIES.despesa].map((c) => [c.value, c.label])
+      Object.entries(TX_CATEGORY_META).map(([v, m]) => [v, m.label])
     );
+
+    export function categoryDefaultDeduct(value) {
+      return TX_CATEGORY_META[value]?.deduct ?? IR_DEDUCT.DEDUTIVEL;
+    }
+    export function categoryGroupId(value) {
+      return TX_CATEGORY_META[value]?.group ?? null;
+    }
 
     // movements.type → ledger vocabulary (aggregate lots), with the sign and
     // "gerar lançamento financeiro" defaults each type starts the form with —

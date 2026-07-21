@@ -1,8 +1,11 @@
 import { db, doc, updateDoc, deleteDoc, serverTimestamp, collection, addDoc } from "../../js/core/firebase.js";
-import { TX_CATEGORIES, MONTH_ABBR, ICONS } from "../../js/core/constants.js";
+import {
+  TX_CATEGORIES, TX_EXPENSE_GROUPS, IR_DEDUCT, MONTH_ABBR, ICONS,
+  categoryDefaultDeduct, categoryGroupId,
+} from "../../js/core/constants.js";
 import {
   yearPrevBtn, yearNextBtn, yearLabelEl, monthSelectorEl, finReceitasEl, finDespesasEl,
-  finSaldoEl, finCountEl, txListEl,
+  finSaldoEl, finSaldoAnteriorEl, finSaldoResultadoEl, finCountEl, txListEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatCurrencyInput, parseBRLToNumber, formatBRL,
@@ -153,6 +156,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finReceitasEl.textContent = "—";
       finDespesasEl.textContent = "—";
       finSaldoEl.textContent = "—";
+      finSaldoAnteriorEl.textContent = "—";
+      finSaldoResultadoEl.textContent = "—";
       finCountEl.textContent = "";
     }
 
@@ -191,13 +196,29 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
         },
         { receitas: 0, despesas: 0 }
       );
-      const saldo = totals.receitas - totals.despesas;
+      const resultadoPeriodo = totals.receitas - totals.despesas;
+
+      // Carries forward every transaction dated strictly before the selected
+      // period's start, regardless of year — scans the full cache, not scopedTx.
+      const periodStart = monthRange
+        ? new Date(selectedYear, monthRange.start - 1, 1)
+        : new Date(selectedYear, 0, 1);
+      const saldoAnterior = transactionsCache.reduce((acc, t) => {
+        const d = toDateSafe(t.date);
+        if (!d || d >= periodStart) return acc;
+        if (t.kind === "receita") return acc + (t.amountBRL || 0);
+        if (t.kind === "despesa") return acc - (t.amountBRL || 0);
+        return acc;
+      }, 0);
+      const saldoAcumulado = saldoAnterior + resultadoPeriodo;
 
       finReceitasEl.textContent = formatBRL(totals.receitas);
       finDespesasEl.textContent = formatBRL(totals.despesas);
-      finSaldoEl.textContent = formatBRL(saldo);
-      finSaldoEl.classList.toggle("fin-positive", saldo > 0);
-      finSaldoEl.classList.toggle("fin-negative", saldo < 0);
+      finSaldoEl.textContent = formatBRL(saldoAcumulado);
+      finSaldoEl.classList.toggle("fin-positive", saldoAcumulado > 0);
+      finSaldoEl.classList.toggle("fin-negative", saldoAcumulado < 0);
+      finSaldoAnteriorEl.textContent = formatBRL(saldoAnterior);
+      finSaldoResultadoEl.textContent = formatBRL(resultadoPeriodo);
       finCountEl.textContent = `${scopedTx.length} lançamento${scopedTx.length === 1 ? "" : "s"}`;
 
       if (scopedTx.length === 0) {
@@ -239,9 +260,37 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
      // 7c. Financeiro — "Nova transação" sheet
      // =====================================================
      export function categoryOptionsHTML(kind, selectedValue) {
-       return TX_CATEGORIES[kind]
-         .map((c) => `<option value="${c.value}" ${c.value === selectedValue ? "selected" : ""}>${escapeHtml(c.label)}</option>`)
+       if (kind !== "despesa") {
+         return TX_CATEGORIES[kind]
+           .map((c) => `<option value="${c.value}" ${c.value === selectedValue ? "selected" : ""}>${escapeHtml(c.label)}</option>`)
+           .join("");
+       }
+       return TX_EXPENSE_GROUPS
+         .map(
+           (g) => `
+             <optgroup label="${escapeHtml(g.label)}">
+               ${g.items.map((c) => `<option value="${c.value}" ${c.value === selectedValue ? "selected" : ""}>${escapeHtml(c.label)}</option>`).join("")}
+             </optgroup>
+           `
+         )
          .join("");
+     }
+
+     function isKnownDespesaCategory(value) {
+       return TX_EXPENSE_GROUPS.some((g) => g.items.some((i) => i.value === value));
+     }
+
+     // Full <option> set for #tx-category, including a "Selecione" placeholder
+     // and — for despesa only — a synthesized option for a legacy category
+     // value that no longer exists in TX_EXPENSE_GROUPS (mirrors the
+     // animalOptions back-compat pattern below), so editing an old
+     // transaction never silently loses its stored category.
+     function categorySelectOptionsHTML(kind, selectedValue) {
+       const legacyOptionHTML =
+         kind === "despesa" && selectedValue && !isKnownDespesaCategory(selectedValue)
+           ? `<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(categoryDisplayLabel(selectedValue))}</option>`
+           : "";
+       return `<option value="">Selecione</option>${legacyOptionHTML}${categoryOptionsHTML(kind, selectedValue)}`;
      }
 
      export function buildTransactionFormHTML(animals, lots, transaction) {
@@ -249,6 +298,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const scope = transaction?.linkedScope || "operation";
        const linkedAnimalId = transaction?.linkedAnimalId || null;
        const linkedLotId = transaction?.linkedLotId || null;
+       const irDeduct = transaction?.irDeductible || categoryDefaultDeduct(transaction?.category);
        // Keep the currently-linked animal selectable even if it's no longer
        // active (sold/dead), so editing an old transaction doesn't lose its link.
        const animalOptions = animals
@@ -274,8 +324,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
            <div class="field field--half">
              <label class="field-label" for="tx-category">Categoria *</label>
              <select class="select" id="tx-category">
-               <option value="">Selecione</option>
-               ${categoryOptionsHTML(kind, transaction?.category)}
+               ${categorySelectOptionsHTML(kind, transaction?.category)}
              </select>
              <p class="field-error" id="tx-category-error"></p>
            </div>
@@ -284,6 +333,18 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
              <label class="field-label" for="tx-amount">Valor (R$) *</label>
              <input class="input" id="tx-amount" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="${transaction ? formatBRL(transaction.amountBRL) : ""}" />
              <p class="field-error" id="tx-amount-error"></p>
+           </div>
+
+           <div class="field" id="tx-ir-field" ${kind === "despesa" ? "" : "hidden"}>
+             <span class="field-label">Dedutível no IR</span>
+             <div class="segmented" role="radiogroup" aria-label="Dedutível no IR">
+               <input type="radio" id="tx-ir-dedutivel" name="tx-ir-deduct" value="${IR_DEDUCT.DEDUTIVEL}" ${irDeduct === IR_DEDUCT.DEDUTIVEL ? "checked" : ""} />
+               <label for="tx-ir-dedutivel">Dedutível</label>
+               <input type="radio" id="tx-ir-nao-dedutivel" name="tx-ir-deduct" value="${IR_DEDUCT.NAO_DEDUTIVEL}" ${irDeduct === IR_DEDUCT.NAO_DEDUTIVEL ? "checked" : ""} />
+               <label for="tx-ir-nao-dedutivel">Não ded.</label>
+               <input type="radio" id="tx-ir-depreciavel" name="tx-ir-deduct" value="${IR_DEDUCT.DEPRECIAVEL}" ${irDeduct === IR_DEDUCT.DEPRECIAVEL ? "checked" : ""} />
+               <label for="tx-ir-depreciavel">Depreciável</label>
+             </div>
            </div>
 
            <div class="field">
@@ -339,6 +400,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const amountInput = document.getElementById("tx-amount");
        const scopeAnimalField = document.getElementById("tx-animal-field");
        const scopeLotField = document.getElementById("tx-lot-field");
+       const irField = document.getElementById("tx-ir-field");
        const submitBtn = document.getElementById("tx-submit");
        const formError = document.getElementById("tx-form-error");
        const allFieldIds = ["tx-category", "tx-amount", "tx-date", "tx-animal", "tx-lot"];
@@ -350,14 +412,31 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
          return form.querySelector('input[name="tx-scope"]:checked').value;
        }
 
+       function setIrDeduct(value) {
+         const target = value || IR_DEDUCT.DEDUTIVEL;
+         form.querySelectorAll('input[name="tx-ir-deduct"]').forEach((r) => { r.checked = r.value === target; });
+       }
+       function syncIrVisibility() {
+         irField.hidden = kindValue() !== "despesa";
+       }
+
        // preselect is only honored on the initial call (edit prefill); a
        // manual kind toggle always resets the category, since the two
-       // kinds' category lists don't overlap.
-       function syncCategoryOptions(preselect) {
-         categorySelect.innerHTML = `<option value="">Selecione</option>${categoryOptionsHTML(kindValue(), preselect)}`;
+       // kinds' category lists don't overlap. resetIr mirrors that: false
+       // only for the initial prefill, where the IR radios are already
+       // correctly baked into the markup (transaction.irDeductible, or the
+       // stored category's default).
+       function syncCategoryOptions(preselect, resetIr = true) {
+         categorySelect.innerHTML = categorySelectOptionsHTML(kindValue(), preselect);
+         if (resetIr) setIrDeduct(categoryDefaultDeduct(categorySelect.value));
        }
-       form.querySelectorAll('input[name="tx-kind"]').forEach((r) => r.addEventListener("change", () => syncCategoryOptions()));
-       syncCategoryOptions(transaction?.category);
+       form.querySelectorAll('input[name="tx-kind"]').forEach((r) => r.addEventListener("change", () => {
+         syncCategoryOptions();
+         syncIrVisibility();
+       }));
+       categorySelect.addEventListener("change", () => setIrDeduct(categoryDefaultDeduct(categorySelect.value)));
+       syncCategoryOptions(transaction?.category, false);
+       syncIrVisibility();
 
        function syncScope() {
          const scope = scopeValue();
@@ -401,6 +480,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
          if (!valid) return;
 
          const date = new Date(`${dateStr}T00:00:00`);
+         const irDeductible = kind === "despesa" ? form.querySelector('input[name="tx-ir-deduct"]:checked').value : null;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
@@ -409,6 +489,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
            kind,
            category,
            costNature: null,
+           irDeductible,
            amountBRL: amount,
            date,
            linkedScope: scope,
