@@ -204,9 +204,10 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
             if (t.buyerType === "pf") acc.funruralBasePf += amt;
             else acc.funruralBasePj += amt;
           }
+          if (t.kind === "despesa" && t.category === "mo-salarios") acc.funruralFolhaBase += t.amountBRL || 0;
           return acc;
         },
-        { receitas: 0, despesas: 0, funruralBase: 0, funruralBasePj: 0, funruralBasePf: 0 }
+        { receitas: 0, despesas: 0, funruralBase: 0, funruralBasePj: 0, funruralBasePf: 0, funruralFolhaBase: 0 }
       );
       const resultadoPeriodo = totals.receitas - totals.despesas;
 
@@ -244,8 +245,11 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
         finFunruralRecolherEl.textContent = formatBRL(totals.funruralBasePf * rate);
         finFunruralSplitEl.hidden = false;
       } else {
-        finFunruralEl.textContent = "—";
-        finFunruralHintEl.textContent = "Cálculo por folha disponível em breve.";
+        const rate = fun.folhaRatePct / 100;
+        const est = totals.funruralFolhaBase * rate;
+        finFunruralEl.textContent = formatBRL(est);
+        finFunruralHintEl.textContent =
+          `${formatPercentTrim(fun.folhaRatePct)}% sobre ${formatBRL(totals.funruralFolhaBase)} de folha (salários) no período`;
         finFunruralSplitEl.hidden = true;
       }
 
