@@ -6,6 +6,7 @@ import { herdListEl } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
   parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel, fmtNum,
+  applyFunruralRetention,
 } from "../../js/core/helpers.js";
 import {
   currentUid, lotsCache, animalsCache, transactionsCache, settingsCache, propertiesCache, eventsCache,
@@ -511,13 +512,16 @@ import { showToast } from "../../js/core/auth.js";
              payload: { arrobas, pricePerArrobaBRL: price, revenueBRL: revenue },
              createdAt: serverTimestamp(),
            });
+           const r = applyFunruralRetention(revenue, "pj");
            await addDoc(collection(db, "transactions"), {
              ownerId: currentUid,
              kind: "receita",
              category: "venda-animal",
              costNature: null,
              buyerType: "pj",
-             amountBRL: revenue,
+             amountBRL: r.netBRL,
+             grossBRL: r.grossBRL,
+             funruralRetidoBRL: r.funruralRetidoBRL,
              date: saleDate,
              linkedScope: "animal",
              linkedAnimalId: animal.id,

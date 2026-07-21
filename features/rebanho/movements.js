@@ -1,6 +1,6 @@
 import { db, doc, updateDoc, serverTimestamp, collection, addDoc } from "../../js/core/firebase.js";
 import { MOVEMENT_TYPE_LABEL, MOVEMENT_TYPE_BY_VALUE } from "../../js/core/constants.js";
-import { escapeHtml, toDateInputValue, movementDeltas, formatCurrencyInput, parseBRLToNumber, formatBRL, getFunruralConfig, formatPercentTrim } from "../../js/core/helpers.js";
+import { escapeHtml, toDateInputValue, movementDeltas, formatCurrencyInput, parseBRLToNumber, formatBRL, getFunruralConfig, formatPercentTrim, applyFunruralRetention } from "../../js/core/helpers.js";
 import { currentUid, confinementsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
@@ -385,13 +385,16 @@ import { fmtNum } from "../indicadores/indicadores.js";
            if (genFinance) {
              const kind = financeKindForType(type, qty);
              const category = kind === "receita" ? "venda-animal" : type === "entry" ? "compra-animal" : "outra";
+             const buyerType = category === "venda-animal" ? "pj" : null;
+             const r = category === "venda-animal" ? applyFunruralRetention(amountBRL, buyerType) : null;
              const txRef = await addDoc(collection(db, "transactions"), {
                ownerId: currentUid,
                kind,
                category,
                costNature: null,
-               buyerType: category === "venda-animal" ? "pj" : null,
-               amountBRL,
+               buyerType,
+               amountBRL: r ? r.netBRL : amountBRL,
+               ...(r ? { grossBRL: r.grossBRL, funruralRetidoBRL: r.funruralRetidoBRL } : {}),
                date,
                linkedScope: "lot",
                linkedAnimalId: null,

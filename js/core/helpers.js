@@ -221,6 +221,20 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
       return { producerType, regime, receitaRatePct, folhaRatePct };
     }
 
+    // Splits a gado sale's gross value into what's retained at source vs. the
+    // net the producer actually receives. Only PJ buyers retain (frigoríficos
+    // withhold Funrural at source); PF buyers and the folha regime pass the
+    // gross through untouched — the producer collects Funrural separately.
+    export function applyFunruralRetention(grossBRL, buyerType) {
+      const fun = getFunruralConfig();
+      const applies = fun.regime === "receita" && buyerType === "pj"
+        && Number.isFinite(grossBRL) && grossBRL > 0;
+      if (!applies) return { grossBRL, funruralRetidoBRL: 0, netBRL: grossBRL };
+      const retido = Math.round(grossBRL * (fun.receitaRatePct / 100) * 100) / 100;
+      return { grossBRL, funruralRetidoBRL: retido,
+               netBRL: Math.round((grossBRL - retido) * 100) / 100 };
+    }
+
     // Farm-side carcass yield: lot override → Perfil default → CARCASS_YIELD.
     export function resolveFarmYieldPct(lot) {
       if (Number.isFinite(lot.carcassYieldPct)) return lot.carcassYieldPct;

@@ -11,6 +11,7 @@ import {
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatCurrencyInput, parseBRLToNumber, formatBRL,
   getAvailableYears, formatDayLabel, categoryDisplayLabel, getFunruralConfig, formatPercentTrim,
+  applyFunruralRetention,
 } from "../../js/core/helpers.js";
 import { currentUid, lotsCache, animalsCache, transactionsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
@@ -199,10 +200,10 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
           if (t.kind === "receita") acc.receitas += t.amountBRL || 0;
           else if (t.kind === "despesa") acc.despesas += t.amountBRL || 0;
           if (t.kind === "receita" && t.category === "venda-animal") {
-            const amt = t.amountBRL || 0;
-            acc.funruralBase += amt;
-            if (t.buyerType === "pf") acc.funruralBasePf += amt;
-            else acc.funruralBasePj += amt;
+            const base = t.grossBRL != null ? t.grossBRL : (t.amountBRL || 0);
+            acc.funruralBase += base;
+            if (t.buyerType === "pf") acc.funruralBasePf += base;
+            else acc.funruralBasePj += base;
           }
           if (t.kind === "despesa" && t.category === "mo-salarios") acc.funruralFolhaBase += t.amountBRL || 0;
           return acc;
@@ -534,7 +535,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
 
          const date = new Date(`${dateStr}T00:00:00`);
          const irDeductible = kind === "despesa" ? form.querySelector('input[name="tx-ir-deduct"]:checked').value : null;
-         const buyerType = (kind === "receita" && category === "venda-animal")
+         const isVendaAnimal = kind === "receita" && category === "venda-animal";
+         const buyerType = isVendaAnimal
            ? form.querySelector('input[name="tx-buyer-type"]:checked').value : null;
 
          submitBtn.disabled = true;
@@ -556,11 +558,17 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
 
          try {
            if (transaction) {
-             // Editar: updateDoc on the existing document — never recreate.
+             // Editar: updateDoc on the existing document — never recreate,
+             // and never re-nets a value that may already be net (no
+             // grossBRL/funruralRetidoBRL override here).
              await updateDoc(doc(db, "transactions", transaction.id), { ...payload, updatedAt: serverTimestamp() });
              showToast("Lançamento atualizado.");
            } else {
-             await addDoc(collection(db, "transactions"), { ownerId: currentUid, ...payload, createdAt: serverTimestamp() });
+             const r = isVendaAnimal ? applyFunruralRetention(amount, buyerType) : null;
+             const createPayload = r
+               ? { ...payload, amountBRL: r.netBRL, grossBRL: r.grossBRL, funruralRetidoBRL: r.funruralRetidoBRL }
+               : payload;
+             await addDoc(collection(db, "transactions"), { ownerId: currentUid, ...createPayload, createdAt: serverTimestamp() });
              showToast("Lançamento salvo.");
            }
            Sheet.close();
