@@ -516,6 +516,7 @@ import { showToast } from "../../js/core/auth.js";
              kind: "receita",
              category: "venda-animal",
              costNature: null,
+             buyerType: "pj",
              amountBRL: revenue,
              date: saleDate,
              linkedScope: "animal",

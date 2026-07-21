@@ -395,6 +395,13 @@ import { toDateSafe } from "./helpers.js";
       receitaRateByType: { "pf": 1.63, "segurado-especial": 1.5, "pj": 2.23 },
       folhaRatePct: 23,                                   // stored for Fase 2, not applied yet
     };
+    // Buyer on a gado sale — determines who remits the Funrural: a PJ buyer
+    // (frigorífico) retains it at the source, a PF buyer doesn't, so the
+    // producer must collect it themselves.
+    export const FUNRURAL_BUYER_TYPES = [
+      { value: "pj", label: "PJ (frigorífico)" },  // retido na fonte
+      { value: "pf", label: "Pessoa Física" },     // produtor recolhe
+    ];
 
     export const MONTH_ABBR = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
     export const WEEKDAY_ABBR = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];

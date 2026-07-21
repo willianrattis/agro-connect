@@ -25,6 +25,9 @@
     export const txListEl = document.getElementById("tx-list");
     export const finFunruralEl = document.getElementById("fin-funrural");
     export const finFunruralHintEl = document.getElementById("fin-funrural-hint");
+    export const finFunruralSplitEl = document.getElementById("fin-funrural-split");
+    export const finFunruralRetidoEl = document.getElementById("fin-funrural-retido");
+    export const finFunruralRecolherEl = document.getElementById("fin-funrural-recolher");
 
     export const settingsTargetValueEl = document.getElementById("settings-target-value");
     export const settingsFarmYieldValueEl = document.getElementById("settings-farmyield-value");

@@ -6,7 +6,7 @@ import {
 import {
   yearPrevBtn, yearNextBtn, yearLabelEl, monthSelectorEl, finReceitasEl, finDespesasEl,
   finSaldoEl, finSaldoAnteriorEl, finSaldoResultadoEl, finCountEl, txListEl,
-  finFunruralEl, finFunruralHintEl,
+  finFunruralEl, finFunruralHintEl, finFunruralSplitEl, finFunruralRetidoEl, finFunruralRecolherEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatCurrencyInput, parseBRLToNumber, formatBRL,
@@ -162,6 +162,9 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finCountEl.textContent = "";
       finFunruralEl.textContent = "—";
       finFunruralHintEl.textContent = "";
+      finFunruralRetidoEl.textContent = "—";
+      finFunruralRecolherEl.textContent = "—";
+      finFunruralSplitEl.hidden = true;
     }
 
     export function renderFinEmpty() {
@@ -195,10 +198,15 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
         (acc, t) => {
           if (t.kind === "receita") acc.receitas += t.amountBRL || 0;
           else if (t.kind === "despesa") acc.despesas += t.amountBRL || 0;
-          if (t.kind === "receita" && t.category === "venda-animal") acc.funruralBase += t.amountBRL || 0;
+          if (t.kind === "receita" && t.category === "venda-animal") {
+            const amt = t.amountBRL || 0;
+            acc.funruralBase += amt;
+            if (t.buyerType === "pf") acc.funruralBasePf += amt;
+            else acc.funruralBasePj += amt;
+          }
           return acc;
         },
-        { receitas: 0, despesas: 0, funruralBase: 0 }
+        { receitas: 0, despesas: 0, funruralBase: 0, funruralBasePj: 0, funruralBasePf: 0 }
       );
       const resultadoPeriodo = totals.receitas - totals.despesas;
 
@@ -227,13 +235,18 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
 
       const fun = getFunruralConfig();
       if (fun.regime === "receita") {
-        const est = totals.funruralBase * (fun.receitaRatePct / 100);
+        const rate = fun.receitaRatePct / 100;
+        const est = totals.funruralBase * rate;
         finFunruralEl.textContent = formatBRL(est);
         finFunruralHintEl.textContent =
           `${formatPercentTrim(fun.receitaRatePct)}% sobre ${formatBRL(totals.funruralBase)} em vendas de gado no período`;
+        finFunruralRetidoEl.textContent = formatBRL(totals.funruralBasePj * rate);
+        finFunruralRecolherEl.textContent = formatBRL(totals.funruralBasePf * rate);
+        finFunruralSplitEl.hidden = false;
       } else {
         finFunruralEl.textContent = "—";
         finFunruralHintEl.textContent = "Cálculo por folha disponível em breve.";
+        finFunruralSplitEl.hidden = true;
       }
 
       if (scopedTx.length === 0) {
@@ -314,6 +327,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const linkedAnimalId = transaction?.linkedAnimalId || null;
        const linkedLotId = transaction?.linkedLotId || null;
        const irDeduct = transaction?.irDeductible || categoryDefaultDeduct(transaction?.category);
+       const buyerType = transaction?.buyerType || "pj";
        // Keep the currently-linked animal selectable even if it's no longer
        // active (sold/dead), so editing an old transaction doesn't lose its link.
        const animalOptions = animals
@@ -360,6 +374,17 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
                <input type="radio" id="tx-ir-depreciavel" name="tx-ir-deduct" value="${IR_DEDUCT.DEPRECIAVEL}" ${irDeduct === IR_DEDUCT.DEPRECIAVEL ? "checked" : ""} />
                <label for="tx-ir-depreciavel">Depreciável</label>
              </div>
+           </div>
+
+           <div class="field" id="tx-buyer-field" ${(kind === "receita" && transaction?.category === "venda-animal") ? "" : "hidden"}>
+             <label class="field-label">Comprador</label>
+             <div class="segmented">
+               <input type="radio" id="tx-buyer-pj" name="tx-buyer-type" value="pj" ${buyerType === "pj" ? "checked" : ""} />
+               <label for="tx-buyer-pj">PJ (frigorífico)</label>
+               <input type="radio" id="tx-buyer-pf" name="tx-buyer-type" value="pf" ${buyerType === "pf" ? "checked" : ""} />
+               <label for="tx-buyer-pf">Pessoa Física</label>
+             </div>
+             <p class="field-hint">PJ retém o Funrural na fonte; PF exige que você recolha.</p>
            </div>
 
            <div class="field">
@@ -416,6 +441,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const scopeAnimalField = document.getElementById("tx-animal-field");
        const scopeLotField = document.getElementById("tx-lot-field");
        const irField = document.getElementById("tx-ir-field");
+       const buyerField = document.getElementById("tx-buyer-field");
        const submitBtn = document.getElementById("tx-submit");
        const formError = document.getElementById("tx-form-error");
        const allFieldIds = ["tx-category", "tx-amount", "tx-date", "tx-animal", "tx-lot"];
@@ -434,6 +460,9 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        function syncIrVisibility() {
          irField.hidden = kindValue() !== "despesa";
        }
+       function syncBuyerVisibility() {
+         buyerField.hidden = !(kindValue() === "receita" && categorySelect.value === "venda-animal");
+       }
 
        // preselect is only honored on the initial call (edit prefill); a
        // manual kind toggle always resets the category, since the two
@@ -448,10 +477,15 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        form.querySelectorAll('input[name="tx-kind"]').forEach((r) => r.addEventListener("change", () => {
          syncCategoryOptions();
          syncIrVisibility();
+         syncBuyerVisibility();
        }));
-       categorySelect.addEventListener("change", () => setIrDeduct(categoryDefaultDeduct(categorySelect.value)));
+       categorySelect.addEventListener("change", () => {
+         setIrDeduct(categoryDefaultDeduct(categorySelect.value));
+         syncBuyerVisibility();
+       });
        syncCategoryOptions(transaction?.category, false);
        syncIrVisibility();
+       syncBuyerVisibility();
 
        function syncScope() {
          const scope = scopeValue();
@@ -496,6 +530,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
 
          const date = new Date(`${dateStr}T00:00:00`);
          const irDeductible = kind === "despesa" ? form.querySelector('input[name="tx-ir-deduct"]:checked').value : null;
+         const buyerType = (kind === "receita" && category === "venda-animal")
+           ? form.querySelector('input[name="tx-buyer-type"]:checked').value : null;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
@@ -505,6 +541,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
            category,
            costNature: null,
            irDeductible,
+           buyerType,
            amountBRL: amount,
            date,
            linkedScope: scope,

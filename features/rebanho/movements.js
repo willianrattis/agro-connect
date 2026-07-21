@@ -371,6 +371,7 @@ import { fmtNum } from "../indicadores/indicadores.js";
                kind,
                category,
                costNature: null,
+               buyerType: category === "venda-animal" ? "pj" : null,
                amountBRL,
                date,
                linkedScope: "lot",
