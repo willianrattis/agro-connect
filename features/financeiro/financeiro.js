@@ -2,7 +2,7 @@ import { db, doc, updateDoc, deleteDoc, serverTimestamp, collection, addDoc } fr
 import { TX_CATEGORIES, MONTH_ABBR, ICONS } from "../../js/core/constants.js";
 import {
   yearPrevBtn, yearNextBtn, yearLabelEl, monthSelectorEl, finReceitasEl, finDespesasEl,
-  finSaldoEl, finCountEl, txListEl,
+  finSaldoEl, finSaldoAnteriorEl, finSaldoResultadoEl, finCountEl, txListEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatCurrencyInput, parseBRLToNumber, formatBRL,
@@ -153,6 +153,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
       finReceitasEl.textContent = "—";
       finDespesasEl.textContent = "—";
       finSaldoEl.textContent = "—";
+      finSaldoAnteriorEl.textContent = "—";
+      finSaldoResultadoEl.textContent = "—";
       finCountEl.textContent = "";
     }
 
@@ -191,13 +193,29 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
         },
         { receitas: 0, despesas: 0 }
       );
-      const saldo = totals.receitas - totals.despesas;
+      const resultadoPeriodo = totals.receitas - totals.despesas;
+
+      // Carries forward every transaction dated strictly before the selected
+      // period's start, regardless of year — scans the full cache, not scopedTx.
+      const periodStart = monthRange
+        ? new Date(selectedYear, monthRange.start - 1, 1)
+        : new Date(selectedYear, 0, 1);
+      const saldoAnterior = transactionsCache.reduce((acc, t) => {
+        const d = toDateSafe(t.date);
+        if (!d || d >= periodStart) return acc;
+        if (t.kind === "receita") return acc + (t.amountBRL || 0);
+        if (t.kind === "despesa") return acc - (t.amountBRL || 0);
+        return acc;
+      }, 0);
+      const saldoAcumulado = saldoAnterior + resultadoPeriodo;
 
       finReceitasEl.textContent = formatBRL(totals.receitas);
       finDespesasEl.textContent = formatBRL(totals.despesas);
-      finSaldoEl.textContent = formatBRL(saldo);
-      finSaldoEl.classList.toggle("fin-positive", saldo > 0);
-      finSaldoEl.classList.toggle("fin-negative", saldo < 0);
+      finSaldoEl.textContent = formatBRL(saldoAcumulado);
+      finSaldoEl.classList.toggle("fin-positive", saldoAcumulado > 0);
+      finSaldoEl.classList.toggle("fin-negative", saldoAcumulado < 0);
+      finSaldoAnteriorEl.textContent = formatBRL(saldoAnterior);
+      finSaldoResultadoEl.textContent = formatBRL(resultadoPeriodo);
       finCountEl.textContent = `${scopedTx.length} lançamento${scopedTx.length === 1 ? "" : "s"}`;
 
       if (scopedTx.length === 0) {
