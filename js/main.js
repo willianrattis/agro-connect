@@ -8,6 +8,7 @@ import "./core/dom.js";
 import "./core/constants.js";
 import "./core/helpers.js";
 import "./core/sheet.js";
+import "./core/datefield.js";
 import "./core/tabs.js";
 import "./core/listeners.js";
 import "./core/auth.js";
