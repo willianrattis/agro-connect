@@ -36,8 +36,29 @@
 
   .kpi-section { margin-top: var(--space-6); }
   .kpi-section-header {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-2);
     margin-bottom: var(--space-3);
   }
+  .kpi-section-header::-webkit-details-marker { display: none; }
+  .kpi-section-header:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  /* Estoque's always-open sections reuse the same markup/classes but
+     shouldn't look or behave like a collapsible summary. */
+  .kpi-section-header.kpi-section-header-plain {
+    display: block;
+    cursor: default;
+  }
+  /* flex-basis: 0 (not auto) keeps a long subtitle from being sized at its
+     max-content width first, which would push the chevron onto its own line. */
+  .kpi-section-heading { flex: 1 1 0%; min-width: 0; }
   .kpi-section-title {
     font-family: var(--font-display);
     font-size: var(--fs-lg);
@@ -50,6 +71,40 @@
     font-size: var(--fs-sm);
     color: var(--text-muted);
   }
+  .kpi-section-chevron {
+    color: var(--text-muted);
+    flex: none;
+    transition: transform 150ms ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kpi-section-chevron { transition: none; }
+  }
+  .kpi-section[open] > .kpi-section-header .kpi-section-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* Compact chart preview shown inside a collapsed section's <summary>.
+     <summary>'s own content stays visible even while its <details> is open
+     (only its *sibling* content is native-hidden), and toggling doesn't
+     trigger a re-render — so hiding the preview once expanded has to be a
+     pure CSS rule keyed off [open], not a render-time decision. */
+  .kpi-section-header > .kpi-card.is-preview {
+    flex: 1 1 100%;
+    margin-top: var(--space-3);
+  }
+  .kpi-section[open] > .kpi-section-header > .kpi-card.is-preview {
+    display: none;
+  }
+  .kpi-card.is-preview {
+    min-height: 0;
+    padding: var(--space-3);
+    box-shadow: none;
+  }
+  .kpi-card.is-preview .expenses-donut {
+    max-width: 96px;
+    margin: var(--space-2) auto 0;
+  }
+  .kpi-card.is-preview .cashflow-chart { height: 48px; }
 
   .kpi-grid {
     display: grid;

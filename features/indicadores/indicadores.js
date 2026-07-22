@@ -562,9 +562,10 @@ import { loadedFlags } from "../../js/core/listeners.js";
          .reduce((best, t) => (!best || (t.amountBRL || 0) > (best.amountBRL || 0) ? t : best), null);
      }
 
-     export function renderExpensesByCategoryCard(range) {
+     export function renderExpensesByCategoryCard(range, { compact = false } = {}) {
        const { groups, total } = computeExpensesByGroup(range);
        if (total === 0) {
+         if (compact) return "";
          return `
            <div class="kpi-card expenses-card is-missing">
              <p class="kpi-card-label">Despesas por categoria</p>
@@ -588,6 +589,19 @@ import { loadedFlags } from "../../js/core/listeners.js";
            return `<circle cx="21" cy="21" r="15.915" fill="none" stroke-width="5" class="donut-seg donut-seg-${i}" stroke-dasharray="${g.pct.toFixed(2)} ${(100 - g.pct).toFixed(2)}" stroke-dashoffset="${offset}"><title>${escapeHtml(g.label)}: ${escapeHtml(formatBRL(g.total))} (${g.pct.toFixed(1).replace(".", ",")}%)</title></circle>`;
          })
          .join("");
+
+       if (compact) {
+         return `
+           <div class="kpi-card expenses-card is-preview">
+             <p class="kpi-card-label">Despesas por categoria</p>
+             <svg class="expenses-donut" viewBox="0 0 42 42" role="img" aria-label="Distribuição das despesas por categoria">
+               ${donutCircles}
+               <text x="21" y="19.5" text-anchor="middle" class="donut-center-value">${escapeHtml(formatBRL(total))}</text>
+               <text x="21" y="26" text-anchor="middle" class="donut-center-caption">despesas</text>
+             </svg>
+           </div>
+         `;
+       }
 
        const maxTotal = groups[0].total;
        const listRows = groups
@@ -631,8 +645,9 @@ import { loadedFlags } from "../../js/core/listeners.js";
        `;
      }
 
-     export function renderCashflowCard() {
+     export function renderCashflowCard({ compact = false } = {}) {
        if (!transactionsCache.length) {
+         if (compact) return "";
          return `
            <div class="kpi-card cashflow-card is-missing">
              <p class="kpi-card-label">Fluxo de caixa mensal</p>
@@ -652,19 +667,52 @@ import { loadedFlags } from "../../js/core/listeners.js";
            return `<rect class="cf-bar${m.net < 0 ? " negative" : ""}" x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="2"><title>${escapeHtml(monthChipLabel(m.key))}: ${escapeHtml(formatBRL(m.net))}</title></rect>`;
          })
          .join("");
+       const svgHTML = `
+         <svg class="cashflow-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Fluxo de caixa mensal dos últimos 12 meses">
+           <line class="cf-axis" x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" />
+           ${bars}
+         </svg>
+       `;
+       if (compact) {
+         return `
+           <div class="kpi-card cashflow-card is-preview">
+             <p class="kpi-card-label">Fluxo de caixa mensal</p>
+             ${svgHTML}
+           </div>
+         `;
+       }
        return `
          <div class="kpi-card cashflow-card">
            <p class="kpi-card-label">Fluxo de caixa mensal</p>
-           <svg class="cashflow-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Fluxo de caixa mensal dos últimos 12 meses">
-             <line class="cf-axis" x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" />
-             ${bars}
-           </svg>
+           ${svgHTML}
            <div class="cashflow-legend">
              <span>${escapeHtml(monthChipLabel(months[0].key))}</span>
              <span>${escapeHtml(monthChipLabel(months[months.length - 1].key))}</span>
            </div>
          </div>
        `;
+     }
+
+     // --- KPI section collapse state ---
+     // renderIndicadores() replaces indicadoresRootEl.innerHTML on every
+     // render, so open/closed <details> state can't live in the DOM — it's
+     // kept here and mirrored to localStorage so it survives reloads.
+     const KPI_SECTIONS_KEY = "agroconnect:indicadores:openSections";
+     function loadOpenKpiSections() {
+       try {
+         const parsed = JSON.parse(localStorage.getItem(KPI_SECTIONS_KEY));
+         return new Set(Array.isArray(parsed) ? parsed : []);
+       } catch {
+         return new Set();
+       }
+     }
+     let openKpiSections = loadOpenKpiSections();
+     function persistOpenKpiSections() {
+       try {
+         localStorage.setItem(KPI_SECTIONS_KEY, JSON.stringify([...openKpiSections]));
+       } catch {
+         // best-effort — a write failure must never break rendering
+       }
      }
 
      // --- Card / section HTML builders ---
@@ -689,10 +737,29 @@ import { loadedFlags } from "../../js/core/listeners.js";
        `;
      }
 
-     export function kpiSectionHTML(title, subtitle, cardsHTML) {
+     export function kpiSectionHTML(id, title, subtitle, cardsHTML, previewHTML = "") {
+       const open = openKpiSections.has(id);
+       return `
+         <details class="kpi-section" data-section-id="${id}"${open ? " open" : ""}>
+           <summary class="kpi-section-header">
+             <div class="kpi-section-heading">
+               <h3 class="kpi-section-title">${escapeHtml(title)}</h3>
+               ${subtitle ? `<p class="kpi-section-subtitle">${escapeHtml(subtitle)}</p>` : ""}
+             </div>
+             <span class="kpi-section-chevron" aria-hidden="true">▾</span>
+             ${previewHTML}
+           </summary>
+           <div class="kpi-grid">${cardsHTML}</div>
+         </details>
+       `;
+     }
+
+     // Non-collapsible section wrapper used by the Estoque tab, which keeps
+     // its own always-open sections outside this feature's scope.
+     export function plainKpiSectionHTML(title, subtitle, cardsHTML) {
        return `
          <div class="kpi-section">
-           <div class="kpi-section-header">
+           <div class="kpi-section-header kpi-section-header-plain">
              <h3 class="kpi-section-title">${escapeHtml(title)}</h3>
              ${subtitle ? `<p class="kpi-section-subtitle">${escapeHtml(subtitle)}</p>` : ""}
            </div>
@@ -714,13 +781,13 @@ import { loadedFlags } from "../../js/core/listeners.js";
 
      export function renderIndicadoresLoading() {
        const groups = [
-         ["Desempenho animal", 5],
-         ["Reprodutivo", 5],
-         ["Econômico-financeiro", 6],
-         ["Gestão", 4],
+         ["desempenho", "Desempenho animal", 5],
+         ["reprodutivo", "Reprodutivo", 5],
+         ["economico", "Econômico-financeiro", 6],
+         ["gestao", "Gestão", 4],
        ];
        indicadoresRootEl.innerHTML = groups
-         .map(([title, count]) => kpiSectionHTML(title, "", Array.from({ length: count }).map(kpiSkeletonCardHTML).join("")))
+         .map(([id, title, count]) => kpiSectionHTML(id, title, "", Array.from({ length: count }).map(kpiSkeletonCardHTML).join("")))
          .join("");
      }
 
@@ -842,6 +909,14 @@ import { loadedFlags } from "../../js/core/listeners.js";
        e.preventDefault();
        handleSlaughterRowActivate(e);
      });
+     // toggle doesn't bubble, so this must be a capture-phase listener.
+     indicadoresRootEl.addEventListener("toggle", (e) => {
+       if (!e.target.matches?.(".kpi-section[data-section-id]")) return;
+       const id = e.target.dataset.sectionId;
+       if (e.target.open) openKpiSections.add(id);
+       else openKpiSections.delete(id);
+       persistOpenKpiSections();
+     }, true);
 
      export function renderIndicadores() {
        if (!loadedFlags.animals || !loadedFlags.transactions || !loadedFlags.events || !loadedFlags.settings) {
@@ -853,10 +928,14 @@ import { loadedFlags } from "../../js/core/listeners.js";
 
        indicadoresRootEl.innerHTML = [
          slaughterPanelHTML(),
-         kpiSectionHTML("Desempenho animal", label, renderGroup1(range).map(kpiCardHTML).join("")),
-         kpiSectionHTML("Reprodutivo", "Cobertura/IA, diagnóstico de gestação e partos", renderGroup2(range).map(kpiCardHTML).join("")),
-         kpiSectionHTML("Econômico-financeiro", label, renderGroup3(range).map(kpiCardHTML).join("") + renderExpensesByCategoryCard(range)),
-         kpiSectionHTML("Gestão", "Fluxo dos últimos 12 meses; demais indicadores no período selecionado", renderGroup4Cards(range).map(kpiCardHTML).join("") + renderCashflowCard()),
+         kpiSectionHTML("desempenho", "Desempenho animal", label, renderGroup1(range).map(kpiCardHTML).join("")),
+         kpiSectionHTML("reprodutivo", "Reprodutivo", "Cobertura/IA, diagnóstico de gestação e partos", renderGroup2(range).map(kpiCardHTML).join("")),
+         kpiSectionHTML("economico", "Econômico-financeiro", label,
+           renderGroup3(range).map(kpiCardHTML).join("") + renderExpensesByCategoryCard(range),
+           renderExpensesByCategoryCard(range, { compact: true })),
+         kpiSectionHTML("gestao", "Gestão", "Fluxo dos últimos 12 meses; demais indicadores no período selecionado",
+           renderGroup4Cards(range).map(kpiCardHTML).join("") + renderCashflowCard(),
+           renderCashflowCard({ compact: true })),
        ].join("");
      }
 
@@ -926,8 +1005,8 @@ import { loadedFlags } from "../../js/core/listeners.js";
 
      export function renderEstoqueLoading() {
        estoqueRootEl.innerHTML = [
-         kpiSectionHTML("Estoque", "", Array.from({ length: 6 }).map(kpiSkeletonCardHTML).join("")),
-         kpiSectionHTML("Consolidado", "", Array.from({ length: 6 }).map(kpiSkeletonCardHTML).join("")),
+         plainKpiSectionHTML("Estoque", "", Array.from({ length: 6 }).map(kpiSkeletonCardHTML).join("")),
+         plainKpiSectionHTML("Consolidado", "", Array.from({ length: 6 }).map(kpiSkeletonCardHTML).join("")),
        ].join("");
      }
 
@@ -962,8 +1041,8 @@ import { loadedFlags } from "../../js/core/listeners.js";
        const consolidated = computeInventoryBuckets(lotsCache, { includeConfined: true });
 
        estoqueRootEl.innerHTML = [
-         kpiSectionHTML(`Estoque — ${propertyName}`, `${propertyLots.length} lote(s) ativo(s)`, inventoryCardsHTML(perProperty.buckets, perProperty.total)),
-         kpiSectionHTML("Consolidado", `${lotsCache.length} lote(s) em todas as propriedades`, inventoryCardsHTML(consolidated.buckets, consolidated.total)),
+         plainKpiSectionHTML(`Estoque — ${propertyName}`, `${propertyLots.length} lote(s) ativo(s)`, inventoryCardsHTML(perProperty.buckets, perProperty.total)),
+         plainKpiSectionHTML("Consolidado", `${lotsCache.length} lote(s) em todas as propriedades`, inventoryCardsHTML(consolidated.buckets, consolidated.total)),
        ].join("");
      }
 
