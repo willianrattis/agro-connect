@@ -259,7 +259,7 @@ import { showToast } from "../../js/core/auth.js";
        const isActive = (animal.status || "active") === "active";
        const lot = animal.lotId ? lotsCache.find((l) => l.id === animal.lotId) : null;
        const stageKey = displayCategoryKeyForAnimal(animal, lot);
-       const { wean, finishing } = lifecycleActionsFor({
+       const { wean, finishing, calving } = lifecycleActionsFor({
          stageKey,
          sex: animal.sex,
          weaningDate: animal.weaningDate,
@@ -274,10 +274,10 @@ import { showToast } from "../../js/core/auth.js";
                  Desmamar
                </button>
              ` : "",
-             animal.sex === "F" ? `
+             calving ? `
                <button type="button" class="action-item pressable" data-menu-action="calving">
                  <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
-                 Registrar 1º parto
+                 ${animal.firstCalvingDate ? "Registrar parto" : "Registrar 1º parto"}
                </button>
              ` : "",
              finishing ? `
@@ -552,12 +552,18 @@ import { showToast } from "../../js/core/auth.js";
        wireStampForm({ submitLabel, onSubmit });
      }
 
-     // --- Registrar 1º parto (fêmeas) ---
+     // --- Registrar parto (fêmeas): 1º parto stamps firstCalvingDate and
+     //     starts the count; every parto after that only advances
+     //     lastCalvingDate/calvingCount — firstCalvingDate never changes
+     //     again. The stage this derives to (novilha de 1ª cria vs. vaca)
+     //     comes from calvingCount, not from firstCalvingDate alone. ---
      export function openCalvingSheet(animal) {
+       const isFirst = !animal.firstCalvingDate;
+       const title = isFirst ? "Registrar 1º parto" : "Registrar parto";
        openStampSheet({
-         title: `Registrar 1º parto · #${escapeHtml(animal.earTag)}`,
-         dateLabel: "Data do 1º parto",
-         submitLabel: "Registrar 1º parto",
+         title: `${title} · #${escapeHtml(animal.earTag)}`,
+         dateLabel: isFirst ? "Data do 1º parto" : "Data do parto",
+         submitLabel: title,
          onSubmit: async (date) => {
            await addDoc(collection(db, "events"), {
              ownerId: currentUid,
@@ -568,17 +574,22 @@ import { showToast } from "../../js/core/auth.js";
              payload: {},
              createdAt: serverTimestamp(),
            });
-           await updateDoc(doc(db, "animals", animal.id), { firstCalvingDate: date, updatedAt: serverTimestamp() });
-           showToast("1º parto registrado.");
+           const stamps = isFirst
+             ? { firstCalvingDate: date, lastCalvingDate: date, calvingCount: 1 }
+             : { lastCalvingDate: date, calvingCount: (animal.calvingCount ?? 1) + 1 };
+           await updateDoc(doc(db, "animals", animal.id), { ...stamps, updatedAt: serverTimestamp() });
+           showToast(isFirst ? "1º parto registrado." : "Parto registrado.");
          },
        });
      }
 
      export function openLotCalvingSheet(lot) {
+       const isFirst = !lot.firstCalvingDate;
+       const title = isFirst ? "Registrar 1º parto" : "Registrar parto";
        openStampSheet({
-         title: `Registrar 1º parto · ${escapeHtml(lot.name)}`,
-         dateLabel: "Data do 1º parto",
-         submitLabel: "Registrar 1º parto",
+         title: `${title} · ${escapeHtml(lot.name)}`,
+         dateLabel: isFirst ? "Data do 1º parto" : "Data do parto",
+         submitLabel: title,
          onSubmit: async (date) => {
            await addDoc(collection(db, "events"), {
              ownerId: currentUid,
@@ -589,8 +600,11 @@ import { showToast } from "../../js/core/auth.js";
              payload: {},
              createdAt: serverTimestamp(),
            });
-           await updateDoc(doc(db, "lots", lot.id), { firstCalvingDate: date, updatedAt: serverTimestamp() });
-           showToast("1º parto registrado para o lote.");
+           const stamps = isFirst
+             ? { firstCalvingDate: date, lastCalvingDate: date, calvingCount: 1 }
+             : { lastCalvingDate: date, calvingCount: (lot.calvingCount ?? 1) + 1 };
+           await updateDoc(doc(db, "lots", lot.id), { ...stamps, updatedAt: serverTimestamp() });
+           showToast(isFirst ? "1º parto registrado para o lote." : "Parto registrado para o lote.");
          },
        });
      }

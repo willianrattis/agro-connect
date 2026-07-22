@@ -30,7 +30,7 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        // a sex + taxonomy category — legacy lots keep their old action set.
        const hasStages = !!lot.sex;
        const stageKey = displayCategoryKeyForLot(lot);
-       const { wean, finishing } = lifecycleActionsFor({
+       const { wean, finishing, calving } = lifecycleActionsFor({
          stageKey,
          sex: lot.sex,
          weaningDate: lot.weaningDate,
@@ -70,10 +70,10 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
                  Registrar desmama
                </button>
              ` : ""}
-             ${hasStages && lot.sex === "F" ? `
+             ${hasStages && calving ? `
                <button type="button" class="action-item pressable" data-menu-action="calving">
                  <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
-                 Registrar 1º parto
+                 ${lot.firstCalvingDate ? "Registrar parto" : "Registrar 1º parto"}
                </button>
              ` : ""}
              ${hasStages && finishing ? `
