@@ -3,7 +3,7 @@ import {
 } from "../../js/core/firebase.js";
 import {
   CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, statusLabel, ICONS,
-  animalStageLabel, animalStageChipClass,
+  animalStageLabel, animalStageChipClass, displayCategoryKeyForAnimal, lifecycleActionsFor,
 } from "../../js/core/constants.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
@@ -257,45 +257,63 @@ import { showToast } from "../../js/core/auth.js";
 
      export function buildActionMenuHTML(animal) {
        const isActive = (animal.status || "active") === "active";
-       const lifecycleItems = isActive
-         ? `
-           <button type="button" class="action-item pressable" data-menu-action="weigh">
-             <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
-             Pesar
-           </button>
-           <button type="button" class="action-item pressable" data-menu-action="wean">
-             <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
-             Desmamar
-           </button>
-           ${animal.sex === "F" ? `
-             <button type="button" class="action-item pressable" data-menu-action="calving">
-               <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
-               Registrar 1º parto
-             </button>
-           ` : ""}
-           ${animal.sex === "M" ? `
-             <button type="button" class="action-item pressable" data-menu-action="finishing">
-               <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
-               Iniciar terminação
-             </button>
-           ` : ""}
-           <button type="button" class="action-item danger pressable" data-menu-action="death">
-             <span class="action-icon" aria-hidden="true">${ICONS.death}</span>
-             Registrar morte
-           </button>
-         `
+       const lot = animal.lotId ? lotsCache.find((l) => l.id === animal.lotId) : null;
+       const stageKey = displayCategoryKeyForAnimal(animal, lot);
+       const { wean, finishing } = lifecycleActionsFor({
+         stageKey,
+         sex: animal.sex,
+         weaningDate: animal.weaningDate,
+         finishingStartDate: animal.finishingStartDate,
+       });
+
+       const registrosItems = isActive
+         ? [
+             wean ? `
+               <button type="button" class="action-item pressable" data-menu-action="wean">
+                 <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
+                 Desmamar
+               </button>
+             ` : "",
+             animal.sex === "F" ? `
+               <button type="button" class="action-item pressable" data-menu-action="calving">
+                 <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
+                 Registrar 1º parto
+               </button>
+             ` : "",
+             finishing ? `
+               <button type="button" class="action-item pressable" data-menu-action="finishing">
+                 <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
+                 Iniciar terminação
+               </button>
+             ` : "",
+             `
+               <button type="button" class="action-item danger pressable" data-menu-action="death">
+                 <span class="action-icon" aria-hidden="true">${ICONS.death}</span>
+                 Registrar morte
+               </button>
+             `,
+           ].filter(Boolean).join("")
          : "";
+
        return `
          <div class="action-list">
-           ${lifecycleItems}
-           <button type="button" class="action-item pressable" data-menu-action="edit">
-             <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
-             Editar
-           </button>
-           <button type="button" class="action-item danger pressable" data-menu-action="delete">
-             <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
-             Excluir
-           </button>
+           ${registrosItems ? `
+             <div class="action-group">
+               <div class="action-group-title">Registros</div>
+               ${registrosItems}
+             </div>
+           ` : ""}
+           <div class="action-group">
+             <div class="action-group-title">Gestão</div>
+             <button type="button" class="action-item pressable" data-menu-action="edit">
+               <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
+               Editar
+             </button>
+             <button type="button" class="action-item danger pressable" data-menu-action="delete">
+               <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
+               Excluir
+             </button>
+           </div>
          </div>
        `;
      }
@@ -308,7 +326,6 @@ import { showToast } from "../../js/core/auth.js";
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
            switch (btn.dataset.menuAction) {
-             case "weigh": openWeighingSheet(animal); break;
              case "wean": openWeaningSheet(animal); break;
              case "calving": openCalvingSheet(animal); break;
              case "finishing": openFinishingSheet(animal); break;
@@ -389,90 +406,6 @@ import { showToast } from "../../js/core/auth.js";
          content: buildDeleteAnimalHTML(animal),
        });
        wireDeleteAnimalForm(animal);
-     }
-
-     // --- Pesar ---
-     export function buildWeighingFormHTML() {
-       return `
-         <form id="weigh-form" class="form-grid" novalidate>
-           <div class="field field--half">
-             <label class="field-label" for="weigh-date">Data da pesagem *</label>
-             <input class="input" id="weigh-date" type="date" />
-             <p class="field-error" id="weigh-date-error"></p>
-           </div>
-           <div class="field field--half">
-             <label class="field-label" for="weigh-weight">Peso (kg) *</label>
-             <input class="input" id="weigh-weight" type="number" min="0" step="0.1" placeholder="Ex: 340" />
-             <p class="field-error" id="weigh-weight-error"></p>
-           </div>
-           <p class="field-error" id="weigh-form-error" role="alert"></p>
-           <button type="submit" class="btn-primary pressable" id="weigh-submit">Registrar pesagem</button>
-         </form>
-       `;
-     }
-
-     export function wireWeighingForm(animal) {
-       const form = document.getElementById("weigh-form");
-       const submitBtn = document.getElementById("weigh-submit");
-       const formError = document.getElementById("weigh-form-error");
-
-       form.addEventListener("submit", async (e) => {
-         e.preventDefault();
-         if (!currentUid) return;
-
-         formError.textContent = "";
-         ["weigh-date", "weigh-weight"].forEach(clearFieldError);
-
-         let valid = true;
-         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
-
-         const dateStr = document.getElementById("weigh-date").value;
-         if (!dateStr) fail("weigh-date", "Informe a data da pesagem.");
-
-         const weightKg = parseFloat(document.getElementById("weigh-weight").value);
-         if (!Number.isFinite(weightKg) || weightKg <= 0) fail("weigh-weight", "Informe o peso.");
-
-         if (!valid) return;
-
-         const date = new Date(`${dateStr}T00:00:00`);
-
-         submitBtn.disabled = true;
-         submitBtn.textContent = "Salvando…";
-
-         try {
-           await addDoc(collection(db, "events"), {
-             ownerId: currentUid,
-             type: "weighing",
-             animalId: animal.id,
-             lotId: animal.lotId || null,
-             date,
-             payload: { weightKg },
-             createdAt: serverTimestamp(),
-           });
-           await updateDoc(doc(db, "animals", animal.id), {
-             currentWeightKg: weightKg,
-             updatedAt: serverTimestamp(),
-           });
-           showToast("Pesagem registrada.");
-           Sheet.close();
-         } catch (err) {
-           console.warn("[Agro Connect] Falha ao registrar pesagem:", err?.code ?? err);
-           formError.textContent =
-             err?.code === "permission-denied"
-               ? "Sem permissão para gravar."
-               : "Não foi possível salvar. Tente novamente.";
-           submitBtn.disabled = false;
-           submitBtn.textContent = "Registrar pesagem";
-         }
-       });
-     }
-
-     export function openWeighingSheet(animal) {
-       Sheet.open({
-         title: `Pesar · #${escapeHtml(animal.earTag)}`,
-         content: buildWeighingFormHTML(),
-       });
-       wireWeighingForm(animal);
      }
 
      // --- Desmamar ---

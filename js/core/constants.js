@@ -191,6 +191,20 @@ import { toDateSafe } from "./helpers.js";
       return clampStageFloor(derivedKey, floorKey, lot.sex);
     }
 
+    // Shared by the animal and lot action menus: which lifecycle stamps make
+    // sense to offer given the current (derived) stage. Calving is
+    // deliberately excluded — its own gating is a separate change.
+    // stageKey null (no birthDate/entryCategory to derive from, legacy
+    // records) never hides an action on data we can't classify.
+    export function lifecycleActionsFor({ stageKey, sex, weaningDate, finishingStartDate }) {
+      if (stageKey == null) {
+        return { wean: true, finishing: sex === "M" };
+      }
+      const wean = (stageKey === "bezerro_lactente" || stageKey === "bezerra_lactente") && !weaningDate;
+      const finishing = sex === "M" && (stageKey === "garrote" || stageKey === "boi_magro") && !finishingStartDate;
+      return { wean, finishing };
+    }
+
     // CATTLE_CATEGORIES key (lots.entryCategory) → legacy coarse lots.category
     // bucket, kept alongside entryCategory on every new lot so the existing
     // lot-list chip/label rendering (lotCategoryLabel/LOT_CHIP_CLASS) keeps

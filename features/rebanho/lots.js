@@ -3,6 +3,7 @@ import {
 } from "../../js/core/firebase.js";
 import {
   CATTLE_CATEGORIES, categoriesForSex, LOT_CATEGORY_BUCKET, MOVEMENT_TYPE_LABEL, ICONS, lotCategoryLabel,
+  displayCategoryKeyForLot, lifecycleActionsFor,
 } from "../../js/core/constants.js";
 import { lotListEl } from "../../js/core/dom.js";
 import {
@@ -28,6 +29,13 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        // Chronological stamps only make sense for Phase 2+ lots that carry
        // a sex + taxonomy category — legacy lots keep their old action set.
        const hasStages = !!lot.sex;
+       const stageKey = displayCategoryKeyForLot(lot);
+       const { wean, finishing } = lifecycleActionsFor({
+         stageKey,
+         sex: lot.sex,
+         weaningDate: lot.weaningDate,
+         finishingStartDate: lot.finishingStartDate,
+       });
        return `
          <div class="action-list">
            ${!isAggregate ? `
@@ -56,7 +64,7 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
                <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
                Nova movimentação
              </button>
-             ${hasStages ? `
+             ${hasStages && wean ? `
                <button type="button" class="action-item pressable" data-menu-action="wean">
                  <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
                  Registrar desmama
@@ -68,7 +76,7 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
                  Registrar 1º parto
                </button>
              ` : ""}
-             ${hasStages && lot.sex === "M" ? `
+             ${hasStages && finishing ? `
                <button type="button" class="action-item pressable" data-menu-action="finishing">
                  <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
                  Iniciar terminação
