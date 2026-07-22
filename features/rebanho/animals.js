@@ -1,7 +1,10 @@
 import {
   db, doc, updateDoc, deleteDoc, serverTimestamp, collection, addDoc, query, where, getDocs,
 } from "../../js/core/firebase.js";
-import { CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, statusLabel, ICONS } from "../../js/core/constants.js";
+import {
+  CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, statusLabel, ICONS,
+  animalStageLabel, animalStageChipClass,
+} from "../../js/core/constants.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
   parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel, fmtNum,
@@ -1068,4 +1071,151 @@ import { showToast } from "../../js/core/auth.js";
          content: buildAnimalDetailHTML(animal),
        });
        document.getElementById("animal-detail-actions-btn")?.addEventListener("click", () => openActionSheet(animal));
+     }
+
+     // --- "Ver animais" (per-lot tagged-animal list) ---
+     // Re-attaches the flat herd list's card UI, scoped to one lot, routing
+     // to the sheets already defined above — no new animal features here.
+     export let openLotAnimalsLotId = null;
+     export function setOpenLotAnimalsLotId(id) { openLotAnimalsLotId = id; }
+
+     export function buildLotAnimalsHTML(lot) {
+       const animals = animalsCache
+         .filter((a) => a.lotId === lot.id)
+         .slice()
+         .sort((a, b) => (a.earTag || "").localeCompare(b.earTag || "", undefined, { numeric: true }));
+
+       if (!animals.length) {
+         return `
+           <div class="form-grid">
+             <div class="empty-state">
+               <span class="icon" aria-hidden="true">${ICONS.tag}</span>
+               <h3>Nenhum animal com brinco neste lote</h3>
+             </div>
+           </div>
+         `;
+       }
+
+       const active = animals.filter((a) => (a.status || "active") === "active");
+       const cards = animals
+         .map((a) => {
+           const days = daysOnFarm(a);
+           const weight = a.currentWeightKg != null ? `${formatKg(a.currentWeightKg)} kg` : "—";
+           const chipClass = animalStageChipClass(a, lot);
+           const saleResult = computeSaleResult(a, transactionsCache);
+           return `
+             <li class="card pressable" data-animal-id="${escapeHtml(a.id)}" tabindex="0" role="button" aria-label="Ver detalhes do animal #${escapeHtml(a.earTag)}">
+               <div class="card-top">
+                 <span class="ear-tag"><span class="hash">#</span>${escapeHtml(a.earTag)}</span>
+                 <div class="card-top-right">
+                   <span class="chip ${chipClass}">${escapeHtml(animalStageLabel(a, lot))}</span>
+                   <button type="button" class="card-menu-btn pressable" data-action="animal-menu" data-id="${escapeHtml(a.id)}" aria-label="Ações do animal #${escapeHtml(a.earTag)}">
+                     ${ICONS.menu}
+                   </button>
+                 </div>
+               </div>
+               <div class="card-stats">
+                 <div class="mini-stat">
+                   <p class="mini-value">${weight}</p>
+                   <p class="mini-label">Peso atual</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${days != null ? `${days} d` : "—"}</p>
+                   <p class="mini-label">Na fazenda</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${statusLabel[a.status] || "Ativo"}</p>
+                   <p class="mini-label">Status</p>
+                 </div>
+               </div>
+               ${saleResult ? `
+                 <div class="sale-result">
+                   <span><strong>${saleResult.days}</strong> dias</span>
+                   <span>Lucro <strong>${formatBRL(saleResult.profit)}</strong></span>
+                   <span><strong>${formatBRL(saleResult.dailyProfit)}</strong>/dia</span>
+                 </div>
+               ` : ""}
+             </li>
+           `;
+         })
+         .join("");
+
+       return `
+         <div class="form-grid">
+           <p class="field-hint">${active.length} de ${animals.length} ativos</p>
+           <ul class="herd-list">${cards}</ul>
+         </div>
+       `;
+     }
+
+     // Delegated on #sheet-body (not on individual cards) so a live refresh
+     // that swaps the whole list back in doesn't need to re-bind per card.
+     // Re-wiring removes the previous delegated pair first — #sheet-body is a
+     // stable node reused by every Sheet.open(), so binding without removing
+     // would stack a duplicate handler on every open/refresh of this sheet.
+     let _lotAnimalsClickHandler = null;
+     let _lotAnimalsKeydownHandler = null;
+
+     export function wireLotAnimalsSheet(lot) {
+       const bodyEl = document.getElementById("sheet-body");
+       if (!bodyEl) return;
+       const back = () => openLotAnimalsSheet(lot);
+
+       if (_lotAnimalsClickHandler) bodyEl.removeEventListener("click", _lotAnimalsClickHandler);
+       if (_lotAnimalsKeydownHandler) bodyEl.removeEventListener("keydown", _lotAnimalsKeydownHandler);
+
+       function activate(e) {
+         const menuBtn = e.target.closest('[data-action="animal-menu"]');
+         if (menuBtn) {
+           const animal = animalsCache.find((a) => a.id === menuBtn.dataset.id);
+           if (animal) {
+             openLotAnimalsLotId = null;
+             openActionSheet(animal);
+             Sheet.setBack(back);
+           }
+           return;
+         }
+         const card = e.target.closest("li[data-animal-id]");
+         if (!card) return;
+         const animal = animalsCache.find((a) => a.id === card.dataset.animalId);
+         if (animal) {
+           openLotAnimalsLotId = null;
+           openAnimalDetailSheet(animal);
+           Sheet.setBack(back);
+         }
+       }
+
+       _lotAnimalsClickHandler = activate;
+       _lotAnimalsKeydownHandler = (e) => {
+         if (e.key !== "Enter" && e.key !== " ") return;
+         if (e.target.closest('[data-action="animal-menu"]')) return; // native button handles its own activation
+         if (!e.target.closest("li[data-animal-id]")) return;
+         e.preventDefault();
+         activate(e);
+       };
+
+       bodyEl.addEventListener("click", _lotAnimalsClickHandler);
+       bodyEl.addEventListener("keydown", _lotAnimalsKeydownHandler);
+     }
+
+     export function openLotAnimalsSheet(lot) {
+       openLotAnimalsLotId = lot.id;
+       Sheet.open({
+         title: `Animais · ${escapeHtml(lot.name)}`,
+         content: buildLotAnimalsHTML(lot),
+         onClose: () => { openLotAnimalsLotId = null; },
+       });
+       wireLotAnimalsSheet(lot);
+     }
+
+     // Keeps the list live while open — animals arrive on their own
+     // onSnapshot listener (selling/weighing/editing an animal elsewhere
+     // should be reflected here without a manual reopen).
+     export function refreshLotAnimalsSheetIfOpen() {
+       if (!openLotAnimalsLotId) return;
+       const lot = lotsCache.find((l) => l.id === openLotAnimalsLotId);
+       if (!lot) { openLotAnimalsLotId = null; Sheet.close(); return; }
+       const bodyEl = document.getElementById("sheet-body");
+       if (bodyEl) bodyEl.innerHTML = buildLotAnimalsHTML(lot);
+       wireLotAnimalsSheet(lot);
      }

@@ -18,6 +18,7 @@ import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
 import {
   clearFieldError, setFieldError, openLotCalvingSheet, openLotFinishingSheet, openLotWeaningSheet,
+  openLotAnimalsSheet,
 } from "./animals.js";
 import { openLotWeighingSheet, openLotWeighingHistorySheet } from "./weighing.js";
 import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
@@ -29,6 +30,15 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        const hasStages = !!lot.sex;
        return `
          <div class="action-list">
+           ${!isAggregate ? `
+             <div class="action-group">
+               <div class="action-group-title">Animais</div>
+               <button type="button" class="action-item pressable" data-menu-action="view-animals">
+                 <span class="action-icon" aria-hidden="true">${ICONS.tag}</span>
+                 Ver animais
+               </button>
+             </div>
+           ` : ""}
            <div class="action-group">
              <div class="action-group-title">Medição</div>
              <button type="button" class="action-item pressable" data-menu-action="weigh-lot">
@@ -91,7 +101,8 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        const back = () => openLotActionSheet(lot);
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
-           if (btn.dataset.menuAction === "weigh-lot") { openLotWeighingSheet(lot); Sheet.setBack(back); }
+           if (btn.dataset.menuAction === "view-animals") { openLotAnimalsSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "weigh-lot") { openLotWeighingSheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "weighing-history") { openLotWeighingHistorySheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "edit") { openEditLotSheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "delete") { openDeleteLotSheet(lot); Sheet.setBack(back); }

@@ -21,6 +21,7 @@ import {
   renderLots, renderLotsError,
 } from "../../features/rebanho/render.js";
 import { refreshLotDetailSheetIfOpen, setOpenLotDetailLotId } from "../../features/rebanho/lots.js";
+import { refreshLotAnimalsSheetIfOpen } from "../../features/rebanho/animals.js";
 import { renderFinanceiro, renderFinError, renderMonthChips } from "../../features/financeiro/financeiro.js";
 import { renderSettingsCard } from "../../features/perfil/settings.js";
 import { renderPropertiesCard } from "../../features/perfil/properties.js";
@@ -88,6 +89,7 @@ import {
           updateSyncState("animals", snap.metadata.fromCache);
           setAnimalsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           renderLots();
+          refreshLotAnimalsSheetIfOpen();
           renderHerdSummary();
           loadedFlags.animals = true;
           renderIndicadores();
