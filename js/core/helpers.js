@@ -288,6 +288,37 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
       return { days, projectedWeightKg, confinementName: confined.confinementName };
     }
 
+    // Per-lot target @/head — lot override → Perfil default.
+    export function resolveLotTargetArrobas(lot) {
+      return Number.isFinite(lot.targetArrobas) ? lot.targetArrobas : getSlaughterConfig().targetArrobasPerHead;
+    }
+
+    // Estimated ready-for-sale date from a weight projection: how many days
+    // until the projected weight reaches the target @ at the given yield,
+    // read-time only. Returns null when any input is missing/non-positive.
+    export function slaughterForecast({ projectedWeightKg, gmdKgPerDay, targetArrobas, yieldPct }) {
+      if (!Number.isFinite(projectedWeightKg) || !Number.isFinite(gmdKgPerDay) || gmdKgPerDay <= 0) return null;
+      if (!Number.isFinite(targetArrobas) || targetArrobas <= 0) return null;
+      if (!Number.isFinite(yieldPct) || yieldPct <= 0) return null;
+
+      const targetLiveWeightKg = (targetArrobas * KG_PER_ARROBA) / yieldPct;
+      const daysRemaining = Math.ceil((targetLiveWeightKg - projectedWeightKg) / gmdKgPerDay);
+      const isReady = daysRemaining <= 0;
+      const date = isReady ? null : new Date(Date.now() + daysRemaining * 86_400_000);
+
+      let label;
+      if (isReady) {
+        label = "Pronto para venda";
+      } else if (daysRemaining < 45) {
+        label = `Previsão: ${date.toLocaleDateString("pt-BR")} · em ${daysRemaining.toLocaleString("pt-BR")} dias`;
+      } else {
+        const months = Math.round(daysRemaining / 30.44);
+        label = `Previsão: ${date.toLocaleDateString("pt-BR")} · em ~${months.toLocaleString("pt-BR")} meses`;
+      }
+
+      return { daysRemaining, isReady, date, label };
+    }
+
     // Tinted single-line strip summarizing a lot's confined head — shared by
     // the lot card and the lot detail sheet. Returns "" when the lot holds
     // no confined head.

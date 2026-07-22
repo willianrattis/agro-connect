@@ -432,3 +432,6 @@
   .slaughter-row.is-ready .slaughter-progress-fill { background: var(--success); }
   .slaughter-row.is-near .slaughter-progress-fill { background: var(--chip-bezerro-text); }
 
+  .slaughter-row-forecast { font-size: var(--fs-xs); color: var(--text-muted); }
+  .slaughter-row.is-ready .slaughter-row-forecast { color: var(--success); font-weight: 600; }
+

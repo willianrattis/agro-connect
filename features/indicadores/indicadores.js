@@ -1,10 +1,11 @@
 import {
   CARCASS_YIELD, KG_PER_ARROBA, CATTLE_CATEGORIES, displayCategoryKeyForAnimal, displayCategoryKeyForLot,
-  TX_EXPENSE_GROUPS, categoryGroupId, TX_CATEGORY_LABEL,
+  TX_EXPENSE_GROUPS, categoryGroupId, TX_CATEGORY_LABEL, CONFINEMENT_GMD_KG_PER_DAY,
 } from "../../js/core/constants.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, totalArrobas, formatArrobas, getSlaughterConfig,
   resolveFarmYieldPct, resolveConfinementYieldPct, lotWeightProjection, lotConfinedProjection,
+  resolveLotTargetArrobas, slaughterForecast,
   formatBRL, saleDaysHeld, monthKey, monthChipLabel, buildRecentMonthKeys,
 } from "../../js/core/helpers.js";
 import {
@@ -831,7 +832,7 @@ import { loadedFlags } from "../../js/core/listeners.js";
        const rows = [];
 
        for (const lot of lotsCache) {
-         const target = Number.isFinite(lot.targetArrobas) ? lot.targetArrobas : cfg.targetArrobasPerHead;
+         const target = resolveLotTargetArrobas(lot);
 
          const headcount = lot.headcount ?? 0;
          if (headcount > 0) {
@@ -849,6 +850,12 @@ import { loadedFlags } from "../../js/core/listeners.js";
                arrobasPerHead,
                targetArrobas: target,
                status: arrobasPerHead >= target ? "ready" : arrobasPerHead >= target - 1 ? "near" : "growing",
+               forecast: slaughterForecast({
+                 projectedWeightKg: projection.projectedWeightKg,
+                 gmdKgPerDay: projection.gmdKgPerDay,
+                 targetArrobas: target,
+                 yieldPct,
+               }),
              });
            }
          }
@@ -869,6 +876,12 @@ import { loadedFlags } from "../../js/core/listeners.js";
                arrobasPerHead,
                targetArrobas: target,
                status: arrobasPerHead >= target ? "ready" : arrobasPerHead >= target - 1 ? "near" : "growing",
+               forecast: slaughterForecast({
+                 projectedWeightKg: confinedProjection.projectedWeightKg,
+                 gmdKgPerDay: CONFINEMENT_GMD_KG_PER_DAY,
+                 targetArrobas: target,
+                 yieldPct,
+               }),
              });
            }
          }
@@ -897,6 +910,7 @@ import { loadedFlags } from "../../js/core/listeners.js";
            <div class="slaughter-progress">
              <div class="slaughter-progress-fill" style="width: ${pct.toFixed(1)}%;"></div>
            </div>
+           ${row.forecast ? `<p class="slaughter-row-forecast">${escapeHtml(row.forecast.label)}</p>` : ""}
          </li>
        `;
      }
