@@ -318,3 +318,23 @@
     border-bottom: none;
   }
 
+  /* Ear-tag picker — "Nova movimentação" (Venda) for individual lots */
+  .tag-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: var(--space-2);
+  }
+  .tag-picker-chip {
+    min-height: 44px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .tag-picker-chip[aria-pressed="true"] {
+    background: var(--accent-tint);
+    border-color: var(--accent);
+    color: var(--brand-strong);
+    font-weight: 600;
+  }
+

@@ -1,7 +1,7 @@
-import { db, doc, updateDoc, serverTimestamp, collection, addDoc } from "../../js/core/firebase.js";
+import { db, doc, updateDoc, serverTimestamp, collection, addDoc, writeBatch } from "../../js/core/firebase.js";
 import { MOVEMENT_TYPE_LABEL, MOVEMENT_TYPE_BY_VALUE } from "../../js/core/constants.js";
 import { escapeHtml, toDateInputValue, movementDeltas, formatCurrencyInput, parseBRLToNumber, formatBRL, getFunruralConfig, formatPercentTrim, applyFunruralRetention } from "../../js/core/helpers.js";
-import { currentUid, confinementsCache } from "../../js/core/state.js";
+import { currentUid, confinementsCache, animalsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
 import { clearFieldError, setFieldError } from "./animals.js";
@@ -22,6 +22,13 @@ import { fmtNum } from "../indicadores/indicadores.js";
        const confinamentoOptions = confinementsCache
          .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`)
          .join("");
+       const isIndividual = (lot.trackingMode || "individual") !== "aggregate";
+       const activeAnimals = isIndividual
+         ? animalsCache
+             .filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
+             .slice()
+             .sort((a, b) => (a.earTag || "").localeCompare(b.earTag || "", undefined, { numeric: true }))
+         : [];
        return `
          <form id="mv-form" class="form-grid" novalidate>
            <div class="field field--half">
@@ -69,6 +76,23 @@ import { fmtNum } from "../indicadores/indicadores.js";
              <input class="input" id="mv-qty" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex: 28" />
              <p class="field-error" id="mv-qty-error"></p>
            </div>
+
+           ${isIndividual ? `
+             <div class="field" id="mv-animals-field" hidden>
+               <span class="field-label">Animais que estão saindo</span>
+               <p class="field-hint" id="mv-animals-count">0 de ${activeAnimals.length} selecionados</p>
+               <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-2);">
+                 <button type="button" class="btn-secondary pressable" id="mv-animals-all">Selecionar todos</button>
+                 <button type="button" class="btn-secondary pressable" id="mv-animals-clear">Limpar</button>
+               </div>
+               <div class="tag-picker" id="mv-animals-picker">
+                 ${activeAnimals.map((a) => `
+                   <button type="button" class="tag-picker-chip pressable" data-animal-id="${escapeHtml(a.id)}" aria-pressed="false">#${escapeHtml(a.earTag)}</button>
+                 `).join("")}
+               </div>
+               <p class="field-error" id="mv-animals-error"></p>
+             </div>
+           ` : ""}
 
            <div class="field field--half">
              <label class="field-label" for="mv-avgWeightKg">Peso médio (kg)</label>
@@ -143,6 +167,71 @@ import { fmtNum } from "../indicadores/indicadores.js";
        const submitBtn = document.getElementById("mv-submit");
        const formError = document.getElementById("mv-form-error");
 
+       const isIndividual = (lot.trackingMode || "individual") !== "aggregate";
+       const activeAnimals = isIndividual
+         ? animalsCache
+             .filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
+             .slice()
+             .sort((a, b) => (a.earTag || "").localeCompare(b.earTag || "", undefined, { numeric: true }))
+         : [];
+       const animalsField = document.getElementById("mv-animals-field");
+       const animalsCountEl = document.getElementById("mv-animals-count");
+       const animalsAllBtn = document.getElementById("mv-animals-all");
+       const animalsClearBtn = document.getElementById("mv-animals-clear");
+       const animalsPickerEl = document.getElementById("mv-animals-picker");
+       const selectedAnimalIds = new Set();
+
+       // Picker (sale-only) writes its selection count into #mv-qty whenever
+       // it's non-empty; qty stays editable so a lot with untagged head can
+       // still be sold in excess of what's tagged.
+       function updateAnimalsUI() {
+         if (!animalsField) return;
+         if (animalsCountEl) animalsCountEl.textContent = `${selectedAnimalIds.size} de ${activeAnimals.length} selecionados`;
+         if (selectedAnimalIds.size > 0) {
+           qtyInput.value = String(selectedAnimalIds.size);
+           syncArrobaCalc();
+           syncFinanceVisibility();
+         }
+       }
+
+       function clearAnimalsSelection() {
+         if (!animalsPickerEl) return;
+         animalsPickerEl.querySelectorAll(".tag-picker-chip").forEach((chip) => chip.setAttribute("aria-pressed", "false"));
+         selectedAnimalIds.clear();
+         updateAnimalsUI();
+       }
+
+       function syncAnimalsField() {
+         if (!animalsField) return;
+         const show = typeSelect.value === "sale";
+         animalsField.hidden = !show;
+         if (!show) clearAnimalsSelection();
+       }
+
+       if (animalsPickerEl) {
+         animalsPickerEl.addEventListener("click", (e) => {
+           const chip = e.target.closest(".tag-picker-chip");
+           if (!chip) return;
+           const pressed = chip.getAttribute("aria-pressed") === "true";
+           chip.setAttribute("aria-pressed", String(!pressed));
+           if (pressed) selectedAnimalIds.delete(chip.dataset.animalId);
+           else selectedAnimalIds.add(chip.dataset.animalId);
+           updateAnimalsUI();
+         });
+       }
+       if (animalsAllBtn) {
+         animalsAllBtn.addEventListener("click", () => {
+           animalsPickerEl.querySelectorAll(".tag-picker-chip").forEach((chip) => {
+             chip.setAttribute("aria-pressed", "true");
+             selectedAnimalIds.add(chip.dataset.animalId);
+           });
+           updateAnimalsUI();
+         });
+       }
+       if (animalsClearBtn) {
+         animalsClearBtn.addEventListener("click", clearAnimalsSelection);
+       }
+
        function isConfinementType() {
          return typeSelect.value === "confinement_out" || typeSelect.value === "confinement_return";
        }
@@ -199,8 +288,13 @@ import { fmtNum } from "../indicadores/indicadores.js";
 
        let amountManuallyEdited = false;
 
+       // The per-animal sale write reuses this instead of recomputing the
+       // arrobas with a second formula — null whenever the hint itself isn't
+       // showing a computed total (missing weight/price/yield).
+       let lastArrobaCalc = null;
+
        function syncArrobaCalc() {
-         if (!isArrobaSaleType()) { arrobaHint.hidden = true; return; }
+         if (!isArrobaSaleType()) { arrobaHint.hidden = true; lastArrobaCalc = null; return; }
 
          const qty = parseInt(qtyInput.value, 10);
          const avgWeightKg = parseFloat(avgWeightInput.value);
@@ -217,6 +311,7 @@ import { fmtNum } from "../indicadores/indicadores.js";
            const arrobasPerHead = (avgWeightKg * (yieldPct / 100)) / 15;
            const totalArrobas = arrobasPerHead * qty;
            const derivedAmount = totalArrobas * arrobaPrice;
+           lastArrobaCalc = { arrobasPerHead, totalArrobas };
 
            arrobaHint.hidden = false;
            arrobaHint.textContent =
@@ -227,9 +322,11 @@ import { fmtNum } from "../indicadores/indicadores.js";
              syncFinanceVisibility();
            }
          } else if (arrobaFieldsTouched) {
+           lastArrobaCalc = null;
            arrobaHint.hidden = false;
            arrobaHint.textContent = "Preencha peso médio, @ e aproveitamento para calcular o valor";
          } else {
+           lastArrobaCalc = null;
            arrobaHint.hidden = true;
          }
        }
@@ -264,6 +361,7 @@ import { fmtNum } from "../indicadores/indicadores.js";
            ? "Peso de embarque — pode ser editado depois com o peso aferido no confinamento"
            : "";
 
+         syncAnimalsField();
          syncArrobaCalc();
          syncFinanceVisibility();
        }
@@ -289,7 +387,7 @@ import { fmtNum } from "../indicadores/indicadores.js";
          if (!currentUid) return;
 
          formError.textContent = "";
-         ["mv-type", "mv-date", "mv-qty", "mv-confinamento", "mv-newconfinamento-name"].forEach(clearFieldError);
+         ["mv-type", "mv-date", "mv-qty", "mv-animals", "mv-confinamento", "mv-newconfinamento-name"].forEach(clearFieldError);
 
          let valid = true;
          const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
@@ -302,6 +400,11 @@ import { fmtNum } from "../indicadores/indicadores.js";
 
          const magnitude = parseInt(document.getElementById("mv-qty").value, 10);
          if (!Number.isInteger(magnitude) || magnitude <= 0) fail("mv-qty", "Informe a quantidade.");
+
+         const selectedAnimalIdList = type === "sale" ? Array.from(selectedAnimalIds) : [];
+         if (type === "sale" && selectedAnimalIdList.length > magnitude) {
+           fail("mv-animals", `Selecione no máximo ${magnitude} animais.`);
+         }
 
          const confinementType = isConfinementType();
          let newConfinamentoName = null;
@@ -405,7 +508,7 @@ import { fmtNum } from "../indicadores/indicadores.js";
              linkedTransactionId = txRef.id;
            }
 
-           await addDoc(collection(db, "movements"), {
+           const movementRef = await addDoc(collection(db, "movements"), {
              ownerId: currentUid,
              lotId: lot.id,
              date,
@@ -428,6 +531,64 @@ import { fmtNum } from "../indicadores/indicadores.js";
              confinedHeadcount: newConfinedHeadcount,
              updatedAt: serverTimestamp(),
            });
+
+           // The movement + lot headcount are committed at this point — a
+           // failure past here must not read as "nothing was saved", since
+           // that's no longer true. It's reported separately below instead
+           // of falling into the generic catch, which would misdescribe it.
+           if (type === "sale" && selectedAnimalIdList.length > 0) {
+             try {
+               const totalArrobas = lastArrobaCalc?.totalArrobas ?? null;
+               const perHeadArrobas = totalArrobas != null ? totalArrobas / selectedAnimalIdList.length : null;
+               const perHeadRevenue = amountBRL != null ? amountBRL / selectedAnimalIdList.length : null;
+
+               const ops = [];
+               selectedAnimalIdList.forEach((animalId) => {
+                 ops.push({
+                   ref: doc(db, "animals", animalId),
+                   type: "update",
+                   data: {
+                     status: "sold",
+                     saleDate: date,
+                     saleArrobas: perHeadArrobas,
+                     salePricePerArrobaBRL: arrobaPriceBRL,
+                     saleRevenueBRL: perHeadRevenue,
+                     saleMovementId: movementRef.id,
+                     updatedAt: serverTimestamp(),
+                   },
+                 });
+                 ops.push({
+                   ref: doc(collection(db, "events")),
+                   type: "set",
+                   data: {
+                     ownerId: currentUid,
+                     type: "sale",
+                     animalId,
+                     lotId: lot.id,
+                     date,
+                     payload: { arrobas: perHeadArrobas, pricePerArrobaBRL: arrobaPriceBRL, revenueBRL: perHeadRevenue },
+                     movementId: movementRef.id,
+                     createdAt: serverTimestamp(),
+                   },
+                 });
+               });
+
+               const CHUNK_SIZE = 450;
+               for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+                 const animalsBatch = writeBatch(db);
+                 ops.slice(i, i + CHUNK_SIZE).forEach((op) => {
+                   if (op.type === "update") animalsBatch.update(op.ref, op.data);
+                   else animalsBatch.set(op.ref, op.data);
+                 });
+                 await animalsBatch.commit();
+               }
+             } catch (animalsErr) {
+               console.warn("[Agro Connect] Falha ao atualizar animais vendidos:", animalsErr?.code ?? animalsErr);
+               showToast("Movimentação salva, mas não foi possível atualizar os animais selecionados. Tente novamente.");
+               Sheet.close();
+               return;
+             }
+           }
 
            showToast("Movimentação registrada.");
            Sheet.close();

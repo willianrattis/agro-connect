@@ -8,10 +8,9 @@ import {
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
   parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel, fmtNum,
-  applyFunruralRetention,
 } from "../../js/core/helpers.js";
 import {
-  currentUid, lotsCache, animalsCache, transactionsCache, settingsCache, propertiesCache, eventsCache,
+  currentUid, lotsCache, animalsCache, transactionsCache, eventsCache,
 } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
@@ -260,10 +259,6 @@ import { showToast } from "../../js/core/auth.js";
        const isActive = (animal.status || "active") === "active";
        const lifecycleItems = isActive
          ? `
-           <button type="button" class="action-item pressable" data-menu-action="sell">
-             <span class="action-icon" aria-hidden="true">${ICONS.sell}</span>
-             Vender
-           </button>
            <button type="button" class="action-item pressable" data-menu-action="weigh">
              <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
              Pesar
@@ -313,7 +308,6 @@ import { showToast } from "../../js/core/auth.js";
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
            switch (btn.dataset.menuAction) {
-             case "sell": openSaleSheet(animal); break;
              case "weigh": openWeighingSheet(animal); break;
              case "wean": openWeaningSheet(animal); break;
              case "calving": openCalvingSheet(animal); break;
@@ -395,143 +389,6 @@ import { showToast } from "../../js/core/auth.js";
          content: buildDeleteAnimalHTML(animal),
        });
        wireDeleteAnimalForm(animal);
-     }
-
-     // --- Vender ---
-     export function buildSaleFormHTML(defaultPrice) {
-       return `
-         <form id="sale-form" class="form-grid" novalidate>
-           <div class="field field--half">
-             <label class="field-label" for="sale-date">Data da venda *</label>
-             <input class="input" id="sale-date" type="date" />
-             <p class="field-error" id="sale-date-error"></p>
-           </div>
-           <div class="field field--half">
-             <label class="field-label" for="sale-arrobas">Peso de carcaça (@) *</label>
-             <input class="input" id="sale-arrobas" type="number" min="0" step="0.01" placeholder="Ex: 21" />
-             <p class="field-error" id="sale-arrobas-error"></p>
-           </div>
-           <div class="field field--half">
-             <label class="field-label" for="sale-price">Preço da @ (R$) *</label>
-             <input class="input" id="sale-price" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="${defaultPrice != null ? formatBRL(defaultPrice) : ""}" />
-             <p class="field-error" id="sale-price-error"></p>
-           </div>
-           <div class="field field--half">
-             <span class="field-label">Valor da venda</span>
-             <p class="stat-value" id="sale-total" style="font-size: var(--fs-lg);">R$ 0,00</p>
-           </div>
-           <p class="field-error" id="sale-form-error" role="alert"></p>
-           <button type="submit" class="btn-primary pressable" id="sale-submit">Confirmar venda</button>
-         </form>
-       `;
-     }
-
-     export function wireSaleForm(animal) {
-       const form = document.getElementById("sale-form");
-       const arrobasInput = document.getElementById("sale-arrobas");
-       const priceInput = document.getElementById("sale-price");
-       const totalEl = document.getElementById("sale-total");
-       const submitBtn = document.getElementById("sale-submit");
-       const formError = document.getElementById("sale-form-error");
-
-       function recomputeTotal() {
-         const arrobas = parseFloat(arrobasInput.value);
-         const price = parseBRLToNumber(priceInput.value);
-         const total = Number.isFinite(arrobas) && Number.isFinite(price) ? arrobas * price : 0;
-         totalEl.textContent = formatBRL(total);
-         return total;
-       }
-       arrobasInput.addEventListener("input", recomputeTotal);
-       priceInput.addEventListener("input", () => { formatCurrencyInput(priceInput); recomputeTotal(); });
-       recomputeTotal();
-
-       form.addEventListener("submit", async (e) => {
-         e.preventDefault();
-         if (!currentUid) return;
-
-         formError.textContent = "";
-         ["sale-date", "sale-arrobas", "sale-price"].forEach(clearFieldError);
-
-         let valid = true;
-         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
-
-         const dateStr = document.getElementById("sale-date").value;
-         if (!dateStr) fail("sale-date", "Informe a data da venda.");
-
-         const arrobas = parseFloat(arrobasInput.value);
-         if (!Number.isFinite(arrobas) || arrobas <= 0) fail("sale-arrobas", "Informe o peso de carcaça em @.");
-
-         const price = parseBRLToNumber(priceInput.value);
-         if (!Number.isFinite(price) || price <= 0) fail("sale-price", "Informe o preço da @.");
-
-         if (!valid) return;
-
-         const revenue = arrobas * price;
-         const saleDate = new Date(`${dateStr}T00:00:00`);
-
-         submitBtn.disabled = true;
-         submitBtn.textContent = "Salvando…";
-
-         try {
-           await updateDoc(doc(db, "animals", animal.id), {
-             status: "sold",
-             saleDate,
-             saleArrobas: arrobas,
-             salePricePerArrobaBRL: price,
-             saleRevenueBRL: revenue,
-             updatedAt: serverTimestamp(),
-           });
-           await addDoc(collection(db, "events"), {
-             ownerId: currentUid,
-             type: "sale",
-             animalId: animal.id,
-             lotId: animal.lotId || null,
-             date: saleDate,
-             payload: { arrobas, pricePerArrobaBRL: price, revenueBRL: revenue },
-             createdAt: serverTimestamp(),
-           });
-           const r = applyFunruralRetention(revenue, "pj");
-           await addDoc(collection(db, "transactions"), {
-             ownerId: currentUid,
-             kind: "receita",
-             category: "venda-animal",
-             costNature: null,
-             buyerType: "pj",
-             amountBRL: r.netBRL,
-             grossBRL: r.grossBRL,
-             funruralRetidoBRL: r.funruralRetidoBRL,
-             date: saleDate,
-             linkedScope: "animal",
-             linkedAnimalId: animal.id,
-             linkedLotId: null,
-             description: null,
-             createdAt: serverTimestamp(),
-           });
-           showToast("Venda registrada.");
-           Sheet.close();
-         } catch (err) {
-           console.warn("[Agro Connect] Falha ao registrar venda:", err?.code ?? err);
-           formError.textContent =
-             err?.code === "permission-denied"
-               ? "Sem permissão para gravar."
-               : "Não foi possível salvar. Tente novamente.";
-           submitBtn.disabled = false;
-           submitBtn.textContent = "Confirmar venda";
-         }
-       });
-     }
-
-     export function openSaleSheet(animal) {
-       const lot = animal.lotId ? lotsCache.find((l) => l.id === animal.lotId) : null;
-       const prop = lot?.propertyId ? propertiesCache.find((p) => p.id === lot.propertyId) : null;
-       const defaultPrice = Number.isFinite(prop?.defaultArrobaPriceBRL)
-         ? prop.defaultArrobaPriceBRL
-         : settingsCache.defaultArrobaPriceBRL;
-       Sheet.open({
-         title: `Vender · #${escapeHtml(animal.earTag)}`,
-         content: buildSaleFormHTML(defaultPrice),
-       });
-       wireSaleForm(animal);
      }
 
      // --- Pesar ---

@@ -52,12 +52,10 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
            </div>
            <div class="action-group">
              <div class="action-group-title">Registros</div>
-             ${isAggregate ? `
-               <button type="button" class="action-item pressable" data-menu-action="movement">
-                 <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
-                 Nova movimentação
-               </button>
-             ` : ""}
+             <button type="button" class="action-item pressable" data-menu-action="movement">
+               <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
+               Nova movimentação
+             </button>
              ${hasStages ? `
                <button type="button" class="action-item pressable" data-menu-action="wean">
                  <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
