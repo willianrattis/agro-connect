@@ -36,8 +36,29 @@
 
   .kpi-section { margin-top: var(--space-6); }
   .kpi-section-header {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-2);
     margin-bottom: var(--space-3);
   }
+  .kpi-section-header::-webkit-details-marker { display: none; }
+  .kpi-section-header:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  /* Estoque's always-open sections reuse the same markup/classes but
+     shouldn't look or behave like a collapsible summary. */
+  .kpi-section-header.kpi-section-header-plain {
+    display: block;
+    cursor: default;
+  }
+  /* flex-basis: 0 (not auto) keeps a long subtitle from being sized at its
+     max-content width first, which would push the chevron onto its own line. */
+  .kpi-section-heading { flex: 1 1 0%; min-width: 0; }
   .kpi-section-title {
     font-family: var(--font-display);
     font-size: var(--fs-lg);
@@ -50,17 +71,90 @@
     font-size: var(--fs-sm);
     color: var(--text-muted);
   }
+  .kpi-section-chevron {
+    color: var(--text-muted);
+    flex: none;
+    transition: transform 150ms ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kpi-section-chevron { transition: none; }
+  }
+  .kpi-section[open] > .kpi-section-header .kpi-section-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* Compact chart preview shown inside a collapsed section's <summary>.
+     <summary>'s own content stays visible even while its <details> is open
+     (only its *sibling* content is native-hidden), and toggling doesn't
+     trigger a re-render — so hiding the preview once expanded has to be a
+     pure CSS rule keyed off [open], not a render-time decision. */
+  .kpi-section-header > .kpi-card.is-preview {
+    flex: 1 1 100%;
+    margin-top: var(--space-3);
+  }
+  .kpi-section[open] > .kpi-section-header > .kpi-card.is-preview {
+    display: none;
+  }
+  .kpi-card.is-preview {
+    min-height: 0;
+    padding: var(--space-3) var(--space-4);
+    box-shadow: none;
+    gap: var(--space-2);
+  }
+  .kpi-preview-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .kpi-preview-total {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-lg);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .kpi-preview-total.is-negative { color: var(--danger); }
+
+  .stacked-bar {
+    display: flex;
+    height: 12px;
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  .stacked-seg {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 3px;
+  }
+
+  .kpi-preview-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    list-style: none;
+  }
+  .kpi-preview-legend li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kpi-preview-legend b {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .is-preview .cashflow-chart { height: 72px; }
 
   .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
   }
   @media (min-width: 560px) {
-    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (min-width: 900px) {
-    .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+    .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
 
   .kpi-card {
@@ -73,6 +167,20 @@
     flex-direction: column;
     gap: var(--space-1);
     min-height: 128px;
+    min-width: 0;
+  }
+  /* auto auto 1fr (not auto 1fr auto): the flexible row must be the LAST one
+     (under the context line), not the value row — a flexible value row gets
+     end-aligned into whatever slack the row-stretch leaves it, so its
+     position would depend on the *context*'s line count and drift out of
+     baseline with neighbours whose context wraps differently. Pinning
+     label+value to fixed auto rows keeps the value directly under the label
+     for every card in a row, and any leftover stretch height (from a taller
+     sibling) is absorbed below the context text instead. */
+  .kpi-card:not(.is-missing):not(.expenses-card):not(.cashflow-card) {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    row-gap: var(--space-1);
   }
   .kpi-card-label {
     font-size: var(--fs-xs);
@@ -85,15 +193,16 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-1);
-    margin-top: auto;
   }
   .kpi-card-value {
     font-family: var(--font-display);
-    font-size: var(--fs-display);
+    font-size: clamp(1.125rem, 0.85rem + 0.9vw, 1.25rem);
     font-weight: 800;
     line-height: 1.05;
     color: var(--brand);
     letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
   }
   .kpi-card-unit {
     font-size: var(--fs-sm);
@@ -132,6 +241,126 @@
     margin-top: var(--space-2);
     font-size: var(--fs-xs);
     color: var(--text-muted);
+  }
+
+  .expenses-card { grid-column: 1 / -1; }
+  .expenses-card .donut-seg-1 { stroke: var(--exp-color-1); }
+  .expenses-card .donut-seg-2 { stroke: var(--exp-color-2); }
+  .expenses-card .donut-seg-3 { stroke: var(--exp-color-3); }
+  .expenses-card .donut-seg-4 { stroke: var(--exp-color-4); }
+  .expenses-card .donut-seg-5 { stroke: var(--exp-color-5); }
+  .expenses-card .donut-seg-6 { stroke: var(--exp-color-6); }
+  .exp-dot-1 { background: var(--exp-color-1); }
+  .exp-dot-2 { background: var(--exp-color-2); }
+  .exp-dot-3 { background: var(--exp-color-3); }
+  .exp-dot-4 { background: var(--exp-color-4); }
+  .exp-dot-5 { background: var(--exp-color-5); }
+  .exp-dot-6 { background: var(--exp-color-6); }
+
+  .expenses-donut {
+    display: block;
+    width: 100%;
+    max-width: 180px;
+    margin: var(--space-2) auto var(--space-3);
+  }
+  .expenses-donut .donut-seg {
+    transition: stroke-dasharray 0.3s ease;
+  }
+  .expenses-donut .donut-center-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 3.1px;
+    fill: var(--text);
+  }
+  .expenses-donut .donut-center-caption {
+    font-size: 1.9px;
+    fill: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .exp-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .exp-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(48px, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    font-size: var(--fs-xs);
+    border-bottom: 1px solid var(--border);
+  }
+  .exp-row:last-child { border-bottom: none; }
+  .exp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    flex: none;
+  }
+  .exp-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .exp-bar {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--border);
+    overflow: hidden;
+  }
+  .exp-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
+  }
+  .exp-dot-1 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-1); }
+  .exp-dot-2 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-2); }
+  .exp-dot-3 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-3); }
+  .exp-dot-4 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-4); }
+  .exp-dot-5 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-5); }
+  .exp-dot-6 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-6); }
+  .exp-value {
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .exp-pct {
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .exp-highlight {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .exp-highlight-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .exp-highlight-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--fs-base);
+    color: var(--brand);
+  }
+  .exp-highlight-meta {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Ponto de abate panel (top of Indicadores) */
@@ -202,4 +431,7 @@
   }
   .slaughter-row.is-ready .slaughter-progress-fill { background: var(--success); }
   .slaughter-row.is-near .slaughter-progress-fill { background: var(--chip-bezerro-text); }
+
+  .slaughter-row-forecast { font-size: var(--fs-xs); color: var(--text-muted); }
+  .slaughter-row.is-ready .slaughter-row-forecast { color: var(--success); font-weight: 600; }
 

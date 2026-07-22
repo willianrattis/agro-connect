@@ -9,6 +9,7 @@ import {
   escapeHtml, daysOnFarm, formatKg, formatArrobas, formatPercentTrim,
   lotAgeMetaLabel, lotTenureMetaLabel, resolveFarmYieldPct, resolveConfinementYieldPct,
   lotWeightProjection, lotConfinedProjection, confinementStripHTML, formatBRL, computeSaleResult,
+  resolveLotTargetArrobas, slaughterForecast,
 } from "../../js/core/helpers.js";
 import { lotsCache, animalsCache, transactionsCache, propertiesCache } from "../../js/core/state.js";
 
@@ -264,6 +265,12 @@ import { lotsCache, animalsCache, transactionsCache, propertiesCache } from "../
                   const headSuffix = hasConfined ? ` · ${headcount} cab.` : "";
                   const labelSuffix = hasConfined ? " (fazenda)" : "";
                   const hint = `Projeção: pastagem ${p.qualityLabel.toLowerCase()} · ${Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia${femaleSuffix} · ${p.days.toLocaleString("pt-BR")} dias${headSuffix}`;
+                  const forecast = slaughterForecast({
+                    projectedWeightKg: p.projectedWeightKg,
+                    gmdKgPerDay: p.gmdKgPerDay,
+                    targetArrobas: resolveLotTargetArrobas(l),
+                    yieldPct: resolveFarmYieldPct(l),
+                  });
                   return `
                     <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                       <div class="mini-stat">
@@ -276,6 +283,7 @@ import { lotsCache, animalsCache, transactionsCache, propertiesCache } from "../
                       </div>
                     </div>
                     <p class="field-hint">${escapeHtml(hint)}</p>
+                    ${forecast ? `<p class="field-hint">${escapeHtml(forecast.label)}</p>` : ""}
                   `;
                 })()}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">

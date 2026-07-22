@@ -25,6 +25,15 @@
     --chip-engorda-bg: #DBEFE4;  --chip-engorda-text: #175243;
     --chip-matriz-bg:  #F0E4D7;  --chip-matriz-text:  #6B4423;
 
+    /* Expenses-by-category chart palette (categorical, ranked slots 1-5 +
+       slot 6 = muted "Outros" catch-all). Derived from --brand/--accent. */
+    --exp-color-1: var(--accent);
+    --exp-color-2: #0E8865;
+    --exp-color-3: #C98500;
+    --exp-color-4: #A15A22;
+    --exp-color-5: #3E6BB0;
+    --exp-color-6: var(--text-muted);
+
     /* Spacing scale */
     --space-1: 4px;
     --space-2: 8px;
