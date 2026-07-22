@@ -8,7 +8,7 @@ import {
 import { lotListEl } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatKg, fractionToPercentDisplay, movementDeltas,
-  getSlaughterConfig, confinementStripHTML, formatCurrencyInput, parseBRLToNumber, formatBRL,
+  getSlaughterConfig, resolveLotSex, confinementStripHTML, formatCurrencyInput, parseBRLToNumber, formatBRL,
   formatCPFInput, formatCNPJNumericInput, formatCNPJAlnumInput, formatUFInput, formatDayLabel,
 } from "../../js/core/helpers.js";
 import {
@@ -292,6 +292,11 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
              <p class="field-hint">Vazio = usa o padrão do confinamento (Perfil).</p>
            </div>
            ` : ""}
+           <div class="field field--half">
+             <label class="field-label" for="lot-max-weight">Peso máx. (maturidade, kg)</label>
+             <input class="input" id="lot-max-weight" type="number" min="100" max="2000" step="10" placeholder="${resolveLotSex(lot) === "F" ? cfg.maxWeightFemaleKg : cfg.maxWeightMaleKg}" value="${lot.maxWeightKg ?? ""}" />
+             <p class="field-hint">Vazio = usa o padrão do Perfil.</p>
+           </div>
 
            <p class="field-error" id="lot-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="lot-submit">Salvar alterações</button>
@@ -332,13 +337,16 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
          const confinementYieldInput = document.getElementById("lot-confinement-yield");
          const confinementYieldPct = confinementYieldInput?.value ? parseFloat(confinementYieldInput.value) / 100 : null;
 
+         const maxWeightRaw = document.getElementById("lot-max-weight").value;
+         const maxWeightKg = maxWeightRaw ? parseFloat(maxWeightRaw) : null;
+
          if (!valid) return;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
 
          try {
-           const updates = { name, category, areaHa, propertyId, targetArrobas, carcassYieldPct, updatedAt: serverTimestamp() };
+           const updates = { name, category, areaHa, propertyId, targetArrobas, carcassYieldPct, maxWeightKg, updatedAt: serverTimestamp() };
            if (confinementYieldInput) updates.confinementYieldPct = confinementYieldPct;
            await updateDoc(doc(db, "lots", lot.id), updates);
            showToast("Lote atualizado.");

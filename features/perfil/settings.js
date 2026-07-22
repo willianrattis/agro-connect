@@ -1,12 +1,15 @@
 import { db, doc, setDoc, serverTimestamp } from "../../js/core/firebase.js";
 import {
-  settingsTargetValueEl, settingsFarmYieldValueEl, settingsConfYieldValueEl, settingsEditBtn3,
+  settingsTargetValueEl, settingsFarmYieldValueEl, settingsConfYieldValueEl, settingsMaxWeightValueEl, settingsEditBtn3,
   settingsFunruralTypeValueEl, settingsFunruralRegimeValueEl, settingsFunruralRateValueEl, settingsEditBtn4,
 } from "../../js/core/dom.js";
 import {
-  formatArrobas, formatPercentTrim, fractionToPercentDisplay, getSlaughterConfig, getFunruralConfig,
+  formatArrobas, formatPercentTrim, fractionToPercentDisplay, formatKg, getSlaughterConfig, getFunruralConfig,
 } from "../../js/core/helpers.js";
-import { FUNRURAL_PRODUCER_TYPES, FUNRURAL_DEFAULTS } from "../../js/core/constants.js";
+import {
+  FUNRURAL_PRODUCER_TYPES, FUNRURAL_DEFAULTS, MATURE_WEIGHT_BREED_GROUPS,
+  DEFAULT_MAX_WEIGHT_MALE_KG, DEFAULT_MAX_WEIGHT_FEMALE_KG,
+} from "../../js/core/constants.js";
 import { currentUid, settingsCache } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
@@ -20,6 +23,7 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        settingsTargetValueEl.textContent = `${formatArrobas(slaughterCfg.targetArrobasPerHead)} @`;
        settingsFarmYieldValueEl.textContent = `${formatPercentTrim(slaughterCfg.defaultFarmYieldPct * 100)}%`;
        settingsConfYieldValueEl.textContent = `${formatPercentTrim(slaughterCfg.defaultConfinementYieldPct * 100)}%`;
+       settingsMaxWeightValueEl.textContent = `${formatKg(slaughterCfg.maxWeightMaleKg)} / ${formatKg(slaughterCfg.maxWeightFemaleKg)} kg`;
 
        const funruralCfg = getFunruralConfig();
        settingsFunruralTypeValueEl.textContent =
@@ -32,6 +36,9 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
      //     defaultConfinementYieldPct) — feeds getSlaughterConfig() and the
      //     "Ponto de abate" panel in Indicadores. ---
      export function buildSlaughterSettingsFormHTML() {
+       const breedGroupOptions = MATURE_WEIGHT_BREED_GROUPS
+         .map((g) => `<option value="${g.value}" data-male-kg="${g.maleKg}" data-female-kg="${g.femaleKg}">${g.label}</option>`)
+         .join("");
        return `
          <form id="slaughter-settings-form" class="form-grid" novalidate>
            <div class="field">
@@ -52,6 +59,26 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
              <p class="field-hint">Aproveitamento de carcaça em confinamento — geralmente maior, até ~57%.</p>
              <p class="field-error" id="slaughter-confyield-error"></p>
            </div>
+           <p class="form-section-title">Peso máximo (maturidade)</p>
+           <div class="field">
+             <label class="field-label" for="slaughter-breed-group">Grupo racial (preenche os campos abaixo)</label>
+             <select class="select" id="slaughter-breed-group">
+               <option value="">Personalizado</option>
+               ${breedGroupOptions}
+             </select>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="slaughter-maxweight-male">Peso máx. macho (kg)</label>
+             <input class="input" id="slaughter-maxweight-male" type="number" min="100" max="2000" step="10" placeholder="${DEFAULT_MAX_WEIGHT_MALE_KG}" value="${settingsCache.maxWeightMaleKg ?? ""}" />
+             <p class="field-hint">Vazio = usa o padrão.</p>
+             <p class="field-error" id="slaughter-maxweight-male-error"></p>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="slaughter-maxweight-female">Peso máx. fêmea (kg)</label>
+             <input class="input" id="slaughter-maxweight-female" type="number" min="100" max="2000" step="10" placeholder="${DEFAULT_MAX_WEIGHT_FEMALE_KG}" value="${settingsCache.maxWeightFemaleKg ?? ""}" />
+             <p class="field-hint">Vazio = usa o padrão.</p>
+             <p class="field-error" id="slaughter-maxweight-female-error"></p>
+           </div>
            <p class="field-error" id="slaughter-settings-form-error" role="alert"></p>
            <button type="submit" class="btn-primary pressable" id="slaughter-settings-submit">Salvar configurações</button>
          </form>
@@ -62,7 +89,24 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
        const form = document.getElementById("slaughter-settings-form");
        const submitBtn = document.getElementById("slaughter-settings-submit");
        const formError = document.getElementById("slaughter-settings-form-error");
-       const numericFieldIds = ["slaughter-target", "slaughter-farmyield", "slaughter-confyield"];
+       const numericFieldIds = [
+         "slaughter-target", "slaughter-farmyield", "slaughter-confyield",
+         "slaughter-maxweight-male", "slaughter-maxweight-female",
+       ];
+
+       const breedGroupSelect = document.getElementById("slaughter-breed-group");
+       const maxWeightMaleInput = document.getElementById("slaughter-maxweight-male");
+       const maxWeightFemaleInput = document.getElementById("slaughter-maxweight-female");
+
+       breedGroupSelect.addEventListener("change", () => {
+         const option = breedGroupSelect.selectedOptions[0];
+         if (!option?.value) return;
+         maxWeightMaleInput.value = option.dataset.maleKg;
+         maxWeightFemaleInput.value = option.dataset.femaleKg;
+       });
+       [maxWeightMaleInput, maxWeightFemaleInput].forEach((input) => {
+         input.addEventListener("input", () => { breedGroupSelect.value = ""; });
+       });
 
        form.addEventListener("submit", async (e) => {
          e.preventDefault();
@@ -85,6 +129,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
          const targetArrobasPerHead = readOptionalNumber("slaughter-target", "uma meta de @");
          const farmYieldRaw = readOptionalNumber("slaughter-farmyield", "um aproveitamento", { min: 1, max: 100 });
          const confYieldRaw = readOptionalNumber("slaughter-confyield", "um aproveitamento", { min: 1, max: 100 });
+         const maxWeightMaleKg = readOptionalNumber("slaughter-maxweight-male", "um peso máximo", { min: 100, max: 2000 });
+         const maxWeightFemaleKg = readOptionalNumber("slaughter-maxweight-female", "um peso máximo", { min: 100, max: 2000 });
 
          if (!valid) return;
 
@@ -99,6 +145,8 @@ import { clearFieldError, setFieldError } from "../rebanho/animals.js";
                targetArrobasPerHead,
                defaultFarmYieldPct: farmYieldRaw != null ? farmYieldRaw / 100 : null,
                defaultConfinementYieldPct: confYieldRaw != null ? confYieldRaw / 100 : null,
+               maxWeightMaleKg,
+               maxWeightFemaleKg,
                updatedAt: serverTimestamp(),
              },
              { merge: true }

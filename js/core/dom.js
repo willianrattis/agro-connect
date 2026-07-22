@@ -30,6 +30,7 @@
     export const settingsTargetValueEl = document.getElementById("settings-target-value");
     export const settingsFarmYieldValueEl = document.getElementById("settings-farmyield-value");
     export const settingsConfYieldValueEl = document.getElementById("settings-confyield-value");
+    export const settingsMaxWeightValueEl = document.getElementById("settings-maxweight-value");
     export const settingsEditBtn3 = document.getElementById("settings-edit-btn-3");
     export const settingsFunruralTypeValueEl = document.getElementById("settings-funrural-type-value");
     export const settingsFunruralRegimeValueEl = document.getElementById("settings-funrural-regime-value");

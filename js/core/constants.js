@@ -20,6 +20,18 @@ import { toDateSafe } from "./helpers.js";
     export const FEMALE_GMD_FACTOR = 0.865;
     export const CONFINEMENT_GMD_KG_PER_DAY = 1.7; // typical feedlot GMD 1.6–1.8 kg/day
 
+    // Mature-weight ceiling for weight projections — settings/{uid}.maxWeightMaleKg|
+    // maxWeightFemaleKg fall back to these when unset, and lot.maxWeightKg overrides both.
+    export const DEFAULT_MAX_WEIGHT_MALE_KG = 1000;
+    export const DEFAULT_MAX_WEIGHT_FEMALE_KG = 600;
+    // Midpoints of Embrapa mature-weight ranges per breed group — used only to
+    // prefill the Perfil max-weight inputs, never persisted under this key.
+    export const MATURE_WEIGHT_BREED_GROUPS = [
+      { value: "zebuino",     label: "Zebuínas (Nelore, Brahman, Guzerá)",      maleKg: 650,  femaleKg: 400 },
+      { value: "britanica",   label: "Britânicas/Europeias (Angus, Hereford)",  maleKg: 750,  femaleKg: 550 },
+      { value: "continental", label: "Continentais (Charolês, Simental)",       maleKg: 1100, femaleKg: 750 },
+    ];
+
     // Ponto de abate — global target/yield defaults, overridable per lot and
     // per Perfil settings (settings/{uid}.targetArrobasPerHead/defaultFarmYieldPct/
     // defaultConfinementYieldPct). These constants are the final fallback for

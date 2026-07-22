@@ -855,6 +855,7 @@ import { loadedFlags } from "../../js/core/listeners.js";
                  gmdKgPerDay: projection.gmdKgPerDay,
                  targetArrobas: target,
                  yieldPct,
+                 maxWeightKg: projection.maxWeightKg,
                }),
              });
            }
@@ -881,6 +882,7 @@ import { loadedFlags } from "../../js/core/listeners.js";
                  gmdKgPerDay: CONFINEMENT_GMD_KG_PER_DAY,
                  targetArrobas: target,
                  yieldPct,
+                 maxWeightKg: confinedProjection.maxWeightKg,
                }),
              });
            }
