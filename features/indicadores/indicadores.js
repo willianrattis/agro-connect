@@ -1,5 +1,6 @@
 import {
   CARCASS_YIELD, KG_PER_ARROBA, CATTLE_CATEGORIES, displayCategoryKeyForAnimal, displayCategoryKeyForLot,
+  TX_EXPENSE_GROUPS, categoryGroupId, TX_CATEGORY_LABEL,
 } from "../../js/core/constants.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, totalArrobas, formatArrobas, getSlaughterConfig,
@@ -536,6 +537,100 @@ import { loadedFlags } from "../../js/core/listeners.js";
        }));
      }
 
+     // [{ id, label, total, pct }] desc by total, plus grand total.
+     export function computeExpensesByGroup(range) {
+       const groupLabel = Object.fromEntries(TX_EXPENSE_GROUPS.map((g) => [g.id, g.label]));
+       const acc = {};
+       for (const t of transactionsCache) {
+         if (t.kind !== "despesa" || !inRange(t.date, range)) continue;
+         const id = categoryGroupId(t.category) || "outros";
+         acc[id] = (acc[id] || 0) + (t.amountBRL || 0);
+       }
+       const total = Object.values(acc).reduce((s, v) => s + v, 0);
+       const groups = Object.entries(acc)
+         .filter(([, v]) => v > 0)
+         .map(([id, v]) => ({ id, label: groupLabel[id] || "Outros", total: v,
+                              pct: total > 0 ? (v / total) * 100 : 0 }))
+         .sort((a, b) => b.total - a.total);
+       return { groups, total };
+     }
+
+     // Largest single despesa transaction in range, or null.
+     export function largestExpense(range) {
+       return transactionsCache
+         .filter((t) => t.kind === "despesa" && inRange(t.date, range))
+         .reduce((best, t) => (!best || (t.amountBRL || 0) > (best.amountBRL || 0) ? t : best), null);
+     }
+
+     export function renderExpensesByCategoryCard(range) {
+       const { groups, total } = computeExpensesByGroup(range);
+       if (total === 0) {
+         return `
+           <div class="kpi-card expenses-card is-missing">
+             <p class="kpi-card-label">Despesas por categoria</p>
+             <p class="kpi-card-hint">Registre despesas no período para ver a distribuição dos gastos por frente.</p>
+           </div>
+         `;
+       }
+
+       const top5 = groups.slice(0, 5);
+       const restTotal = groups.slice(5).reduce((s, g) => s + g.total, 0);
+       const donutSlices = restTotal > 0
+         ? [...top5, { id: "resto", label: "Outros", total: restTotal, pct: total > 0 ? (restTotal / total) * 100 : 0 }]
+         : top5;
+
+       let cumulativePct = 0;
+       const donutCircles = donutSlices
+         .map((g, idx) => {
+           const i = idx + 1;
+           const offset = ((125 - cumulativePct) % 100).toFixed(2);
+           cumulativePct += g.pct;
+           return `<circle cx="21" cy="21" r="15.915" fill="none" stroke-width="5" class="donut-seg donut-seg-${i}" stroke-dasharray="${g.pct.toFixed(2)} ${(100 - g.pct).toFixed(2)}" stroke-dashoffset="${offset}"><title>${escapeHtml(g.label)}: ${escapeHtml(formatBRL(g.total))} (${g.pct.toFixed(1).replace(".", ",")}%)</title></circle>`;
+         })
+         .join("");
+
+       const maxTotal = groups[0].total;
+       const listRows = groups
+         .map((g, idx) => {
+           const i = idx < 5 ? idx + 1 : 6;
+           const pctOfMax = maxTotal > 0 ? (g.total / maxTotal) * 100 : 0;
+           return `
+             <div class="exp-row">
+               <span class="exp-dot exp-dot-${i}"></span>
+               <span class="exp-label">${escapeHtml(g.label)}</span>
+               <span class="exp-bar"><span class="exp-bar-fill" style="width: ${pctOfMax.toFixed(1)}%"></span></span>
+               <span class="exp-value">${escapeHtml(formatBRL(g.total))}</span>
+               <span class="exp-pct">${g.pct.toFixed(1).replace(".", ",")}%</span>
+             </div>
+           `;
+         })
+         .join("");
+
+       const largest = largestExpense(range);
+       const highlightHTML = largest
+         ? `
+           <div class="exp-highlight">
+             <span class="exp-highlight-label">Maior despesa</span>
+             <span class="exp-highlight-value">${escapeHtml(formatBRL(largest.amountBRL || 0))}</span>
+             <span class="exp-highlight-meta">${escapeHtml((TX_CATEGORY_LABEL[largest.category] || largest.category || "") + (largest.description ? ` · ${largest.description}` : ""))}</span>
+           </div>
+         `
+         : "";
+
+       return `
+         <div class="kpi-card expenses-card">
+           <p class="kpi-card-label">Despesas por categoria</p>
+           <svg class="expenses-donut" viewBox="0 0 42 42" role="img" aria-label="Distribuição das despesas por categoria">
+             ${donutCircles}
+             <text x="21" y="19.5" text-anchor="middle" class="donut-center-value">${escapeHtml(formatBRL(total))}</text>
+             <text x="21" y="26" text-anchor="middle" class="donut-center-caption">despesas</text>
+           </svg>
+           <div class="exp-list">${listRows}</div>
+           ${highlightHTML}
+         </div>
+       `;
+     }
+
      export function renderCashflowCard() {
        if (!transactionsCache.length) {
          return `
@@ -760,7 +855,7 @@ import { loadedFlags } from "../../js/core/listeners.js";
          slaughterPanelHTML(),
          kpiSectionHTML("Desempenho animal", label, renderGroup1(range).map(kpiCardHTML).join("")),
          kpiSectionHTML("Reprodutivo", "Cobertura/IA, diagnóstico de gestação e partos", renderGroup2(range).map(kpiCardHTML).join("")),
-         kpiSectionHTML("Econômico-financeiro", label, renderGroup3(range).map(kpiCardHTML).join("")),
+         kpiSectionHTML("Econômico-financeiro", label, renderGroup3(range).map(kpiCardHTML).join("") + renderExpensesByCategoryCard(range)),
          kpiSectionHTML("Gestão", "Fluxo dos últimos 12 meses; demais indicadores no período selecionado", renderGroup4Cards(range).map(kpiCardHTML).join("") + renderCashflowCard()),
        ].join("");
      }

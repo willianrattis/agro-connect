@@ -134,6 +134,126 @@
     color: var(--text-muted);
   }
 
+  .expenses-card { grid-column: 1 / -1; }
+  .expenses-card .donut-seg-1 { stroke: var(--exp-color-1); }
+  .expenses-card .donut-seg-2 { stroke: var(--exp-color-2); }
+  .expenses-card .donut-seg-3 { stroke: var(--exp-color-3); }
+  .expenses-card .donut-seg-4 { stroke: var(--exp-color-4); }
+  .expenses-card .donut-seg-5 { stroke: var(--exp-color-5); }
+  .expenses-card .donut-seg-6 { stroke: var(--exp-color-6); }
+  .exp-dot-1 { background: var(--exp-color-1); }
+  .exp-dot-2 { background: var(--exp-color-2); }
+  .exp-dot-3 { background: var(--exp-color-3); }
+  .exp-dot-4 { background: var(--exp-color-4); }
+  .exp-dot-5 { background: var(--exp-color-5); }
+  .exp-dot-6 { background: var(--exp-color-6); }
+
+  .expenses-donut {
+    display: block;
+    width: 100%;
+    max-width: 180px;
+    margin: var(--space-2) auto var(--space-3);
+  }
+  .expenses-donut .donut-seg {
+    transition: stroke-dasharray 0.3s ease;
+  }
+  .expenses-donut .donut-center-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 3.1px;
+    fill: var(--text);
+  }
+  .expenses-donut .donut-center-caption {
+    font-size: 1.9px;
+    fill: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .exp-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .exp-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(48px, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    font-size: var(--fs-xs);
+    border-bottom: 1px solid var(--border);
+  }
+  .exp-row:last-child { border-bottom: none; }
+  .exp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    flex: none;
+  }
+  .exp-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .exp-bar {
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--border);
+    overflow: hidden;
+  }
+  .exp-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: var(--text-muted);
+  }
+  .exp-dot-1 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-1); }
+  .exp-dot-2 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-2); }
+  .exp-dot-3 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-3); }
+  .exp-dot-4 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-4); }
+  .exp-dot-5 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-5); }
+  .exp-dot-6 ~ .exp-bar .exp-bar-fill { background: var(--exp-color-6); }
+  .exp-value {
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .exp-pct {
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .exp-highlight {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .exp-highlight-label {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .exp-highlight-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--fs-base);
+    color: var(--brand);
+  }
+  .exp-highlight-meta {
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* Ponto de abate panel (top of Indicadores) */
   .slaughter-panel { margin-bottom: var(--space-6); }
   .chip-location { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
