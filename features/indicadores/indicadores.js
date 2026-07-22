@@ -562,6 +562,17 @@ import { loadedFlags } from "../../js/core/listeners.js";
          .reduce((best, t) => (!best || (t.amountBRL || 0) > (best.amountBRL || 0) ? t : best), null);
      }
 
+     // Top 5 groups + one aggregated "Outros" slice when there are more —
+     // shared by the donut (expanded) and the stacked bar (preview) so their
+     // colors/order always match.
+     export function computeExpenseSlices(groups, total) {
+       const top5 = groups.slice(0, 5);
+       const restTotal = groups.slice(5).reduce((s, g) => s + g.total, 0);
+       return restTotal > 0
+         ? [...top5, { id: "resto", label: "Outros", total: restTotal, pct: total > 0 ? (restTotal / total) * 100 : 0 }]
+         : top5;
+     }
+
      export function renderExpensesByCategoryCard(range, { compact = false } = {}) {
        const { groups, total } = computeExpensesByGroup(range);
        if (total === 0) {
@@ -574,11 +585,7 @@ import { loadedFlags } from "../../js/core/listeners.js";
          `;
        }
 
-       const top5 = groups.slice(0, 5);
-       const restTotal = groups.slice(5).reduce((s, g) => s + g.total, 0);
-       const donutSlices = restTotal > 0
-         ? [...top5, { id: "resto", label: "Outros", total: restTotal, pct: total > 0 ? (restTotal / total) * 100 : 0 }]
-         : top5;
+       const donutSlices = computeExpenseSlices(groups, total);
 
        let cumulativePct = 0;
        const donutCircles = donutSlices
@@ -591,14 +598,28 @@ import { loadedFlags } from "../../js/core/listeners.js";
          .join("");
 
        if (compact) {
+         const segmentsHTML = donutSlices
+           .map((g, idx) => {
+             const title = `${g.label}: ${formatBRL(g.total)} (${g.pct.toFixed(1).replace(".", ",")}%)`;
+             return `<span class="stacked-seg exp-dot-${idx + 1}" style="flex-basis: ${g.pct.toFixed(1)}%" title="${escapeHtml(title)}"></span>`;
+           })
+           .join("");
+
+         const legendSlices = donutSlices.slice(0, 2);
+         const legendItems = legendSlices
+           .map((g, idx) => `<li><span class="exp-dot exp-dot-${idx + 1}"></span>${escapeHtml(g.label)} <b>${Math.round(g.pct)}%</b></li>`)
+           .join("");
+         const remaining = donutSlices.length - legendSlices.length;
+         const moreItem = remaining > 0 ? `<li class="is-muted">+${remaining} categorias</li>` : "";
+
          return `
            <div class="kpi-card expenses-card is-preview">
-             <p class="kpi-card-label">Despesas por categoria</p>
-             <svg class="expenses-donut" viewBox="0 0 42 42" role="img" aria-label="Distribuição das despesas por categoria">
-               ${donutCircles}
-               <text x="21" y="19.5" text-anchor="middle" class="donut-center-value">${escapeHtml(formatBRL(total))}</text>
-               <text x="21" y="26" text-anchor="middle" class="donut-center-caption">despesas</text>
-             </svg>
+             <div class="kpi-preview-head">
+               <p class="kpi-card-label">Despesas por categoria</p>
+               <p class="kpi-preview-total">${escapeHtml(formatBRL(total))}</p>
+             </div>
+             <div class="stacked-bar" role="img" aria-label="Distribuição das despesas por categoria">${segmentsHTML}</div>
+             <ul class="kpi-preview-legend">${legendItems}${moreItem}</ul>
            </div>
          `;
        }
@@ -674,10 +695,18 @@ import { loadedFlags } from "../../js/core/listeners.js";
          </svg>
        `;
        if (compact) {
+         const net = months.reduce((s, m) => s + m.net, 0);
          return `
            <div class="kpi-card cashflow-card is-preview">
-             <p class="kpi-card-label">Fluxo de caixa mensal</p>
+             <div class="kpi-preview-head">
+               <p class="kpi-card-label">Fluxo de caixa mensal</p>
+               <p class="kpi-preview-total${net < 0 ? " is-negative" : ""}">${escapeHtml(formatBRL(net))}</p>
+             </div>
              ${svgHTML}
+             <div class="cashflow-legend">
+               <span>${escapeHtml(monthChipLabel(months[0].key))}</span>
+               <span>${escapeHtml(monthChipLabel(months[months.length - 1].key))}</span>
+             </div>
            </div>
          `;
        }

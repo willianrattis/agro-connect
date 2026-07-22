@@ -97,14 +97,56 @@
   }
   .kpi-card.is-preview {
     min-height: 0;
-    padding: var(--space-3);
+    padding: var(--space-3) var(--space-4);
     box-shadow: none;
+    gap: var(--space-2);
   }
-  .kpi-card.is-preview .expenses-donut {
-    max-width: 96px;
-    margin: var(--space-2) auto 0;
+  .kpi-preview-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
   }
-  .kpi-card.is-preview .cashflow-chart { height: 48px; }
+  .kpi-preview-total {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--fs-lg);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .kpi-preview-total.is-negative { color: var(--danger); }
+
+  .stacked-bar {
+    display: flex;
+    height: 12px;
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  .stacked-seg {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 3px;
+  }
+
+  .kpi-preview-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    list-style: none;
+  }
+  .kpi-preview-legend li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kpi-preview-legend b {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .is-preview .cashflow-chart { height: 72px; }
 
   .kpi-grid {
     display: grid;
