@@ -150,14 +150,11 @@
 
   .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
   }
   @media (min-width: 560px) {
-    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (min-width: 900px) {
-    .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+    .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
 
   .kpi-card {
@@ -170,6 +167,20 @@
     flex-direction: column;
     gap: var(--space-1);
     min-height: 128px;
+    min-width: 0;
+  }
+  /* auto auto 1fr (not auto 1fr auto): the flexible row must be the LAST one
+     (under the context line), not the value row — a flexible value row gets
+     end-aligned into whatever slack the row-stretch leaves it, so its
+     position would depend on the *context*'s line count and drift out of
+     baseline with neighbours whose context wraps differently. Pinning
+     label+value to fixed auto rows keeps the value directly under the label
+     for every card in a row, and any leftover stretch height (from a taller
+     sibling) is absorbed below the context text instead. */
+  .kpi-card:not(.is-missing):not(.expenses-card):not(.cashflow-card) {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    row-gap: var(--space-1);
   }
   .kpi-card-label {
     font-size: var(--fs-xs);
@@ -182,15 +193,16 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-1);
-    margin-top: auto;
   }
   .kpi-card-value {
     font-family: var(--font-display);
-    font-size: var(--fs-display);
+    font-size: clamp(1.125rem, 0.85rem + 0.9vw, 1.25rem);
     font-weight: 800;
     line-height: 1.05;
     color: var(--brand);
     letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
   }
   .kpi-card-unit {
     font-size: var(--fs-sm);
