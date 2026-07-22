@@ -39,6 +39,7 @@ import { toDateSafe } from "./helpers.js";
       boi_magro:         { label: "Boi magro",          sex: "M" },
       boi_gordo:         { label: "Boi gordo",          sex: "M" },
       novilha:           { label: "Novilha",            sex: "F" },
+      novilha_primeira_cria: { label: "Novilha de 1ª cria", sex: "F" },
       vaca:              { label: "Vaca",               sex: "F" },
     };
 
@@ -53,6 +54,7 @@ import { toDateSafe } from "./helpers.js";
       novilha: "chip-recria",
       boi_magro: "chip-engorda",
       boi_gordo: "chip-engorda",
+      novilha_primeira_cria: "chip-matriz",
       vaca: "chip-matriz",
     };
 
@@ -112,7 +114,7 @@ import { toDateSafe } from "./helpers.js";
     // animal back below what its age already implies.
     // Returns null when there's no birthDate to compute from — callers must
     // fall back to the stored entry category (no auto-advance) in that case.
-    export function deriveStage({ sex, birthDate, weaningDate, firstCalvingDate, finishingStartDate, now = new Date() }) {
+    export function deriveStage({ sex, birthDate, weaningDate, firstCalvingDate, finishingStartDate, calvingCount, now = new Date() }) {
       const age = ageMonthsBetween(birthDate, now);
       if (age == null) return null;
 
@@ -120,7 +122,10 @@ import { toDateSafe } from "./helpers.js";
       const weanedEarly = !!(weaningDate && toDateSafe(weaningDate) && toDateSafe(weaningDate) <= nowDate);
 
       if (sex === "F") {
-        if (firstCalvingDate) return "vaca";
+        // calvingCount == null means a legacy record written before repeatable
+        // calving existed — it keeps deriving to "vaca", same as always.
+        if (calvingCount >= 2) return "vaca";
+        if (firstCalvingDate) return calvingCount == null ? "vaca" : "novilha_primeira_cria";
         if (age >= 12) return "novilha";
         if (age >= 8 || weanedEarly) return "bezerra_desmamada";
         return "bezerra_lactente";
@@ -141,7 +146,7 @@ import { toDateSafe } from "./helpers.js";
     // otherwise imply (e.g. missing birthDateRef precision).
     export const STAGE_RANK = {
       M: ["bezerro_lactente", "bezerro_desmamado", "garrote", "boi_magro", "boi_gordo"],
-      F: ["bezerra_lactente", "bezerra_desmamada", "novilha", "vaca"],
+      F: ["bezerra_lactente", "bezerra_desmamada", "novilha", "novilha_primeira_cria", "vaca"],
     };
     export function stageRank(key, sex) {
       const order = STAGE_RANK[sex];
@@ -168,6 +173,7 @@ import { toDateSafe } from "./helpers.js";
         weaningDate: animal.weaningDate,
         firstCalvingDate: animal.firstCalvingDate,
         finishingStartDate: animal.finishingStartDate,
+        calvingCount: animal.calvingCount,
       });
       if (!derivedKey) return storedKey;
       return clampStageFloor(derivedKey, storedKey, animal.sex);
@@ -186,9 +192,25 @@ import { toDateSafe } from "./helpers.js";
         weaningDate: lot.weaningDate,
         firstCalvingDate: lot.firstCalvingDate,
         finishingStartDate: lot.finishingStartDate,
+        calvingCount: lot.calvingCount,
       });
       if (!derivedKey) return floorKey;
       return clampStageFloor(derivedKey, floorKey, lot.sex);
+    }
+
+    // Shared by the animal and lot action menus: which lifecycle stamps make
+    // sense to offer given the current (derived) stage.
+    // stageKey null (no birthDate/entryCategory to derive from, legacy
+    // records) never hides an action on data we can't classify.
+    export function lifecycleActionsFor({ stageKey, sex, weaningDate, finishingStartDate }) {
+      if (stageKey == null) {
+        return { wean: true, finishing: sex === "M", calving: sex === "F" };
+      }
+      const wean = (stageKey === "bezerro_lactente" || stageKey === "bezerra_lactente") && !weaningDate;
+      const finishing = sex === "M" && (stageKey === "garrote" || stageKey === "boi_magro") && !finishingStartDate;
+      const calving = sex === "F"
+        && (stageKey === "novilha" || stageKey === "novilha_primeira_cria" || stageKey === "vaca");
+      return { wean, finishing, calving };
     }
 
     // CATTLE_CATEGORIES key (lots.entryCategory) → legacy coarse lots.category
@@ -204,6 +226,7 @@ import { toDateSafe } from "./helpers.js";
       novilha: "recria",
       boi_magro: "engorda",
       boi_gordo: "engorda",
+      novilha_primeira_cria: "matrizes",
       vaca: "matrizes",
     };
 
@@ -422,6 +445,7 @@ import { toDateSafe } from "./helpers.js";
       transfer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 21l-4-4 4-4"/><path d="M21 17H3"/></svg>`,
       history: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>`,
       print: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>`,
+      tag: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v9a6 6 0 0 1-12 0V4a1 1 0 0 1 1-1z"/><circle cx="12" cy="7" r="1.4"/></svg>`,
     };
 
     // lots.category (SPEC 6.3) — distinct plural vocabulary from animals.category,

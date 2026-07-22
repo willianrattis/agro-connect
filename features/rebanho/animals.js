@@ -1,15 +1,16 @@
 import {
   db, doc, updateDoc, deleteDoc, serverTimestamp, collection, addDoc, query, where, getDocs,
 } from "../../js/core/firebase.js";
-import { CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, statusLabel, ICONS } from "../../js/core/constants.js";
-import { herdListEl } from "../../js/core/dom.js";
+import {
+  CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, statusLabel, ICONS,
+  animalStageLabel, animalStageChipClass, displayCategoryKeyForAnimal, lifecycleActionsFor,
+} from "../../js/core/constants.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
   parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel, fmtNum,
-  applyFunruralRetention,
 } from "../../js/core/helpers.js";
 import {
-  currentUid, lotsCache, animalsCache, transactionsCache, settingsCache, propertiesCache, eventsCache,
+  currentUid, lotsCache, animalsCache, transactionsCache, eventsCache,
 } from "../../js/core/state.js";
 import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
@@ -256,49 +257,63 @@ import { showToast } from "../../js/core/auth.js";
 
      export function buildActionMenuHTML(animal) {
        const isActive = (animal.status || "active") === "active";
-       const lifecycleItems = isActive
-         ? `
-           <button type="button" class="action-item pressable" data-menu-action="sell">
-             <span class="action-icon" aria-hidden="true">${ICONS.sell}</span>
-             Vender
-           </button>
-           <button type="button" class="action-item pressable" data-menu-action="weigh">
-             <span class="action-icon" aria-hidden="true">${ICONS.weigh}</span>
-             Pesar
-           </button>
-           <button type="button" class="action-item pressable" data-menu-action="wean">
-             <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
-             Desmamar
-           </button>
-           ${animal.sex === "F" ? `
-             <button type="button" class="action-item pressable" data-menu-action="calving">
-               <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
-               Registrar 1º parto
-             </button>
-           ` : ""}
-           ${animal.sex === "M" ? `
-             <button type="button" class="action-item pressable" data-menu-action="finishing">
-               <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
-               Iniciar terminação
-             </button>
-           ` : ""}
-           <button type="button" class="action-item danger pressable" data-menu-action="death">
-             <span class="action-icon" aria-hidden="true">${ICONS.death}</span>
-             Registrar morte
-           </button>
-         `
+       const lot = animal.lotId ? lotsCache.find((l) => l.id === animal.lotId) : null;
+       const stageKey = displayCategoryKeyForAnimal(animal, lot);
+       const { wean, finishing, calving } = lifecycleActionsFor({
+         stageKey,
+         sex: animal.sex,
+         weaningDate: animal.weaningDate,
+         finishingStartDate: animal.finishingStartDate,
+       });
+
+       const registrosItems = isActive
+         ? [
+             wean ? `
+               <button type="button" class="action-item pressable" data-menu-action="wean">
+                 <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
+                 Desmamar
+               </button>
+             ` : "",
+             calving ? `
+               <button type="button" class="action-item pressable" data-menu-action="calving">
+                 <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
+                 ${animal.firstCalvingDate ? "Registrar parto" : "Registrar 1º parto"}
+               </button>
+             ` : "",
+             finishing ? `
+               <button type="button" class="action-item pressable" data-menu-action="finishing">
+                 <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
+                 Iniciar terminação
+               </button>
+             ` : "",
+             `
+               <button type="button" class="action-item danger pressable" data-menu-action="death">
+                 <span class="action-icon" aria-hidden="true">${ICONS.death}</span>
+                 Registrar morte
+               </button>
+             `,
+           ].filter(Boolean).join("")
          : "";
+
        return `
          <div class="action-list">
-           ${lifecycleItems}
-           <button type="button" class="action-item pressable" data-menu-action="edit">
-             <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
-             Editar
-           </button>
-           <button type="button" class="action-item danger pressable" data-menu-action="delete">
-             <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
-             Excluir
-           </button>
+           ${registrosItems ? `
+             <div class="action-group">
+               <div class="action-group-title">Registros</div>
+               ${registrosItems}
+             </div>
+           ` : ""}
+           <div class="action-group">
+             <div class="action-group-title">Gestão</div>
+             <button type="button" class="action-item pressable" data-menu-action="edit">
+               <span class="action-icon" aria-hidden="true">${ICONS.edit}</span>
+               Editar
+             </button>
+             <button type="button" class="action-item danger pressable" data-menu-action="delete">
+               <span class="action-icon" aria-hidden="true">${ICONS.delete}</span>
+               Excluir
+             </button>
+           </div>
          </div>
        `;
      }
@@ -311,8 +326,6 @@ import { showToast } from "../../js/core/auth.js";
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
            switch (btn.dataset.menuAction) {
-             case "sell": openSaleSheet(animal); break;
-             case "weigh": openWeighingSheet(animal); break;
              case "wean": openWeaningSheet(animal); break;
              case "calving": openCalvingSheet(animal); break;
              case "finishing": openFinishingSheet(animal); break;
@@ -393,251 +406,6 @@ import { showToast } from "../../js/core/auth.js";
          content: buildDeleteAnimalHTML(animal),
        });
        wireDeleteAnimalForm(animal);
-     }
-
-     // Tapping the card opens the animal detail sheet (weighing history +
-     // "Resultado" for sold animals); the kebab button opens the action menu
-     // instead — checked first since it's nested inside the card.
-     export function handleHerdCardActivate(e) {
-       const menuBtn = e.target.closest('[data-action="animal-menu"]');
-       if (menuBtn) {
-         const animal = animalsCache.find((a) => a.id === menuBtn.dataset.id);
-         if (animal) openActionSheet(animal);
-         return;
-       }
-       const card = e.target.closest("li[data-animal-id]");
-       if (!card) return;
-       const animal = animalsCache.find((a) => a.id === card.dataset.animalId);
-       if (animal) openAnimalDetailSheet(animal);
-     }
-     herdListEl.addEventListener("click", handleHerdCardActivate);
-     herdListEl.addEventListener("keydown", (e) => {
-       if (e.key !== "Enter" && e.key !== " ") return;
-       if (e.target.closest('[data-action="animal-menu"]')) return; // native button handles its own activation
-       if (!e.target.closest("li[data-animal-id]")) return;
-       e.preventDefault();
-       handleHerdCardActivate(e);
-     });
-
-     // --- Vender ---
-     export function buildSaleFormHTML(defaultPrice) {
-       return `
-         <form id="sale-form" class="form-grid" novalidate>
-           <div class="field field--half">
-             <label class="field-label" for="sale-date">Data da venda *</label>
-             <input class="input" id="sale-date" type="date" />
-             <p class="field-error" id="sale-date-error"></p>
-           </div>
-           <div class="field field--half">
-             <label class="field-label" for="sale-arrobas">Peso de carcaça (@) *</label>
-             <input class="input" id="sale-arrobas" type="number" min="0" step="0.01" placeholder="Ex: 21" />
-             <p class="field-error" id="sale-arrobas-error"></p>
-           </div>
-           <div class="field field--half">
-             <label class="field-label" for="sale-price">Preço da @ (R$) *</label>
-             <input class="input" id="sale-price" type="text" inputmode="decimal" placeholder="R$ 0,00" autocomplete="off" value="${defaultPrice != null ? formatBRL(defaultPrice) : ""}" />
-             <p class="field-error" id="sale-price-error"></p>
-           </div>
-           <div class="field field--half">
-             <span class="field-label">Valor da venda</span>
-             <p class="stat-value" id="sale-total" style="font-size: var(--fs-lg);">R$ 0,00</p>
-           </div>
-           <p class="field-error" id="sale-form-error" role="alert"></p>
-           <button type="submit" class="btn-primary pressable" id="sale-submit">Confirmar venda</button>
-         </form>
-       `;
-     }
-
-     export function wireSaleForm(animal) {
-       const form = document.getElementById("sale-form");
-       const arrobasInput = document.getElementById("sale-arrobas");
-       const priceInput = document.getElementById("sale-price");
-       const totalEl = document.getElementById("sale-total");
-       const submitBtn = document.getElementById("sale-submit");
-       const formError = document.getElementById("sale-form-error");
-
-       function recomputeTotal() {
-         const arrobas = parseFloat(arrobasInput.value);
-         const price = parseBRLToNumber(priceInput.value);
-         const total = Number.isFinite(arrobas) && Number.isFinite(price) ? arrobas * price : 0;
-         totalEl.textContent = formatBRL(total);
-         return total;
-       }
-       arrobasInput.addEventListener("input", recomputeTotal);
-       priceInput.addEventListener("input", () => { formatCurrencyInput(priceInput); recomputeTotal(); });
-       recomputeTotal();
-
-       form.addEventListener("submit", async (e) => {
-         e.preventDefault();
-         if (!currentUid) return;
-
-         formError.textContent = "";
-         ["sale-date", "sale-arrobas", "sale-price"].forEach(clearFieldError);
-
-         let valid = true;
-         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
-
-         const dateStr = document.getElementById("sale-date").value;
-         if (!dateStr) fail("sale-date", "Informe a data da venda.");
-
-         const arrobas = parseFloat(arrobasInput.value);
-         if (!Number.isFinite(arrobas) || arrobas <= 0) fail("sale-arrobas", "Informe o peso de carcaça em @.");
-
-         const price = parseBRLToNumber(priceInput.value);
-         if (!Number.isFinite(price) || price <= 0) fail("sale-price", "Informe o preço da @.");
-
-         if (!valid) return;
-
-         const revenue = arrobas * price;
-         const saleDate = new Date(`${dateStr}T00:00:00`);
-
-         submitBtn.disabled = true;
-         submitBtn.textContent = "Salvando…";
-
-         try {
-           await updateDoc(doc(db, "animals", animal.id), {
-             status: "sold",
-             saleDate,
-             saleArrobas: arrobas,
-             salePricePerArrobaBRL: price,
-             saleRevenueBRL: revenue,
-             updatedAt: serverTimestamp(),
-           });
-           await addDoc(collection(db, "events"), {
-             ownerId: currentUid,
-             type: "sale",
-             animalId: animal.id,
-             lotId: animal.lotId || null,
-             date: saleDate,
-             payload: { arrobas, pricePerArrobaBRL: price, revenueBRL: revenue },
-             createdAt: serverTimestamp(),
-           });
-           const r = applyFunruralRetention(revenue, "pj");
-           await addDoc(collection(db, "transactions"), {
-             ownerId: currentUid,
-             kind: "receita",
-             category: "venda-animal",
-             costNature: null,
-             buyerType: "pj",
-             amountBRL: r.netBRL,
-             grossBRL: r.grossBRL,
-             funruralRetidoBRL: r.funruralRetidoBRL,
-             date: saleDate,
-             linkedScope: "animal",
-             linkedAnimalId: animal.id,
-             linkedLotId: null,
-             description: null,
-             createdAt: serverTimestamp(),
-           });
-           showToast("Venda registrada.");
-           Sheet.close();
-         } catch (err) {
-           console.warn("[Agro Connect] Falha ao registrar venda:", err?.code ?? err);
-           formError.textContent =
-             err?.code === "permission-denied"
-               ? "Sem permissão para gravar."
-               : "Não foi possível salvar. Tente novamente.";
-           submitBtn.disabled = false;
-           submitBtn.textContent = "Confirmar venda";
-         }
-       });
-     }
-
-     export function openSaleSheet(animal) {
-       const lot = animal.lotId ? lotsCache.find((l) => l.id === animal.lotId) : null;
-       const prop = lot?.propertyId ? propertiesCache.find((p) => p.id === lot.propertyId) : null;
-       const defaultPrice = Number.isFinite(prop?.defaultArrobaPriceBRL)
-         ? prop.defaultArrobaPriceBRL
-         : settingsCache.defaultArrobaPriceBRL;
-       Sheet.open({
-         title: `Vender · #${escapeHtml(animal.earTag)}`,
-         content: buildSaleFormHTML(defaultPrice),
-       });
-       wireSaleForm(animal);
-     }
-
-     // --- Pesar ---
-     export function buildWeighingFormHTML() {
-       return `
-         <form id="weigh-form" class="form-grid" novalidate>
-           <div class="field field--half">
-             <label class="field-label" for="weigh-date">Data da pesagem *</label>
-             <input class="input" id="weigh-date" type="date" />
-             <p class="field-error" id="weigh-date-error"></p>
-           </div>
-           <div class="field field--half">
-             <label class="field-label" for="weigh-weight">Peso (kg) *</label>
-             <input class="input" id="weigh-weight" type="number" min="0" step="0.1" placeholder="Ex: 340" />
-             <p class="field-error" id="weigh-weight-error"></p>
-           </div>
-           <p class="field-error" id="weigh-form-error" role="alert"></p>
-           <button type="submit" class="btn-primary pressable" id="weigh-submit">Registrar pesagem</button>
-         </form>
-       `;
-     }
-
-     export function wireWeighingForm(animal) {
-       const form = document.getElementById("weigh-form");
-       const submitBtn = document.getElementById("weigh-submit");
-       const formError = document.getElementById("weigh-form-error");
-
-       form.addEventListener("submit", async (e) => {
-         e.preventDefault();
-         if (!currentUid) return;
-
-         formError.textContent = "";
-         ["weigh-date", "weigh-weight"].forEach(clearFieldError);
-
-         let valid = true;
-         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
-
-         const dateStr = document.getElementById("weigh-date").value;
-         if (!dateStr) fail("weigh-date", "Informe a data da pesagem.");
-
-         const weightKg = parseFloat(document.getElementById("weigh-weight").value);
-         if (!Number.isFinite(weightKg) || weightKg <= 0) fail("weigh-weight", "Informe o peso.");
-
-         if (!valid) return;
-
-         const date = new Date(`${dateStr}T00:00:00`);
-
-         submitBtn.disabled = true;
-         submitBtn.textContent = "Salvando…";
-
-         try {
-           await addDoc(collection(db, "events"), {
-             ownerId: currentUid,
-             type: "weighing",
-             animalId: animal.id,
-             lotId: animal.lotId || null,
-             date,
-             payload: { weightKg },
-             createdAt: serverTimestamp(),
-           });
-           await updateDoc(doc(db, "animals", animal.id), {
-             currentWeightKg: weightKg,
-             updatedAt: serverTimestamp(),
-           });
-           showToast("Pesagem registrada.");
-           Sheet.close();
-         } catch (err) {
-           console.warn("[Agro Connect] Falha ao registrar pesagem:", err?.code ?? err);
-           formError.textContent =
-             err?.code === "permission-denied"
-               ? "Sem permissão para gravar."
-               : "Não foi possível salvar. Tente novamente.";
-           submitBtn.disabled = false;
-           submitBtn.textContent = "Registrar pesagem";
-         }
-       });
-     }
-
-     export function openWeighingSheet(animal) {
-       Sheet.open({
-         title: `Pesar · #${escapeHtml(animal.earTag)}`,
-         content: buildWeighingFormHTML(),
-       });
-       wireWeighingForm(animal);
      }
 
      // --- Desmamar ---
@@ -784,12 +552,18 @@ import { showToast } from "../../js/core/auth.js";
        wireStampForm({ submitLabel, onSubmit });
      }
 
-     // --- Registrar 1º parto (fêmeas) ---
+     // --- Registrar parto (fêmeas): 1º parto stamps firstCalvingDate and
+     //     starts the count; every parto after that only advances
+     //     lastCalvingDate/calvingCount — firstCalvingDate never changes
+     //     again. The stage this derives to (novilha de 1ª cria vs. vaca)
+     //     comes from calvingCount, not from firstCalvingDate alone. ---
      export function openCalvingSheet(animal) {
+       const isFirst = !animal.firstCalvingDate;
+       const title = isFirst ? "Registrar 1º parto" : "Registrar parto";
        openStampSheet({
-         title: `Registrar 1º parto · #${escapeHtml(animal.earTag)}`,
-         dateLabel: "Data do 1º parto",
-         submitLabel: "Registrar 1º parto",
+         title: `${title} · #${escapeHtml(animal.earTag)}`,
+         dateLabel: isFirst ? "Data do 1º parto" : "Data do parto",
+         submitLabel: title,
          onSubmit: async (date) => {
            await addDoc(collection(db, "events"), {
              ownerId: currentUid,
@@ -800,17 +574,22 @@ import { showToast } from "../../js/core/auth.js";
              payload: {},
              createdAt: serverTimestamp(),
            });
-           await updateDoc(doc(db, "animals", animal.id), { firstCalvingDate: date, updatedAt: serverTimestamp() });
-           showToast("1º parto registrado.");
+           const stamps = isFirst
+             ? { firstCalvingDate: date, lastCalvingDate: date, calvingCount: 1 }
+             : { lastCalvingDate: date, calvingCount: (animal.calvingCount ?? 1) + 1 };
+           await updateDoc(doc(db, "animals", animal.id), { ...stamps, updatedAt: serverTimestamp() });
+           showToast(isFirst ? "1º parto registrado." : "Parto registrado.");
          },
        });
      }
 
      export function openLotCalvingSheet(lot) {
+       const isFirst = !lot.firstCalvingDate;
+       const title = isFirst ? "Registrar 1º parto" : "Registrar parto";
        openStampSheet({
-         title: `Registrar 1º parto · ${escapeHtml(lot.name)}`,
-         dateLabel: "Data do 1º parto",
-         submitLabel: "Registrar 1º parto",
+         title: `${title} · ${escapeHtml(lot.name)}`,
+         dateLabel: isFirst ? "Data do 1º parto" : "Data do parto",
+         submitLabel: title,
          onSubmit: async (date) => {
            await addDoc(collection(db, "events"), {
              ownerId: currentUid,
@@ -821,8 +600,11 @@ import { showToast } from "../../js/core/auth.js";
              payload: {},
              createdAt: serverTimestamp(),
            });
-           await updateDoc(doc(db, "lots", lot.id), { firstCalvingDate: date, updatedAt: serverTimestamp() });
-           showToast("1º parto registrado para o lote.");
+           const stamps = isFirst
+             ? { firstCalvingDate: date, lastCalvingDate: date, calvingCount: 1 }
+             : { lastCalvingDate: date, calvingCount: (lot.calvingCount ?? 1) + 1 };
+           await updateDoc(doc(db, "lots", lot.id), { ...stamps, updatedAt: serverTimestamp() });
+           showToast(isFirst ? "1º parto registrado para o lote." : "Parto registrado para o lote.");
          },
        });
      }
@@ -1093,4 +875,151 @@ import { showToast } from "../../js/core/auth.js";
          content: buildAnimalDetailHTML(animal),
        });
        document.getElementById("animal-detail-actions-btn")?.addEventListener("click", () => openActionSheet(animal));
+     }
+
+     // --- "Ver animais" (per-lot tagged-animal list) ---
+     // Re-attaches the flat herd list's card UI, scoped to one lot, routing
+     // to the sheets already defined above — no new animal features here.
+     export let openLotAnimalsLotId = null;
+     export function setOpenLotAnimalsLotId(id) { openLotAnimalsLotId = id; }
+
+     export function buildLotAnimalsHTML(lot) {
+       const animals = animalsCache
+         .filter((a) => a.lotId === lot.id)
+         .slice()
+         .sort((a, b) => (a.earTag || "").localeCompare(b.earTag || "", undefined, { numeric: true }));
+
+       if (!animals.length) {
+         return `
+           <div class="form-grid">
+             <div class="empty-state">
+               <span class="icon" aria-hidden="true">${ICONS.tag}</span>
+               <h3>Nenhum animal com brinco neste lote</h3>
+             </div>
+           </div>
+         `;
+       }
+
+       const active = animals.filter((a) => (a.status || "active") === "active");
+       const cards = animals
+         .map((a) => {
+           const days = daysOnFarm(a);
+           const weight = a.currentWeightKg != null ? `${formatKg(a.currentWeightKg)} kg` : "—";
+           const chipClass = animalStageChipClass(a, lot);
+           const saleResult = computeSaleResult(a, transactionsCache);
+           return `
+             <li class="card pressable" data-animal-id="${escapeHtml(a.id)}" tabindex="0" role="button" aria-label="Ver detalhes do animal #${escapeHtml(a.earTag)}">
+               <div class="card-top">
+                 <span class="ear-tag"><span class="hash">#</span>${escapeHtml(a.earTag)}</span>
+                 <div class="card-top-right">
+                   <span class="chip ${chipClass}">${escapeHtml(animalStageLabel(a, lot))}</span>
+                   <button type="button" class="card-menu-btn pressable" data-action="animal-menu" data-id="${escapeHtml(a.id)}" aria-label="Ações do animal #${escapeHtml(a.earTag)}">
+                     ${ICONS.menu}
+                   </button>
+                 </div>
+               </div>
+               <div class="card-stats">
+                 <div class="mini-stat">
+                   <p class="mini-value">${weight}</p>
+                   <p class="mini-label">Peso atual</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${days != null ? `${days} d` : "—"}</p>
+                   <p class="mini-label">Na fazenda</p>
+                 </div>
+                 <div class="mini-stat">
+                   <p class="mini-value">${statusLabel[a.status] || "Ativo"}</p>
+                   <p class="mini-label">Status</p>
+                 </div>
+               </div>
+               ${saleResult ? `
+                 <div class="sale-result">
+                   <span><strong>${saleResult.days}</strong> dias</span>
+                   <span>Lucro <strong>${formatBRL(saleResult.profit)}</strong></span>
+                   <span><strong>${formatBRL(saleResult.dailyProfit)}</strong>/dia</span>
+                 </div>
+               ` : ""}
+             </li>
+           `;
+         })
+         .join("");
+
+       return `
+         <div class="form-grid">
+           <p class="field-hint">${active.length} de ${animals.length} ativos</p>
+           <ul class="herd-list">${cards}</ul>
+         </div>
+       `;
+     }
+
+     // Delegated on #sheet-body (not on individual cards) so a live refresh
+     // that swaps the whole list back in doesn't need to re-bind per card.
+     // Re-wiring removes the previous delegated pair first — #sheet-body is a
+     // stable node reused by every Sheet.open(), so binding without removing
+     // would stack a duplicate handler on every open/refresh of this sheet.
+     let _lotAnimalsClickHandler = null;
+     let _lotAnimalsKeydownHandler = null;
+
+     export function wireLotAnimalsSheet(lot) {
+       const bodyEl = document.getElementById("sheet-body");
+       if (!bodyEl) return;
+       const back = () => openLotAnimalsSheet(lot);
+
+       if (_lotAnimalsClickHandler) bodyEl.removeEventListener("click", _lotAnimalsClickHandler);
+       if (_lotAnimalsKeydownHandler) bodyEl.removeEventListener("keydown", _lotAnimalsKeydownHandler);
+
+       function activate(e) {
+         const menuBtn = e.target.closest('[data-action="animal-menu"]');
+         if (menuBtn) {
+           const animal = animalsCache.find((a) => a.id === menuBtn.dataset.id);
+           if (animal) {
+             openLotAnimalsLotId = null;
+             openActionSheet(animal);
+             Sheet.setBack(back);
+           }
+           return;
+         }
+         const card = e.target.closest("li[data-animal-id]");
+         if (!card) return;
+         const animal = animalsCache.find((a) => a.id === card.dataset.animalId);
+         if (animal) {
+           openLotAnimalsLotId = null;
+           openAnimalDetailSheet(animal);
+           Sheet.setBack(back);
+         }
+       }
+
+       _lotAnimalsClickHandler = activate;
+       _lotAnimalsKeydownHandler = (e) => {
+         if (e.key !== "Enter" && e.key !== " ") return;
+         if (e.target.closest('[data-action="animal-menu"]')) return; // native button handles its own activation
+         if (!e.target.closest("li[data-animal-id]")) return;
+         e.preventDefault();
+         activate(e);
+       };
+
+       bodyEl.addEventListener("click", _lotAnimalsClickHandler);
+       bodyEl.addEventListener("keydown", _lotAnimalsKeydownHandler);
+     }
+
+     export function openLotAnimalsSheet(lot) {
+       openLotAnimalsLotId = lot.id;
+       Sheet.open({
+         title: `Animais · ${escapeHtml(lot.name)}`,
+         content: buildLotAnimalsHTML(lot),
+         onClose: () => { openLotAnimalsLotId = null; },
+       });
+       wireLotAnimalsSheet(lot);
+     }
+
+     // Keeps the list live while open — animals arrive on their own
+     // onSnapshot listener (selling/weighing/editing an animal elsewhere
+     // should be reflected here without a manual reopen).
+     export function refreshLotAnimalsSheetIfOpen() {
+       if (!openLotAnimalsLotId) return;
+       const lot = lotsCache.find((l) => l.id === openLotAnimalsLotId);
+       if (!lot) { openLotAnimalsLotId = null; Sheet.close(); return; }
+       const bodyEl = document.getElementById("sheet-body");
+       if (bodyEl) bodyEl.innerHTML = buildLotAnimalsHTML(lot);
+       wireLotAnimalsSheet(lot);
      }

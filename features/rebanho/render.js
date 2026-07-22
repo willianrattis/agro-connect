@@ -1,22 +1,21 @@
 import {
-  KG_PER_ARROBA, FEMALE_GMD_FACTOR, statusLabel, ICONS,
-  animalStageLabel, animalStageChipClass, lotStageLabel, lotStageChipClass,
+  KG_PER_ARROBA, FEMALE_GMD_FACTOR, ICONS, lotStageLabel, lotStageChipClass,
 } from "../../js/core/constants.js";
 import {
-  herdListEl, herdCountEl, lotListEl, lotCountEl, statHeadEl, statArrobasEl,
+  lotListEl, lotCountEl, statHeadEl, statArrobasEl,
 } from "../../js/core/dom.js";
 import {
-  escapeHtml, daysOnFarm, formatKg, formatArrobas, formatPercentTrim,
+  escapeHtml, formatKg, formatArrobas, formatPercentTrim,
   lotAgeMetaLabel, lotTenureMetaLabel, resolveFarmYieldPct, resolveConfinementYieldPct,
-  lotWeightProjection, lotConfinedProjection, confinementStripHTML, formatBRL, computeSaleResult,
+  lotWeightProjection, lotConfinedProjection, confinementStripHTML, formatBRL,
   resolveLotTargetArrobas, slaughterForecast,
 } from "../../js/core/helpers.js";
-import { lotsCache, animalsCache, transactionsCache, propertiesCache } from "../../js/core/state.js";
+import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js";
 
     // 4. Render: skeletons → cattle cards (staggered)
     // =====================================================
     export function renderSkeletons(count) {
-      herdListEl.innerHTML = Array.from({ length: count })
+      lotListEl.innerHTML = Array.from({ length: count })
         .map(
           () => `
             <li class="card skeleton" aria-hidden="true">
@@ -33,55 +32,6 @@ import { lotsCache, animalsCache, transactionsCache, propertiesCache } from "../
           `
         )
         .join("");
-    }
-
-    export function renderHerd(animals) {
-      herdListEl.innerHTML = animals
-        .map((a, i) => {
-          const days = daysOnFarm(a);
-          const weight = a.currentWeightKg != null ? `${formatKg(a.currentWeightKg)} kg` : "—";
-          const lot = a.lotId ? lotsCache.find((l) => l.id === a.lotId) : null;
-          const chipClass = animalStageChipClass(a, lot);
-          const saleResult = computeSaleResult(a, transactionsCache);
-          return `
-            <li class="card enter pressable" style="--i: ${i}" data-animal-id="${escapeHtml(a.id)}" tabindex="0" role="button" aria-label="Ver detalhes do animal #${escapeHtml(a.earTag)}">
-              <div class="card-top">
-                <span class="ear-tag"><span class="hash">#</span>${escapeHtml(a.earTag)}</span>
-                <div class="card-top-right">
-                  <span class="chip ${chipClass}">${escapeHtml(animalStageLabel(a, lot))}</span>
-                  <button type="button" class="card-menu-btn pressable" data-action="animal-menu" data-id="${escapeHtml(a.id)}" aria-label="Ações do animal #${escapeHtml(a.earTag)}">
-                    ${ICONS.menu}
-                  </button>
-                </div>
-              </div>
-              <div class="card-stats">
-                <div class="mini-stat">
-                  <p class="mini-value">${weight}</p>
-                  <p class="mini-label">Peso atual</p>
-                </div>
-                <div class="mini-stat">
-                  <p class="mini-value">${days != null ? `${days} d` : "—"}</p>
-                  <p class="mini-label">Na fazenda</p>
-                </div>
-                <div class="mini-stat">
-                  <p class="mini-value">${statusLabel[a.status] || "Ativo"}</p>
-                  <p class="mini-label">Status</p>
-                </div>
-              </div>
-              ${saleResult ? `
-                <div class="sale-result">
-                  <span><strong>${saleResult.days}</strong> dias</span>
-                  <span>Lucro <strong>${formatBRL(saleResult.profit)}</strong></span>
-                  <span><strong>${formatBRL(saleResult.dailyProfit)}</strong>/dia</span>
-                </div>
-              ` : ""}
-            </li>
-          `;
-        })
-        .join("");
-
-      const active = animals.filter((a) => (a.status || "active") === "active");
-      herdCountEl.textContent = `${active.length} animais ativos`;
     }
 
     // Herd summary strip (Cabeças no rebanho / Estoque estimado) is derived
@@ -116,43 +66,6 @@ import { lotsCache, animalsCache, transactionsCache, propertiesCache } from "../
       }
       statHeadEl.textContent = String(head);
       statArrobasEl.innerHTML = `${formatArrobas(arrobas)} <small>@</small>`;
-    }
-
-    export function renderHerdEmpty() {
-      herdListEl.innerHTML = `
-        <li>
-          <div class="empty-state">
-            <span class="icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v9a6 6 0 0 1-12 0V4a1 1 0 0 1 1-1z"/><circle cx="12" cy="7" r="1.4"/></svg>
-            </span>
-            <h3>Nenhum animal ainda</h3>
-            <p>Esta lista mostra apenas animais com brinco. Seus lotes aparecem na aba Lotes.</p>
-          </div>
-        </li>
-      `;
-      herdCountEl.textContent = "0 animais ativos";
-    }
-
-    export function renderHerdError(err) {
-      const isPermission = err?.code === "permission-denied";
-      herdListEl.innerHTML = `
-        <li>
-          <div class="empty-state">
-            <span class="icon" aria-hidden="true" style="background: rgba(179,38,30,0.12); color: var(--danger);">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
-            </span>
-            <h3>${isPermission ? "Sem permissão para ler o rebanho" : "Não foi possível carregar"}</h3>
-            <p>${
-              isPermission
-                ? "Sua conta não tem acesso a estes dados. Verifique se você está logado com a conta correta."
-                : "Verifique sua conexão e tente novamente em instantes."
-            }</p>
-          </div>
-        </li>
-      `;
-      statHeadEl.textContent = "—";
-      statArrobasEl.textContent = "—";
-      herdCountEl.textContent = "";
     }
 
     export function renderLotsError() {

@@ -72,8 +72,7 @@ function enhanceOne(native) {
   const pickerBtn = document.createElement("button");
   pickerBtn.type = "button";
   pickerBtn.className = "datefield-picker";
-  pickerBtn.setAttribute("tabindex", "-1");
-  pickerBtn.setAttribute("aria-hidden", "true");
+  pickerBtn.setAttribute("aria-label", "Escolher data no calendário");
   pickerBtn.innerHTML = PICKER_ICON;
 
   wrapper.appendChild(proxy);
@@ -132,7 +131,17 @@ function enhanceOne(native) {
     try { native.showPicker(); } catch { /* unsupported (e.g. Safari < 16.4) */ }
   }
   pickerBtn.addEventListener("click", openPicker);
-  proxy.addEventListener("click", openPicker);
+
+  proxy.addEventListener("blur", () => {
+    if (proxy.value !== "" && parseDateBR(proxy.value) === "") {
+      formatInvalid = true;
+      native.value = "";
+      applyInvalidVisual();
+    } else if (proxy.value === "") {
+      formatInvalid = false;
+      applyInvalidVisual();
+    }
+  });
 
   native.addEventListener("change", () => {
     if (syncingFromProxy) return;

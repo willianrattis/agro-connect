@@ -2,7 +2,7 @@ import {
   db, doc, serverTimestamp, collection, addDoc, query, where, orderBy, onSnapshot,
 } from "./firebase.js";
 import {
-  syncIndicatorEl, herdListEl, herdCountEl, lotListEl, lotCountEl, statHeadEl, statArrobasEl,
+  syncIndicatorEl, lotListEl, lotCountEl, statHeadEl, statArrobasEl,
   finReceitasEl, finDespesasEl, finSaldoEl, finCountEl, txListEl,
   settingsTargetValueEl, settingsFarmYieldValueEl, settingsConfYieldValueEl,
   accountMembersCardEl, accountMembersListEl, sharedAccessCardEl,
@@ -17,10 +17,11 @@ import {
 } from "./state.js";
 import { showToast } from "./auth.js";
 import {
-  renderSkeletons, renderHerd, renderHerdEmpty, renderHerdError, renderHerdSummary,
+  renderSkeletons, renderHerdSummary,
   renderLots, renderLotsError,
 } from "../../features/rebanho/render.js";
 import { refreshLotDetailSheetIfOpen, setOpenLotDetailLotId } from "../../features/rebanho/lots.js";
+import { refreshLotAnimalsSheetIfOpen } from "../../features/rebanho/animals.js";
 import { renderFinanceiro, renderFinError, renderMonthChips } from "../../features/financeiro/financeiro.js";
 import { renderSettingsCard } from "../../features/perfil/settings.js";
 import { renderPropertiesCard } from "../../features/perfil/properties.js";
@@ -73,7 +74,6 @@ import {
     export function startFirestoreListeners(uid) {
       setCurrentUid(uid);
       renderSkeletons(4);
-      herdCountEl.textContent = "Carregando…";
       loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
       propertyMigrationAttempted = false;
 
@@ -88,9 +88,8 @@ import {
         (snap) => {
           updateSyncState("animals", snap.metadata.fromCache);
           setAnimalsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          if (animalsCache.length === 0) renderHerdEmpty();
-          else renderHerd(animalsCache);
           renderLots();
+          refreshLotAnimalsSheetIfOpen();
           renderHerdSummary();
           loadedFlags.animals = true;
           renderIndicadores();
@@ -98,7 +97,6 @@ import {
         (err) => {
           updateSyncState("animals", false);
           console.warn("[Agro Connect] animals onSnapshot error:", err?.code ?? err);
-          renderHerdError(err);
           loadedFlags.animals = true;
           renderIndicadores();
         }
@@ -195,7 +193,6 @@ import {
         (snap) => {
           updateSyncState("transactions", snap.metadata.fromCache);
           setTransactionsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          if (animalsCache.length) renderHerd(animalsCache);
           renderMonthChips();
           renderFinanceiro();
           loadedFlags.transactions = true;
@@ -389,10 +386,8 @@ import {
       setEstoqueSelectedPropertyId(null);
       loadedFlags = { animals: false, transactions: false, events: false, settings: false, properties: false, lots: false };
       propertyMigrationAttempted = false;
-      herdListEl.innerHTML = "";
       statHeadEl.textContent = "—";
       statArrobasEl.textContent = "—";
-      herdCountEl.textContent = "";
       lotListEl.innerHTML = "";
       lotCountEl.textContent = "";
       finReceitasEl.textContent = "—";

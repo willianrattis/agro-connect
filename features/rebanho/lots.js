@@ -3,6 +3,7 @@ import {
 } from "../../js/core/firebase.js";
 import {
   CATTLE_CATEGORIES, categoriesForSex, LOT_CATEGORY_BUCKET, MOVEMENT_TYPE_LABEL, ICONS, lotCategoryLabel,
+  displayCategoryKeyForLot, lifecycleActionsFor,
 } from "../../js/core/constants.js";
 import { lotListEl } from "../../js/core/dom.js";
 import {
@@ -18,6 +19,7 @@ import { Sheet } from "../../js/core/sheet.js";
 import { showToast } from "../../js/core/auth.js";
 import {
   clearFieldError, setFieldError, openLotCalvingSheet, openLotFinishingSheet, openLotWeaningSheet,
+  openLotAnimalsSheet,
 } from "./animals.js";
 import { openLotWeighingSheet, openLotWeighingHistorySheet } from "./weighing.js";
 import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
@@ -27,8 +29,24 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        // Chronological stamps only make sense for Phase 2+ lots that carry
        // a sex + taxonomy category — legacy lots keep their old action set.
        const hasStages = !!lot.sex;
+       const stageKey = displayCategoryKeyForLot(lot);
+       const { wean, finishing, calving } = lifecycleActionsFor({
+         stageKey,
+         sex: lot.sex,
+         weaningDate: lot.weaningDate,
+         finishingStartDate: lot.finishingStartDate,
+       });
        return `
          <div class="action-list">
+           ${!isAggregate ? `
+             <div class="action-group">
+               <div class="action-group-title">Animais</div>
+               <button type="button" class="action-item pressable" data-menu-action="view-animals">
+                 <span class="action-icon" aria-hidden="true">${ICONS.tag}</span>
+                 Ver animais
+               </button>
+             </div>
+           ` : ""}
            <div class="action-group">
              <div class="action-group-title">Medição</div>
              <button type="button" class="action-item pressable" data-menu-action="weigh-lot">
@@ -42,25 +60,23 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
            </div>
            <div class="action-group">
              <div class="action-group-title">Registros</div>
-             ${isAggregate ? `
-               <button type="button" class="action-item pressable" data-menu-action="movement">
-                 <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
-                 Nova movimentação
-               </button>
-             ` : ""}
-             ${hasStages ? `
+             <button type="button" class="action-item pressable" data-menu-action="movement">
+               <span class="action-icon" aria-hidden="true">${ICONS.movement}</span>
+               Nova movimentação
+             </button>
+             ${hasStages && wean ? `
                <button type="button" class="action-item pressable" data-menu-action="wean">
                  <span class="action-icon" aria-hidden="true">${ICONS.wean}</span>
                  Registrar desmama
                </button>
              ` : ""}
-             ${hasStages && lot.sex === "F" ? `
+             ${hasStages && calving ? `
                <button type="button" class="action-item pressable" data-menu-action="calving">
                  <span class="action-icon" aria-hidden="true">${ICONS.calving}</span>
-                 Registrar 1º parto
+                 ${lot.firstCalvingDate ? "Registrar parto" : "Registrar 1º parto"}
                </button>
              ` : ""}
-             ${hasStages && lot.sex === "M" ? `
+             ${hasStages && finishing ? `
                <button type="button" class="action-item pressable" data-menu-action="finishing">
                  <span class="action-icon" aria-hidden="true">${ICONS.finishing}</span>
                  Iniciar terminação
@@ -91,7 +107,8 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        const back = () => openLotActionSheet(lot);
        document.querySelectorAll("#sheet-body [data-menu-action]").forEach((btn) => {
          btn.addEventListener("click", () => {
-           if (btn.dataset.menuAction === "weigh-lot") { openLotWeighingSheet(lot); Sheet.setBack(back); }
+           if (btn.dataset.menuAction === "view-animals") { openLotAnimalsSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "weigh-lot") { openLotWeighingSheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "weighing-history") { openLotWeighingHistorySheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "edit") { openEditLotSheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "delete") { openDeleteLotSheet(lot); Sheet.setBack(back); }
