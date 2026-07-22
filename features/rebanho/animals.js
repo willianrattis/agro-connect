@@ -2,7 +2,6 @@ import {
   db, doc, updateDoc, deleteDoc, serverTimestamp, collection, addDoc, query, where, getDocs,
 } from "../../js/core/firebase.js";
 import { CATTLE_CATEGORIES, categoriesForSex, resolveCategoryKey, deriveStage, statusLabel, ICONS } from "../../js/core/constants.js";
-import { herdListEl } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, daysOnFarm, formatKg, formatCurrencyInput,
   parseBRLToNumber, formatBRL, saleDaysHeld, computeSaleResult, formatDayLabel, fmtNum,
@@ -394,30 +393,6 @@ import { showToast } from "../../js/core/auth.js";
        });
        wireDeleteAnimalForm(animal);
      }
-
-     // Tapping the card opens the animal detail sheet (weighing history +
-     // "Resultado" for sold animals); the kebab button opens the action menu
-     // instead — checked first since it's nested inside the card.
-     export function handleHerdCardActivate(e) {
-       const menuBtn = e.target.closest('[data-action="animal-menu"]');
-       if (menuBtn) {
-         const animal = animalsCache.find((a) => a.id === menuBtn.dataset.id);
-         if (animal) openActionSheet(animal);
-         return;
-       }
-       const card = e.target.closest("li[data-animal-id]");
-       if (!card) return;
-       const animal = animalsCache.find((a) => a.id === card.dataset.animalId);
-       if (animal) openAnimalDetailSheet(animal);
-     }
-     herdListEl.addEventListener("click", handleHerdCardActivate);
-     herdListEl.addEventListener("keydown", (e) => {
-       if (e.key !== "Enter" && e.key !== " ") return;
-       if (e.target.closest('[data-action="animal-menu"]')) return; // native button handles its own activation
-       if (!e.target.closest("li[data-animal-id]")) return;
-       e.preventDefault();
-       handleHerdCardActivate(e);
-     });
 
      // --- Vender ---
      export function buildSaleFormHTML(defaultPrice) {

@@ -2,8 +2,6 @@
     // 2. DOM references
     // =====================================================
     export const syncIndicatorEl = document.getElementById("sync-indicator");
-    export const herdListEl = document.getElementById("herd-list");
-    export const herdCountEl = document.getElementById("herd-count");
     export const lotListEl = document.getElementById("lot-list");
     export const lotCountEl = document.getElementById("lot-count");
     export const statHeadEl = document.getElementById("stat-head");
