@@ -71,6 +71,7 @@ import { clearFieldError, setFieldError } from "./animals.js";
            ${showIndividuals ? `
              <div class="field">
                <div id="lot-weighing-individual-list" class="form-grid"></div>
+               ${isIndividual ? `<datalist id="lot-weighing-tag-options"></datalist>` : ""}
                ${totalPages > 1 ? `
                  <div style="display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-3);">
                    <button type="button" id="lot-weighing-prev-page" class="btn-secondary pressable" disabled>← Anterior</button>
@@ -101,6 +102,7 @@ import { clearFieldError, setFieldError } from "./animals.js";
        const yieldPct = resolveFarmYieldPct(lot);
 
        const individualWeights = new Array(weighableCount).fill(null);
+       const individualTags = new Array(weighableCount).fill(null);
        let currentPage = 0;
 
        const listEl = document.getElementById("lot-weighing-individual-list");
@@ -111,6 +113,22 @@ import { clearFieldError, setFieldError } from "./animals.js";
        const prevBtn = document.getElementById("lot-weighing-prev-page");
        const nextBtn = document.getElementById("lot-weighing-next-page");
        const pageInd = document.getElementById("lot-weighing-page-indicator");
+       const tagOptionsEl = document.getElementById("lot-weighing-tag-options");
+
+       // Suggestions are shared across every tag input (one <datalist> for
+       // the whole form), so a tag already typed in any row drops out of
+       // everyone else's suggestions too — the row that owns it doesn't need
+       // to see it again once entered.
+       function updateTagOptions() {
+         if (!isIndividual || !tagOptionsEl) return;
+         const used = new Set(
+           individualTags.filter((t) => t).map((t) => t.trim().toLowerCase())
+         );
+         const available = activeAnimals.filter(
+           (a) => !used.has((a.earTag || "").trim().toLowerCase())
+         );
+         tagOptionsEl.innerHTML = available.map((a) => `<option value="${escapeHtml(a.earTag)}"></option>`).join("");
+       }
 
        function renderPage() {
          if (!listEl) return;
@@ -119,17 +137,33 @@ import { clearFieldError, setFieldError } from "./animals.js";
          const rows = [];
          for (let i = start; i < end; i++) {
            const v = individualWeights[i];
-           rows.push(`
-             <input class="input" type="number" step="0.01" min="0" inputmode="decimal"
-                    placeholder="Peso ${i + 1} (kg)"
-                    data-role="individual-weight" data-index="${i}"
-                    value="${v != null ? v : ""}" />
-           `);
+           if (isIndividual) {
+             const tag = individualTags[i];
+             rows.push(`
+               <div class="lot-weighing-row" style="display: flex; gap: var(--space-2);">
+                 <input class="input" type="text" list="lot-weighing-tag-options" placeholder="Brinco"
+                        data-role="individual-tag" data-index="${i}"
+                        value="${tag ? escapeHtml(tag) : ""}" style="flex: 1;" />
+                 <input class="input" type="number" step="0.01" min="0" inputmode="decimal"
+                        placeholder="Peso (kg)"
+                        data-role="individual-weight" data-index="${i}"
+                        value="${v != null ? v : ""}" style="flex: 1;" />
+               </div>
+             `);
+           } else {
+             rows.push(`
+               <input class="input" type="number" step="0.01" min="0" inputmode="decimal"
+                      placeholder="Peso ${i + 1} (kg)"
+                      data-role="individual-weight" data-index="${i}"
+                      value="${v != null ? v : ""}" />
+             `);
+           }
          }
          listEl.innerHTML = rows.join("");
          if (prevBtn) prevBtn.disabled = currentPage === 0;
          if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
          if (pageInd) pageInd.textContent = `Página ${currentPage + 1} de ${totalPages}`;
+         updateTagOptions();
        }
 
        function updateArrobaDisplay(pesoKg) {
@@ -156,28 +190,65 @@ import { clearFieldError, setFieldError } from "./animals.js";
          updateArrobaDisplay(avg);
        }
 
+       function focusFirstRow() {
+         const first = isIndividual
+           ? listEl.querySelector('[data-role="individual-tag"]')
+           : listEl.querySelector('[data-role="individual-weight"]');
+         if (first) first.focus();
+       }
+
        if (listEl) {
          listEl.addEventListener("input", (e) => {
            const t = e.target;
-           if (!t.matches('[data-role="individual-weight"]')) return;
-           const idx = parseInt(t.dataset.index, 10);
-           const val = parseFloat(t.value);
-           individualWeights[idx] = Number.isFinite(val) && val > 0 ? val : null;
-           recomputeAverage();
+           if (t.matches('[data-role="individual-weight"]')) {
+             const idx = parseInt(t.dataset.index, 10);
+             const val = parseFloat(t.value);
+             individualWeights[idx] = Number.isFinite(val) && val > 0 ? val : null;
+             recomputeAverage();
+           } else if (isIndividual && t.matches('[data-role="individual-tag"]')) {
+             const idx = parseInt(t.dataset.index, 10);
+             individualTags[idx] = t.value || null;
+             updateTagOptions();
+           }
          });
 
          listEl.addEventListener("keydown", (e) => {
-           if (e.key !== "Enter" || !e.target.matches('[data-role="individual-weight"]')) return;
+           if (e.key !== "Enter") return;
+           const t = e.target;
+
+           if (isIndividual && t.matches('[data-role="individual-tag"]')) {
+             e.preventDefault();
+             const idx = parseInt(t.dataset.index, 10);
+             listEl.querySelector(`[data-role="individual-weight"][data-index="${idx}"]`)?.focus();
+             return;
+           }
+
+           if (!t.matches('[data-role="individual-weight"]')) return;
            e.preventDefault();
+
+           if (isIndividual) {
+             const idx = parseInt(t.dataset.index, 10);
+             const nextTag = listEl.querySelector(`[data-role="individual-tag"][data-index="${idx + 1}"]`);
+             if (nextTag) {
+               nextTag.focus();
+             } else if (currentPage < totalPages - 1) {
+               currentPage++;
+               renderPage();
+               focusFirstRow();
+             } else {
+               submitBtn.focus();
+             }
+             return;
+           }
+
            const inputs = Array.from(listEl.querySelectorAll('[data-role="individual-weight"]'));
-           const idx = inputs.indexOf(e.target);
+           const idx = inputs.indexOf(t);
            if (idx < inputs.length - 1) {
              inputs[idx + 1].focus();
            } else if (currentPage < totalPages - 1) {
              currentPage++;
              renderPage();
-             const first = listEl.querySelector('[data-role="individual-weight"]');
-             if (first) first.focus();
+             focusFirstRow();
            } else {
              submitBtn.focus();
            }
@@ -190,16 +261,14 @@ import { clearFieldError, setFieldError } from "./animals.js";
          if (currentPage > 0) {
            currentPage--;
            renderPage();
-           const first = listEl.querySelector('[data-role="individual-weight"]');
-           if (first) first.focus();
+           focusFirstRow();
          }
        });
        if (nextBtn) nextBtn.addEventListener("click", () => {
          if (currentPage < totalPages - 1) {
            currentPage++;
            renderPage();
-           const first = listEl.querySelector('[data-role="individual-weight"]');
-           if (first) first.focus();
+           focusFirstRow();
          }
        });
 
@@ -223,20 +292,53 @@ import { clearFieldError, setFieldError } from "./animals.js";
          const avgWeightKg = parseFloat(document.getElementById("lot-weighing-avg").value);
          if (!Number.isFinite(avgWeightKg) || avgWeightKg <= 0) fail("lot-weighing-avg", "Informe o peso médio.");
 
-         if (!valid) return;
+         // Fresh read of active animals at submit time (an animal could have
+         // been sold/died while the sheet was open), used both to validate
+         // ear tags and to build the matched entries below.
+         const freshActiveAnimals = isIndividual
+           ? animalsCache.filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
+           : [];
+         const headcountAtWeighing = isIndividual ? freshActiveAnimals.length : (lot.headcount || 0);
 
          const validWeights = individualWeights.filter((w) => Number.isFinite(w) && w > 0);
+
+         // A row needs BOTH a tag and a weight to become a matched entry — a
+         // tag alone (no weight) is silently ignored, per spec.
+         const individualEntries = [];
+         if (isIndividual) {
+           const seenTags = new Set();
+           for (let i = 0; i < weighableCount && valid; i++) {
+             const rawTag = individualTags[i];
+             const tag = rawTag ? rawTag.trim() : "";
+             const weightKg = individualWeights[i];
+             if (!tag || weightKg == null) continue;
+
+             const normalized = tag.toLowerCase();
+             const animal = freshActiveAnimals.find(
+               (a) => (a.earTag || "").trim().toLowerCase() === normalized
+             );
+             if (!animal) {
+               valid = false;
+               formError.textContent = "Brinco não encontrado neste lote.";
+               break;
+             }
+             if (seenTags.has(normalized)) {
+               valid = false;
+               formError.textContent = "Brinco repetido.";
+               break;
+             }
+             seenTags.add(normalized);
+             individualEntries.push({ animalId: animal.id, earTag: animal.earTag, weightKg });
+           }
+         }
+
+         if (!valid) return;
 
          submitBtn.disabled = true;
          submitBtn.textContent = "Salvando…";
 
          try {
            const batch = writeBatch(db);
-           const isIndividual = (lot.trackingMode || "individual") === "individual";
-           const activeAnimals = isIndividual
-             ? animalsCache.filter((a) => a.lotId === lot.id && (a.status || "active") === "active")
-             : [];
-           const headcountAtWeighing = isIndividual ? activeAnimals.length : (lot.headcount || 0);
 
            // Generates an id client-side without a write, so events can reference it
            // inside the same batch.
@@ -247,6 +349,7 @@ import { clearFieldError, setFieldError } from "./animals.js";
              date: weighingDate,
              avgWeightKg,
              individualWeights: validWeights.length ? validWeights : null,
+             individualEntries: individualEntries.length ? individualEntries : null,
              headcountAtWeighing,
              trackingMode: isIndividual ? "individual" : "aggregate",
              createdAt: serverTimestamp(),
@@ -264,7 +367,9 @@ import { clearFieldError, setFieldError } from "./animals.js";
              // 500-op batch limit (1 lot update + 1 weighing doc + 1 event per
              // animal) — needs chunked batches (see deleteLotCascade) as a
              // follow-up.
-             activeAnimals.forEach((animal) => {
+             const matchedByAnimalId = new Map(individualEntries.map((entry) => [entry.animalId, entry.weightKg]));
+             freshActiveAnimals.forEach((animal) => {
+               const weightKg = matchedByAnimalId.has(animal.id) ? matchedByAnimalId.get(animal.id) : avgWeightKg;
                const eventRef = doc(collection(db, "events"));
                batch.set(eventRef, {
                  ownerId: currentUid,
@@ -272,7 +377,7 @@ import { clearFieldError, setFieldError } from "./animals.js";
                  animalId: animal.id,
                  lotId: lot.id,
                  date: weighingDate,
-                 payload: { weightKg: avgWeightKg },
+                 payload: { weightKg },
                  source: "lot_weighing",
                  lotWeighingId: weighingRef.id,
                  createdAt: serverTimestamp(),
@@ -368,12 +473,32 @@ import { clearFieldError, setFieldError } from "./animals.js";
        });
      }
 
+     // Zips the flat individualWeights sample against the (smaller) set of
+     // tag-matched entries, by value, so each row can show "#<earTag>" when
+     // attributed or fall back to its positional index otherwise. There's no
+     // stored index linking the two arrays — matching by value is the best
+     // available signal, and duplicate weight values are rare enough that a
+     // display-only mismatch there is an acceptable trade-off.
+     function weighingDisplayRows(weights, entries) {
+       const remaining = entries.slice();
+       return weights.map((weightKg) => {
+         const idx = remaining.findIndex((entry) => entry.weightKg === weightKg);
+         if (idx === -1) return { earTag: null, weightKg };
+         const [entry] = remaining.splice(idx, 1);
+         return { earTag: entry.earTag, weightKg };
+       });
+     }
+
      export function buildLotWeighingDetailHTML(lot, w) {
        const d = toDateSafe(w.date);
        const { perHead, total } = weighingArrobas(lot, w);
        const weights = Array.isArray(w.individualWeights) ? w.individualWeights : [];
+       const hasIndividualEntries = Array.isArray(w.individualEntries) && w.individualEntries.length > 0;
        const mostRecent = lotWeighingsFor(lot.id)[0];
-       const isEditable = mostRecent && mostRecent.id === w.id;
+       // Weighings with ear-tag attributions never get the edit UI, even when
+       // most recent — saveWeighingEdit rewrites weights anonymously and would
+       // silently invalidate the attributions (see saveWeighingEdit).
+       const isEditable = mostRecent && mostRecent.id === w.id && !hasIndividualEntries;
 
        let grid;
        if (isEditable) {
@@ -401,18 +526,21 @@ import { clearFieldError, setFieldError } from "./animals.js";
            </div>
          `;
        } else if (weights.length) {
+         const displayRows = weighingDisplayRows(weights, hasIndividualEntries ? w.individualEntries : []);
          grid = `
            <div class="field">
              <label class="field-label">Pesagens individuais (${weights.length})</label>
-             <p class="field-hint">Somente a pesagem mais recente do lote pode ser editada.</p>
+             <p class="field-hint">${hasIndividualEntries
+               ? "Pesagens com brinco ainda não podem ser editadas."
+               : "Somente a pesagem mais recente do lote pode ser editada."}</p>
              <div class="weighing-detail-scroll">
                <table class="weighing-detail-table">
                  <thead>
                    <tr><th>#</th><th class="num">Peso</th></tr>
                  </thead>
                  <tbody>
-                   ${weights.map((kg, i) => `
-                     <tr><td>#${i + 1}</td><td class="num">${formatKg(kg)} kg</td></tr>
+                   ${displayRows.map((row, i) => `
+                     <tr><td>${row.earTag ? `#${escapeHtml(row.earTag)}` : `#${i + 1}`}</td><td class="num">${formatKg(row.weightKg)} kg</td></tr>
                    `).join("")}
                  </tbody>
                </table>
@@ -473,7 +601,8 @@ import { clearFieldError, setFieldError } from "./animals.js";
          ?.addEventListener("click", () => openLotWeighingHistorySheet(lot));
 
        const mostRecent = lotWeighingsFor(lot.id)[0];
-       const isEditable = mostRecent && mostRecent.id === w.id;
+       const hasIndividualEntries = Array.isArray(w.individualEntries) && w.individualEntries.length > 0;
+       const isEditable = mostRecent && mostRecent.id === w.id && !hasIndividualEntries;
 
        if (isEditable) {
          const yieldPct = resolveFarmYieldPct(lot);
@@ -672,7 +801,9 @@ import { clearFieldError, setFieldError } from "./animals.js";
        const property = propertiesCache.find((p) => p.id === lot.propertyId);
        const { perHead, total } = weighingArrobas(lot, w);
        const weights = Array.isArray(w.individualWeights) ? w.individualWeights : [];
-       const indivRows = weights.map((kg, i) => `<tr><td>#${i + 1}</td><td class="num">${formatKg(kg)} kg</td></tr>`).join("");
+       const hasIndividualEntries = Array.isArray(w.individualEntries) && w.individualEntries.length > 0;
+       const displayRows = weighingDisplayRows(weights, hasIndividualEntries ? w.individualEntries : []);
+       const indivRows = displayRows.map((row, i) => `<tr><td>${row.earTag ? `#${escapeHtml(row.earTag)}` : `#${i + 1}`}</td><td class="num">${formatKg(row.weightKg)} kg</td></tr>`).join("");
        return `
          <div class="print-doc">
            <h1>Pesagem de lote · ${escapeHtml(lot.name)}</h1>
