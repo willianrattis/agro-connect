@@ -448,6 +448,15 @@
     </div>
   </nav>
 
+  <!-- ===== Merge selection action bar (Rebanho feed selection mode) ===== -->
+  <div class="selection-bar" id="merge-selection-bar" role="region" aria-label="Seleção para mesclagem" hidden>
+    <p class="selection-bar-count" id="merge-selection-count" aria-live="polite">0 selecionados</p>
+    <div class="selection-bar-actions">
+      <button type="button" class="btn-secondary pressable" id="merge-selection-cancel">Cancelar</button>
+      <button type="button" class="btn-primary pressable" id="merge-selection-next" disabled>Avançar</button>
+    </div>
+  </div>
+
    <!-- ===== Bottom sheet / modal (native <dialog>) ===== -->
    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
      <div class="sheet-drag-region" id="sheet-drag" aria-hidden="true">

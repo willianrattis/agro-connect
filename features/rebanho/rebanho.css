@@ -86,6 +86,21 @@
     flex-direction: column;
     gap: var(--space-3);
   }
+  .herd-list.has-merge-bar {
+    padding-bottom: var(--space-7);
+  }
+
+  .card.is-selectable {
+    cursor: pointer;
+  }
+  .card.is-selected {
+    border-color: var(--brand);
+    box-shadow: var(--shadow-md), 0 0 0 2px var(--brand);
+  }
+  .card.is-ineligible {
+    opacity: 0.55;
+    pointer-events: none;
+  }
 
 
   .card {

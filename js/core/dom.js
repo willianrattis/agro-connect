@@ -15,6 +15,10 @@
     export const fabBtn = document.getElementById("fab-add");
     export const tabs = Array.from(document.querySelectorAll(".tab"));
     export const views = Array.from(document.querySelectorAll(".view"));
+    export const mergeSelectionBarEl = document.getElementById("merge-selection-bar");
+    export const mergeSelectionCountEl = document.getElementById("merge-selection-count");
+    export const mergeSelectionCancelBtn = document.getElementById("merge-selection-cancel");
+    export const mergeSelectionNextBtn = document.getElementById("merge-selection-next");
 
     export const yearPrevBtn = document.getElementById("year-prev");
     export const yearNextBtn = document.getElementById("year-next");

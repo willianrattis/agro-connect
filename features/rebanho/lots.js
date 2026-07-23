@@ -5,7 +5,7 @@ import {
   CATTLE_CATEGORIES, categoriesForSex, LOT_CATEGORY_BUCKET, MOVEMENT_TYPE_LABEL, ICONS, lotCategoryLabel,
   displayCategoryKeyForLot, lifecycleActionsFor,
 } from "../../js/core/constants.js";
-import { lotListEl } from "../../js/core/dom.js";
+import { lotListEl, tabs } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatKg, fractionToPercentDisplay, movementDeltas,
   getSlaughterConfig, resolveLotSex, confinementStripHTML, formatCurrencyInput, parseBRLToNumber, formatBRL,
@@ -23,6 +23,9 @@ import {
 } from "./animals.js";
 import { openLotWeighingSheet, openLotWeighingHistorySheet } from "./weighing.js";
 import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
+import {
+  isMergeSelectionActive, getMergeSelectionIds, toggleMergeSelection, enterMergeSelection, exitMergeSelection,
+} from "./render.js";
 
      export function buildLotActionMenuHTML(lot) {
        const isAggregate = (lot.trackingMode || "individual") === "aggregate";
@@ -508,6 +511,11 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
      // instead — checked first since it's nested inside the card. Individual
      // (per-animal) lots have no data-lot-id, so their cards stay inert.
      export function handleLotCardActivate(e) {
+       if (isMergeSelectionActive()) {
+         const card = e.target.closest("li[data-merge-selectable]");
+         if (card) toggleMergeSelection(card.dataset.lotId);
+         return;
+       }
        const menuBtn = e.target.closest('[data-action="lot-menu"]');
        if (menuBtn) {
          const lot = lotsCache.find((l) => l.id === menuBtn.dataset.id);
@@ -523,7 +531,7 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
      lotListEl.addEventListener("keydown", (e) => {
        if (e.key !== "Enter" && e.key !== " ") return;
        if (e.target.closest('[data-action="lot-menu"]')) return; // native button handles its own activation
-       if (!e.target.closest("li[data-lot-id]")) return;
+       if (!e.target.closest("li[data-lot-id], li[data-merge-selectable]")) return;
        e.preventDefault();
        handleLotCardActivate(e);
      });
@@ -1747,7 +1755,25 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        wireMergeForm();
      }
 
-     document.getElementById("lot-merge-btn").addEventListener("click", openMergeLotsSheet);
+     document.getElementById("lot-merge-btn").addEventListener("click", () => {
+       if (!enterMergeSelection()) {
+         showToast("É preciso ao menos 2 lotes por cabeça ativos para mesclar.");
+       }
+     });
+
+     document.getElementById("merge-selection-next").addEventListener("click", () => {
+       const lots = getMergeSelectionIds().map((id) => lotsCache.find((l) => l.id === id)).filter(Boolean);
+       // TODO(prompt-G): replace with the multi-select merge flow (target picker + preview).
+       openMergeConfirmSheet(lots[0], lots.slice(1), true);
+     });
+
+     // Switching tabs mid-selection would leave the FAB hidden and the
+     // action bar stuck over whatever view the user navigated to.
+     tabs.forEach((tab) => {
+       tab.addEventListener("click", () => {
+         if (isMergeSelectionActive()) exitMergeSelection();
+       });
+     });
 
      // --- Confirmação da mesclagem ---
      export function buildMergeConfirmHTML(targetLot, sourceLots, preview) {

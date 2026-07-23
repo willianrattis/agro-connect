@@ -4,7 +4,8 @@ import {
 import {
   lotListEl, lotCountEl, statHeadEl, statArrobasEl,
   lotFiltersEl, lotFilterPropertyEl, lotFilterSexEl, lotFilterYearEl,
-  lotSortBtn, lotSortLabelEl,
+  lotSortBtn, lotSortLabelEl, fabBtn,
+  mergeSelectionBarEl, mergeSelectionCountEl, mergeSelectionCancelBtn, mergeSelectionNextBtn,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, formatKg, formatArrobas, formatPercentTrim,
@@ -134,6 +135,78 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
       if (e.target.closest('[data-action="clear-lot-filters"]')) resetLotFilters();
     });
 
+    // Merge-selection mode — in-feed card selection that replaces the old
+    // "Mesclar lotes" picker sheet. null = off; a Set<string> of lot ids =
+    // on (possibly empty, before the second lot is picked).
+    let mergeSelection = null;
+
+    export function isMergeSelectionActive() {
+      return mergeSelection !== null;
+    }
+
+    export function getMergeSelectionIds() {
+      return mergeSelection ? Array.from(mergeSelection) : [];
+    }
+
+    // Only per-head (aggregate) lots that aren't closed can be merged —
+    // merging a closed (zero-head) lot changes no number in the preview and
+    // just imports its exit history into the target's ledger.
+    export function isMergeEligible(lot) {
+      return (lot.trackingMode || "individual") === "aggregate" && !lotClosure(lot).isClosed;
+    }
+
+    export function enterMergeSelection() {
+      const eligibleCount = lotsCache.filter(isMergeEligible).length;
+      if (eligibleCount < 2) return false;
+      mergeSelection = new Set();
+      renderLots();
+      return true;
+    }
+
+    export function exitMergeSelection() {
+      mergeSelection = null;
+      renderLots();
+    }
+
+    export function toggleMergeSelection(id) {
+      if (!mergeSelection) return;
+      const lot = lotsCache.find((l) => l.id === id);
+      if (!lot || !isMergeEligible(lot)) return;
+      if (mergeSelection.has(id)) mergeSelection.delete(id);
+      else mergeSelection.add(id);
+      renderLots();
+    }
+
+    // Selection survives filtering — ids are only dropped here, when the lot
+    // they point to has vanished from lotsCache entirely or stopped being
+    // eligible (e.g. closed out from under the selection). Filtering the
+    // feed to find a second lot must never drop the first.
+    function pruneMergeSelection() {
+      if (!mergeSelection) return;
+      for (const id of mergeSelection) {
+        const lot = lotsCache.find((l) => l.id === id);
+        if (!lot || !isMergeEligible(lot)) mergeSelection.delete(id);
+      }
+    }
+
+    function ineligibilityReason(lot) {
+      if ((lot.trackingMode || "individual") !== "aggregate") return "Lote com brincos individuais";
+      return "Lote encerrado";
+    }
+
+    mergeSelectionCancelBtn.addEventListener("click", () => exitMergeSelection());
+
+    function syncMergeSelectionBar() {
+      const active = isMergeSelectionActive();
+      mergeSelectionBarEl.hidden = !active;
+      fabBtn.hidden = active;
+      lotListEl.classList.toggle("has-merge-bar", active);
+      if (!active) return;
+      const n = mergeSelection.size;
+      mergeSelectionCountEl.textContent = `${n} selecionado${n === 1 ? "" : "s"}`;
+      mergeSelectionNextBtn.disabled = n < 2;
+    }
+
     // 4. Render: skeletons → cattle cards (staggered)
     // =====================================================
     export function renderSkeletons(count) {
@@ -210,6 +283,9 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
     // Reads lotsCache + animalsCache directly (both kept fresh by their own
     // onSnapshot listeners) so it can be called from either one.
     export function renderLots() {
+      pruneMergeSelection();
+      const selectionActive = isMergeSelectionActive();
+
       if (lotsCache.length === 0) {
         lotFiltersEl.hidden = true;
         lotListEl.innerHTML = `
@@ -224,6 +300,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
           </li>
         `;
         lotCountEl.textContent = "0 lotes";
+        syncMergeSelectionBar();
         return;
       }
       lotFiltersEl.hidden = false;
@@ -244,6 +321,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
           </li>
         `;
         lotCountEl.textContent = "0 lotes";
+        syncMergeSelectionBar();
         return;
       }
 
@@ -253,7 +331,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
           const stageKey = lotDisplayStageKey(l, closure);
           const chipClass = lotStageChipClass(l, stageKey);
           const categoryChip = `<span class="chip ${chipClass}">${escapeHtml(lotStageLabel(l, stageKey))}</span>`;
-          const menuBtn = `
+          const menuBtn = selectionActive ? "" : `
             <button type="button" class="card-menu-btn pressable" data-action="lot-menu" data-id="${escapeHtml(l.id)}" aria-label="Ações do lote ${escapeHtml(l.name)}">
               ${ICONS.menu}
             </button>
@@ -267,6 +345,9 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                 ${dateChip ? `<span class="chip chip-meta">${escapeHtml(dateChip)}</span>` : ""}
               </div>
             `
+            : "";
+          const selectionHintHTML = selectionActive && !isMergeEligible(l)
+            ? `<p class="field-hint">${ineligibilityReason(l)}</p>`
             : "";
 
           if ((l.trackingMode || "individual") === "aggregate") {
@@ -294,8 +375,26 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
             const costPerArroba = totalArrobasEst
               ? (l.totalPurchaseCostBRL ?? 0) / totalArrobasEst
               : null;
+
+            const cardClasses = ["card", "enter"];
+            let cardAttrs = ` style="--i: ${i}"`;
+            if (selectionActive) {
+              if (isMergeEligible(l)) {
+                const selected = mergeSelection.has(l.id);
+                cardClasses.push("is-selectable");
+                if (selected) cardClasses.push("is-selected");
+                cardAttrs += ` data-lot-id="${escapeHtml(l.id)}" data-merge-selectable role="checkbox" aria-checked="${selected}" tabindex="0" aria-label="Selecionar lote ${escapeHtml(l.name)}"`;
+              } else {
+                cardClasses.push("is-ineligible");
+                cardAttrs += ` aria-disabled="true"`;
+              }
+            } else {
+              cardClasses.push("pressable");
+              cardAttrs += ` data-lot-id="${escapeHtml(l.id)}" tabindex="0" role="button" aria-label="Ver detalhes do lote ${escapeHtml(l.name)}"`;
+            }
+
             return `
-              <li class="card enter pressable" style="--i: ${i}" data-lot-id="${escapeHtml(l.id)}" tabindex="0" role="button" aria-label="Ver detalhes do lote ${escapeHtml(l.name)}">
+              <li class="${cardClasses.join(" ")}"${cardAttrs}>
                 <div class="card-top">
                   <span class="ear-tag" style="font-size: var(--fs-base);">${escapeHtml(l.name)}</span>
                   <div class="card-top-right">
@@ -304,6 +403,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                   </div>
                 </div>
                 ${metaRowHTML}
+                ${selectionHintHTML}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
                     <p class="mini-value">${ownedHeadcount}</p>
@@ -372,8 +472,14 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
           }
 
           const count = animalsCache.filter((a) => a.lotId === l.id && (a.status || "active") === "active").length;
+          const individualCardClasses = ["card", "enter"];
+          let individualCardAttrs = ` style="--i: ${i}"`;
+          if (selectionActive) {
+            individualCardClasses.push("is-ineligible");
+            individualCardAttrs += ` aria-disabled="true"`;
+          }
           return `
-            <li class="card enter" style="--i: ${i}">
+            <li class="${individualCardClasses.join(" ")}"${individualCardAttrs}>
               <div class="card-top">
                 <span class="ear-tag" style="font-size: var(--fs-base);">${escapeHtml(l.name)}</span>
                 <div class="card-top-right">
@@ -382,6 +488,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                 </div>
               </div>
               ${metaRowHTML}
+              ${selectionHintHTML}
               <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                 <div class="mini-stat">
                   <p class="mini-value">${count}</p>
@@ -407,4 +514,5 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
         })
         .join("");
       lotCountEl.textContent = `${filteredLots.length} lote${filteredLots.length === 1 ? "" : "s"}`;
+      syncMergeSelectionBar();
     }
