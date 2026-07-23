@@ -3,14 +3,103 @@ import {
 } from "../../js/core/constants.js";
 import {
   lotListEl, lotCountEl, statHeadEl, statArrobasEl,
+  lotFiltersEl, lotFilterPropertyEl, lotFilterSexEl, lotFilterYearEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, formatKg, formatArrobas, formatPercentTrim,
   lotAgeMetaLabel, lotTenureMetaLabel, resolveFarmYieldPct, resolveConfinementYieldPct,
   lotWeightProjection, lotConfinedProjection, confinementStripHTML, formatBRL,
   resolveLotTargetArrobas, slaughterForecast, lotClosure, lotDisplayStageKey,
+  toDateSafe, resolveLotSex,
 } from "../../js/core/helpers.js";
 import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js";
+
+    // Quick-filter state for the Rebanho feed — in-memory only (no
+    // localStorage/URL/Firestore), reset on reload. "" means "no filter" for
+    // every field except status, whose neutral value is "all".
+    let lotFilters = { status: "active", propertyId: "", sex: "", year: "" };
+
+    // Rebuilds the property/sex/year <select> option lists from the current
+    // caches, preserving the active selection where it still exists — a
+    // selection whose option disappeared (property deleted, no lot left from
+    // that year) resets to "" ("all") rather than silently keeping a value
+    // that's no longer offered.
+    function populateLotFilterOptions() {
+      const properties = [...propertiesCache].sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR"));
+      const propertyIds = new Set(properties.map((p) => p.id));
+      if (lotFilters.propertyId && !propertyIds.has(lotFilters.propertyId)) lotFilters.propertyId = "";
+      lotFilterPropertyEl.innerHTML = [
+        `<option value="">Todas as propriedades</option>`,
+        ...properties.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`),
+      ].join("");
+      lotFilterPropertyEl.value = lotFilters.propertyId;
+
+      lotFilterSexEl.innerHTML = `
+        <option value="">Ambos os sexos</option>
+        <option value="M">Machos</option>
+        <option value="F">Fêmeas</option>
+      `;
+      lotFilterSexEl.value = lotFilters.sex;
+
+      const years = [...new Set(
+        lotsCache
+          .map((l) => toDateSafe(l.acquisitionDate)?.getFullYear())
+          .filter((y) => Number.isFinite(y))
+      )].sort((a, b) => b - a);
+      if (lotFilters.year && !years.includes(Number(lotFilters.year))) lotFilters.year = "";
+      lotFilterYearEl.innerHTML = [
+        `<option value="">Todos os anos</option>`,
+        ...years.map((y) => `<option value="${y}">${y}</option>`),
+      ].join("");
+      lotFilterYearEl.value = lotFilters.year;
+    }
+
+    // status: "active" lots are those lotClosure() doesn't consider closed;
+    // "closed" the opposite; "all" skips the check entirely. Every other
+    // field is skipped when left at its "" (all) value.
+    function applyLotFilters(lots) {
+      return lots.filter((l) => {
+        if (lotFilters.status !== "all") {
+          const isClosed = lotClosure(l).isClosed;
+          if (lotFilters.status === "active" && isClosed) return false;
+          if (lotFilters.status === "closed" && !isClosed) return false;
+        }
+        if (lotFilters.propertyId && l.propertyId !== lotFilters.propertyId) return false;
+        if (lotFilters.sex && resolveLotSex(l) !== lotFilters.sex) return false;
+        if (lotFilters.year) {
+          const acqYear = toDateSafe(l.acquisitionDate)?.getFullYear();
+          if (String(acqYear) !== lotFilters.year) return false;
+        }
+        return true;
+      });
+    }
+
+    function resetLotFilters() {
+      lotFilters = { status: "active", propertyId: "", sex: "", year: "" };
+      const activeRadio = document.getElementById("lot-status-active");
+      if (activeRadio) activeRadio.checked = true;
+      renderLots();
+    }
+
+    document.querySelectorAll('input[name="lot-status"]').forEach((r) => r.addEventListener("change", () => {
+      lotFilters.status = document.querySelector('input[name="lot-status"]:checked').value;
+      renderLots();
+    }));
+    lotFilterPropertyEl.addEventListener("change", () => {
+      lotFilters.propertyId = lotFilterPropertyEl.value;
+      renderLots();
+    });
+    lotFilterSexEl.addEventListener("change", () => {
+      lotFilters.sex = lotFilterSexEl.value;
+      renderLots();
+    });
+    lotFilterYearEl.addEventListener("change", () => {
+      lotFilters.year = lotFilterYearEl.value;
+      renderLots();
+    });
+    lotListEl.addEventListener("click", (e) => {
+      if (e.target.closest('[data-action="clear-lot-filters"]')) resetLotFilters();
+    });
 
     // 4. Render: skeletons → cattle cards (staggered)
     // =====================================================
@@ -40,6 +129,8 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
     // Owned totals include confined head (still the owner's patrimony, just
     // not on the farm) via the confined projection, so fully-confined lots
     // don't vanish from these totals.
+    // Deliberately unfiltered — always reports the whole herd regardless of
+    // the quick filters below, which only scope the card list.
     export function renderHerdSummary() {
       let head = 0;
       let arrobas = 0;
@@ -87,6 +178,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
     // onSnapshot listeners) so it can be called from either one.
     export function renderLots() {
       if (lotsCache.length === 0) {
+        lotFiltersEl.hidden = true;
         lotListEl.innerHTML = `
           <li>
             <div class="empty-state">
@@ -101,8 +193,28 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
         lotCountEl.textContent = "0 lotes";
         return;
       }
+      lotFiltersEl.hidden = false;
+      populateLotFilterOptions();
 
-      lotListEl.innerHTML = lotsCache
+      const filteredLots = applyLotFilters(lotsCache);
+      if (filteredLots.length === 0) {
+        lotListEl.innerHTML = `
+          <li>
+            <div class="empty-state">
+              <span class="icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+              </span>
+              <h3>Nenhum lote com esses filtros</h3>
+              <p>Ajuste os filtros acima para ver outros lotes.</p>
+              <button type="button" class="btn-inline pressable" data-action="clear-lot-filters" style="margin-top: var(--space-4);">Limpar filtros</button>
+            </div>
+          </li>
+        `;
+        lotCountEl.textContent = "0 lotes";
+        return;
+      }
+
+      lotListEl.innerHTML = filteredLots
         .map((l, i) => {
           const closure = lotClosure(l);
           const stageKey = lotDisplayStageKey(l, closure);
@@ -251,5 +363,5 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
           `;
         })
         .join("");
-      lotCountEl.textContent = `${lotsCache.length} lote${lotsCache.length === 1 ? "" : "s"}`;
+      lotCountEl.textContent = `${filteredLots.length} lote${filteredLots.length === 1 ? "" : "s"}`;
     }

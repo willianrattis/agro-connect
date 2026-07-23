@@ -41,6 +41,31 @@
   }
 
 
+  /* Quick filters (status segmented control + property/sex/year selects)
+     above the cattle-card list. Mobile-first: the selects share one
+     horizontally-scrollable row so a third or fourth filter never forces
+     the page itself to scroll sideways at narrow widths. */
+  .lot-filters {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  .lot-filters-selects {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .lot-filters-selects::-webkit-scrollbar {
+    display: none;
+  }
+  .lot-filters-selects .input {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 9rem;
+  }
+
   /* =====================================================
      6. Cattle cards
      ===================================================== */

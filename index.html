@@ -159,6 +159,28 @@
           </div>
         </div>
 
+        <div class="lot-filters" id="lot-filters" hidden>
+          <div class="segmented" role="radiogroup" aria-label="Situação dos lotes">
+            <input type="radio" id="lot-status-active" name="lot-status" value="active" checked />
+            <label for="lot-status-active">Ativos</label>
+            <input type="radio" id="lot-status-closed" name="lot-status" value="closed" />
+            <label for="lot-status-closed">Encerrados</label>
+            <input type="radio" id="lot-status-all" name="lot-status" value="all" />
+            <label for="lot-status-all">Todos</label>
+          </div>
+          <div class="lot-filters-selects">
+            <select class="input" id="lot-filter-property" aria-label="Propriedade">
+              <option value="">Todas as propriedades</option>
+            </select>
+            <select class="input" id="lot-filter-sex" aria-label="Sexo">
+              <option value="">Ambos os sexos</option>
+            </select>
+            <select class="input" id="lot-filter-year" aria-label="Ano de entrada">
+              <option value="">Todos os anos</option>
+            </select>
+          </div>
+        </div>
+
         <ul class="herd-list" id="lot-list" aria-live="polite">
           <!-- Lot cards, rendered by JS -->
         </ul>

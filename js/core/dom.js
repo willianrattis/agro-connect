@@ -4,6 +4,10 @@
     export const syncIndicatorEl = document.getElementById("sync-indicator");
     export const lotListEl = document.getElementById("lot-list");
     export const lotCountEl = document.getElementById("lot-count");
+    export const lotFiltersEl = document.getElementById("lot-filters");
+    export const lotFilterPropertyEl = document.getElementById("lot-filter-property");
+    export const lotFilterSexEl = document.getElementById("lot-filter-sex");
+    export const lotFilterYearEl = document.getElementById("lot-filter-year");
     export const statHeadEl = document.getElementById("stat-head");
     export const statArrobasEl = document.getElementById("stat-arrobas");
     export const fabBtn = document.getElementById("fab-add");
