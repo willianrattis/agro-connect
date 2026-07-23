@@ -147,6 +147,22 @@
   .chip-engorda { background: var(--chip-engorda-bg); color: var(--chip-engorda-text); }
   .chip-matriz  { background: var(--chip-matriz-bg);  color: var(--chip-matriz-text); }
 
+  .card-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .card-meta-row .field-hint { margin: 0; }
+
+  .chip-meta {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
   .card-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

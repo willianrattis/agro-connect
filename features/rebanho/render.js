@@ -7,7 +7,7 @@ import {
 } from "../../js/core/dom.js";
 import {
   escapeHtml, formatKg, formatArrobas, formatPercentTrim,
-  lotAgeMetaLabel, lotTenureMetaLabel, resolveFarmYieldPct, resolveConfinementYieldPct,
+  lotAgeMetaLabel, lotTenureMetaLabel, lotDateChipLabel, resolveFarmYieldPct, resolveConfinementYieldPct,
   lotWeightProjection, lotConfinedProjection, confinementStripHTML, formatBRL,
   resolveLotTargetArrobas, slaughterForecast, lotClosure, lotDisplayStageKey,
   toDateSafe, resolveLotSex,
@@ -225,6 +225,16 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
               ${ICONS.menu}
             </button>
           `;
+          const property = l.propertyId ? propertiesCache.find((p) => p.id === l.propertyId) : null;
+          const dateChip = lotDateChipLabel(l, closure);
+          const metaRowHTML = property || dateChip
+            ? `
+              <div class="card-meta-row">
+                ${property ? `<p class="field-hint">${escapeHtml(property.name)}</p>` : ""}
+                ${dateChip ? `<span class="chip chip-meta">${escapeHtml(dateChip)}</span>` : ""}
+              </div>
+            `
+            : "";
 
           if ((l.trackingMode || "individual") === "aggregate") {
             const headcount = l.headcount ?? 0;
@@ -251,7 +261,6 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
             const costPerArroba = totalArrobasEst
               ? (l.totalPurchaseCostBRL ?? 0) / totalArrobasEst
               : null;
-            const property = l.propertyId ? propertiesCache.find((p) => p.id === l.propertyId) : null;
             return `
               <li class="card enter pressable" style="--i: ${i}" data-lot-id="${escapeHtml(l.id)}" tabindex="0" role="button" aria-label="Ver detalhes do lote ${escapeHtml(l.name)}">
                 <div class="card-top">
@@ -261,7 +270,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                     ${menuBtn}
                   </div>
                 </div>
-                ${property ? `<p class="field-hint">${escapeHtml(property.name)}</p>` : ""}
+                ${metaRowHTML}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
                     <p class="mini-value">${ownedHeadcount}</p>
@@ -339,6 +348,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                   ${menuBtn}
                 </div>
               </div>
+              ${metaRowHTML}
               <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                 <div class="mini-stat">
                   <p class="mini-value">${count}</p>

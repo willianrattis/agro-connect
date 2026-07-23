@@ -139,22 +139,26 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache, anim
       return lot.birthDateRefIsEstimated ? `${duration} (est.)` : duration;
     }
 
-    // Lot card meta: time on the property since acquisitionDate, with the
-    // absolute date alongside since "1 ano e 4 meses" alone is hard to anchor.
-    // Once closed (and a closedAt could be resolved), the range is pinned to
+    // Lot card meta: time on the property since acquisitionDate. Once closed
+    // (and a closedAt could be resolved), the duration is pinned to
     // acquisition → exit instead of acquisition → today.
     export function lotTenureMetaLabel(lot, closure = lotClosure(lot)) {
       const refDate = closure.closedAt ?? new Date();
       const months = ageMonthsBetween(lot.acquisitionDate, refDate);
-      const duration = formatMonthsDuration(months);
-      if (!duration) return "—";
+      return formatMonthsDuration(months) ?? "—";
+    }
+
+    // Lot card meta chip: the absolute acquisition date(s), split out of
+    // lotTenureMetaLabel() since "1 ano e 4 meses" alone is hard to anchor.
+    // Null when acquisitionDate can't be resolved at all.
+    export function lotDateChipLabel(lot, closure = lotClosure(lot)) {
       const acq = toDateSafe(lot.acquisitionDate);
-      if (!acq) return duration;
+      if (!acq) return null;
       const acqBR = acq.toLocaleDateString("pt-BR");
       if (closure.isClosed && closure.closedAt) {
-        return `${duration} (${acqBR} → ${closure.closedAt.toLocaleDateString("pt-BR")})`;
+        return `${acqBR} → ${closure.closedAt.toLocaleDateString("pt-BR")}`;
       }
-      return `${duration} (desde ${acqBR})`;
+      return `desde ${acqBR}`;
     }
 
     // Resolves a lot's pasture quality key, falling back to the default
