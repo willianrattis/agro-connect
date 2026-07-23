@@ -2,6 +2,12 @@
     // 2. DOM references
     // =====================================================
     export const syncIndicatorEl = document.getElementById("sync-indicator");
+    export const brandHomeBtn = document.getElementById("brand-home-btn");
+    export const homeStatHeadEl = document.getElementById("home-stat-head");
+    export const homeStatArrobasEl = document.getElementById("home-stat-arrobas");
+    export const homeStatSaldoEl = document.getElementById("home-stat-saldo");
+    export const homeAlertsListEl = document.getElementById("home-alerts-list");
+    export const homeActivityListEl = document.getElementById("home-activity-list");
     export const lotListEl = document.getElementById("lot-list");
     export const lotCountEl = document.getElementById("lot-count");
     export const lotFiltersEl = document.getElementById("lot-filters");

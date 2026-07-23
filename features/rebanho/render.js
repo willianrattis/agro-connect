@@ -237,7 +237,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
     // don't vanish from these totals.
     // Deliberately unfiltered — always reports the whole herd regardless of
     // the quick filters below, which only scope the card list.
-    export function renderHerdSummary() {
+    export function herdTotals() {
       let head = 0;
       let arrobas = 0;
       for (const l of lotsCache) {
@@ -261,6 +261,11 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
           }
         }
       }
+      return { head, arrobas };
+    }
+
+    export function renderHerdSummary() {
+      const { head, arrobas } = herdTotals();
       statHeadEl.textContent = String(head);
       statArrobasEl.innerHTML = `${formatArrobas(arrobas)} <small>@</small>`;
     }

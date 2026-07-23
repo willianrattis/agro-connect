@@ -29,6 +29,7 @@ import { renderSuppliersCard } from "../../features/perfil/suppliers.js";
 import {
   renderIndicadores, renderIndicadoresLoading, renderEstoque, setEstoqueSelectedPropertyId,
 } from "../../features/indicadores/indicadores.js";
+import { renderHome } from "../../features/home/home.js";
 
     // =====================================================
     // 8. Firestore listeners (animals + lots + transactions + settings)
@@ -91,6 +92,7 @@ import {
           renderLots();
           refreshLotAnimalsSheetIfOpen();
           renderHerdSummary();
+          renderHome();
           loadedFlags.animals = true;
           renderIndicadores();
         },
@@ -116,6 +118,7 @@ import {
           renderLots();
           renderHerdSummary();
           renderFinanceiro();
+          renderHome();
           refreshLotDetailSheetIfOpen();
           loadedFlags.lots = true;
           renderEstoque();
@@ -150,12 +153,14 @@ import {
           setMovementsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           refreshLotDetailSheetIfOpen();
           renderIndicadores();
+          renderHome();
         },
         (err) => {
           updateSyncState("movements", false);
           console.warn("[Agro Connect] movements onSnapshot error:", err?.code ?? err);
           setMovementsCache([]);
           renderIndicadores();
+          renderHome();
         }
       );
 
@@ -195,6 +200,7 @@ import {
           setTransactionsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           renderMonthChips();
           renderFinanceiro();
+          renderHome();
           loadedFlags.transactions = true;
           renderIndicadores();
         },
@@ -223,6 +229,7 @@ import {
           setEventsCache(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
           loadedFlags.events = true;
           renderIndicadores();
+          renderHome();
         },
         (err) => {
           updateSyncState("events", false);
@@ -231,6 +238,7 @@ import {
           showToast("Não foi possível carregar os eventos. Verifique sua conexão.");
           loadedFlags.events = true;
           renderIndicadores();
+          renderHome();
         }
       );
 

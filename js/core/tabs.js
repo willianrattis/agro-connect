@@ -1,15 +1,20 @@
 import { tabs, views } from "./dom.js";
 
     // =====================================================
-    // 5. Tab navigation (simple view switcher)
+    // 5. View navigation (tab bar + brand mark → Home)
     // =====================================================
-    export function activateTab(tab) {
+    // viewId with no matching tab (e.g. "view-home") leaves every tab
+    // inactive — Home has no tab of its own in the 4-item tab bar.
+    export function activateView(viewId) {
+      views.forEach((v) => {
+        v.hidden = v.id !== viewId;
+      });
       tabs.forEach((t) => {
-        const active = t === tab;
-        if (active) t.setAttribute("aria-current", "page");
+        if (t.dataset.view === viewId) t.setAttribute("aria-current", "page");
         else t.removeAttribute("aria-current");
       });
-      views.forEach((v) => {
-        v.hidden = v.id !== tab.dataset.view;
-      });
+    }
+
+    export function activateTab(tab) {
+      activateView(tab.dataset.view);
     }
