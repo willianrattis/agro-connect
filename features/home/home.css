@@ -1,0 +1,179 @@
+  /* =====================================================
+     Home (feed inicial)
+     ===================================================== */
+
+  /* --- A. Hero KPIs --- */
+  #view-home .home-hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    background: var(--brand);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) var(--space-4);
+    box-shadow: var(--shadow-lg);
+  }
+  #view-home .home-hero-stat-saldo {
+    grid-column: 1 / -1;
+    padding-top: var(--space-3);
+  }
+  #view-home .home-hero-value {
+    font-family: var(--font-display);
+    font-size: var(--fs-display);
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--on-brand);
+    letter-spacing: -0.02em;
+  }
+  #view-home .home-hero-value small {
+    font-size: 0.5em;
+    font-weight: 700;
+    opacity: 0.8;
+  }
+  #view-home .home-hero-saldo-value {
+    font-size: var(--fs-xl);
+  }
+  /* On the --brand surface, --success/--danger read poorly — swap the tint
+     onto a light pill instead of colouring the text directly. */
+  #view-home .home-hero-saldo-value.fin-positive,
+  #view-home .home-hero-saldo-value.fin-negative {
+    display: inline-block;
+    background: var(--surface);
+    border-radius: var(--radius-full);
+    padding: 2px var(--space-3);
+  }
+  #view-home .home-hero-saldo-value.fin-positive { color: var(--success); }
+  #view-home .home-hero-saldo-value.fin-negative { color: var(--danger); }
+  #view-home .home-hero-label {
+    margin-top: var(--space-1);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--on-brand);
+    opacity: 0.72;
+  }
+
+  @media (min-width: 768px) {
+    #view-home .home-hero {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    #view-home .home-hero-stat-saldo {
+      grid-column: auto;
+      padding-top: 0;
+      align-self: center;
+    }
+  }
+
+  /* --- B. Alertas --- */
+  #view-home .home-alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  #view-home .home-alert-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    cursor: pointer;
+  }
+  #view-home .home-alert-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
+    flex: none;
+  }
+  #view-home .home-alert-body { min-width: 0; }
+  #view-home .home-alert-title {
+    font-weight: 700;
+    font-size: var(--fs-sm);
+  }
+  #view-home .home-alert-subtitle {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #view-home .home-alert-ready .home-alert-icon {
+    background: var(--chip-engorda-bg);
+    color: var(--chip-engorda-text);
+  }
+  #view-home .home-alert-soon .home-alert-icon,
+  #view-home .home-alert-weaning .home-alert-icon {
+    background: var(--chip-bezerro-bg);
+    color: var(--chip-bezerro-text);
+  }
+  #view-home .home-alert-unreachable .home-alert-icon {
+    background: rgba(179, 38, 30, 0.12);
+    color: var(--danger);
+  }
+
+  #view-home .home-alert-more {
+    text-align: center;
+    padding: var(--space-2);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* --- C. Atividade recente --- */
+  #view-home .home-activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  #view-home .home-activity-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  #view-home .home-activity-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: var(--accent-tint);
+    color: var(--brand);
+    flex: none;
+  }
+  #view-home .home-activity-main { min-width: 0; flex: 1; }
+  #view-home .home-activity-label {
+    font-weight: 600;
+    font-size: var(--fs-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #view-home .home-activity-context {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #view-home .home-activity-day {
+    flex: none;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* Entrance stagger for rows that aren't a .card (which already gets this
+     treatment, reduced-motion included, from rebanho.css). */
+  #view-home .home-activity-row.enter {
+    animation: card-in 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #view-home .home-activity-row.enter { animation: none; }
+  }

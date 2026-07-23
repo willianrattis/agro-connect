@@ -187,4 +187,17 @@
   body[data-auth="error"]   .view { display: none; }   /* no data flash before auth resolves */
   body:not([data-auth="in"]) .fab { display: none; }   /* FAB is a protected action */
   body:not([data-auth="in"]) .tabbar { display: none; }
+  body:not([data-auth="in"]) .brand-btn { pointer-events: none; }
+
+  /* Brand mark → Home button: reuses the header <h1>'s flex layout, since
+     that layout now applies to the button (its only child) rather than
+     directly to the mark/text. */
+  .brand-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  /* The FAB has no default create action on Home (a feed, not a list). */
+  body[data-auth="in"] .app-main:has(#view-home:not([hidden])) ~ .fab { display: none; }
 

@@ -13,6 +13,9 @@ import "./core/tabs.js";
 import "./core/listeners.js";
 import "./core/auth.js";
 
+// Home feed — imported first so it's ready before the tab/FAB wiring below.
+import "../features/home/home.js";
+
 // Rebanho feature modules, in the order their code first appeared inline.
 import "../features/rebanho/render.js";
 import "../features/rebanho/animals.js";
@@ -29,9 +32,10 @@ import "../features/perfil/properties.js";
 import "../features/perfil/suppliers.js";
 import "../features/indicadores/indicadores.js";
 
-// --- Bootstrap wiring that spans multiple features (tab clicks, the FAB) ---
-import { tabs, views, fabBtn } from "./core/dom.js";
-import { activateTab } from "./core/tabs.js";
+// --- Bootstrap wiring that spans multiple features (tab clicks, the brand
+//     mark, the FAB) ---
+import { tabs, views, fabBtn, brandHomeBtn } from "./core/dom.js";
+import { activateTab, activateView } from "./core/tabs.js";
 import { showToast } from "./core/auth.js";
 import { renderAccountMembersCard } from "../features/perfil/members.js";
 import { openNewLotSheet } from "../features/rebanho/lots.js";
@@ -44,9 +48,13 @@ tabs.forEach((tab) => {
   });
 });
 
+brandHomeBtn.addEventListener("click", () => activateView("view-home"));
+
 fabBtn.addEventListener("click", () => {
   const activeView = views.find((v) => !v.hidden);
-  if (activeView?.id === "view-rebanho") {
+  if (activeView?.id === "view-home") {
+    // FAB is hidden on Home (no default create action for the feed).
+  } else if (activeView?.id === "view-rebanho") {
     openNewLotSheet();
   } else if (activeView?.id === "view-financeiro") {
     openNewTransactionSheet();
