@@ -177,12 +177,14 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                     : "";
                   const headSuffix = hasConfined ? ` · ${headcount} cab.` : "";
                   const labelSuffix = hasConfined ? " (fazenda)" : "";
-                  const hint = `Projeção: pastagem ${p.qualityLabel.toLowerCase()} · ${Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia${femaleSuffix} · ${p.days.toLocaleString("pt-BR")} dias${headSuffix}`;
+                  const cappedSuffix = p.isCapped ? ` · limite de ${formatKg(p.maxWeightKg)} kg atingido` : "";
+                  const hint = `Projeção: pastagem ${p.qualityLabel.toLowerCase()} · ${Math.round(p.gmdKgPerDay * 1000).toLocaleString("pt-BR")} g/dia${femaleSuffix} · ${p.days.toLocaleString("pt-BR")} dias${headSuffix}${cappedSuffix}`;
                   const forecast = slaughterForecast({
                     projectedWeightKg: p.projectedWeightKg,
                     gmdKgPerDay: p.gmdKgPerDay,
                     targetArrobas: resolveLotTargetArrobas(l),
                     yieldPct: resolveFarmYieldPct(l),
+                    maxWeightKg: p.maxWeightKg,
                   });
                   return `
                     <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">

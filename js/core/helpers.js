@@ -3,7 +3,7 @@ import {
   DEFAULT_TARGET_ARROBAS_PER_HEAD, DEFAULT_FARM_YIELD_PCT, DEFAULT_CONFINEMENT_YIELD_PCT,
   CATTLE_CATEGORIES, FEMALE_GMD_FACTOR, CONFINEMENT_GMD_KG_PER_DAY, ICONS,
   MONTH_ABBR, WEEKDAY_ABBR, TX_CATEGORY_LABEL, resolveCategoryKey, ageMonthsBetween,
-  FUNRURAL_DEFAULTS,
+  FUNRURAL_DEFAULTS, DEFAULT_MAX_WEIGHT_MALE_KG, DEFAULT_MAX_WEIGHT_FEMALE_KG,
 } from "./constants.js";
 import { propertiesCache, movementsCache, settingsCache, transactionsCache } from "./state.js";
 
@@ -203,6 +203,12 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
         defaultConfinementYieldPct: Number.isFinite(settingsCache.defaultConfinementYieldPct)
           ? settingsCache.defaultConfinementYieldPct
           : DEFAULT_CONFINEMENT_YIELD_PCT,
+        maxWeightMaleKg: Number.isFinite(settingsCache.maxWeightMaleKg)
+          ? settingsCache.maxWeightMaleKg
+          : DEFAULT_MAX_WEIGHT_MALE_KG,
+        maxWeightFemaleKg: Number.isFinite(settingsCache.maxWeightFemaleKg)
+          ? settingsCache.maxWeightFemaleKg
+          : DEFAULT_MAX_WEIGHT_FEMALE_KG,
       };
     }
 
@@ -247,10 +253,26 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
       return getSlaughterConfig().defaultConfinementYieldPct;
     }
 
+    // Legacy lots predate the `sex` field, so fall back to the category
+    // taxonomy's sex, then default to male.
+    export function resolveLotSex(lot) {
+      return lot.sex ?? CATTLE_CATEGORIES[resolveCategoryKey(lot.entryCategory, null)]?.sex ?? "M";
+    }
+
+    // Mature-weight ceiling for a lot's projection: lot override → Perfil
+    // default (by sex) → hardcoded constant.
+    export function resolveLotMaxWeightKg(lot) {
+      if (Number.isFinite(lot.maxWeightKg)) return lot.maxWeightKg;
+      const cfg = getSlaughterConfig();
+      return resolveLotSex(lot) === "F" ? cfg.maxWeightFemaleKg : cfg.maxWeightMaleKg;
+    }
+
     // Projects a lot's on-farm weight/@ from its farm anchor using the
     // property's pasture-quality GMD (Embrapa averages), reduced for females
     // (they gain slower than the male-referenced Embrapa figures) —
-    // read-time only, never persisted.
+    // read-time only, never persisted. The projected weight is capped at the
+    // lot's mature-weight ceiling (never below the base weight, so a lot
+    // that's already past its cap keeps its base weight, flagged isCapped).
     export function lotWeightProjection(lot) {
       const { baseWeightKg, baseDate } = lotProjectionAnchors(lot).farm;
       if (!Number.isFinite(baseWeightKg) || baseWeightKg <= 0) return null;
@@ -260,32 +282,39 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
       const qualityKey = resolveLotPastureQualityKey(lot);
       const { label: qualityLabel, gmdKgPerDay: baseGmdKgPerDay } = PASTURE_QUALITY[qualityKey];
 
-      // Legacy lots predate the `sex` field, so fall back to the category
-      // taxonomy's sex, then default to male.
-      const sex = lot.sex ?? CATTLE_CATEGORIES[resolveCategoryKey(lot.entryCategory, null)]?.sex ?? "M";
-      const isFemale = sex === "F";
+      const isFemale = resolveLotSex(lot) === "F";
       const gmdKgPerDay = isFemale ? baseGmdKgPerDay * FEMALE_GMD_FACTOR : baseGmdKgPerDay;
 
-      const gainKg = days * gmdKgPerDay;
-      const projectedWeightKg = baseWeightKg + gainKg;
+      const rawProjectedWeightKg = baseWeightKg + days * gmdKgPerDay;
+      const maxWeightKg = resolveLotMaxWeightKg(lot);
+      const isCapped = Number.isFinite(maxWeightKg) && rawProjectedWeightKg > maxWeightKg;
+      const projectedWeightKg = isCapped ? Math.max(maxWeightKg, baseWeightKg) : rawProjectedWeightKg;
+      const gainKg = projectedWeightKg - baseWeightKg;
       const yieldPct = resolveFarmYieldPct(lot);
       const projectedTotalArrobas = (lot.headcount ?? 0) * ((projectedWeightKg * yieldPct) / KG_PER_ARROBA);
 
-      return { days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale, projectedWeightKg, gainKg, projectedTotalArrobas };
+      return {
+        days, qualityKey, qualityLabel, baseGmdKgPerDay, gmdKgPerDay, isFemale,
+        projectedWeightKg, gainKg, projectedTotalArrobas, maxWeightKg, isCapped,
+      };
     }
 
     // Feedlot day-counter + weight projection for a lot's confined head,
     // from the confined anchor — read-time only, never persisted. Null when
     // the lot holds no confined head, or none of its movements is a
-    // confinement_out (so there's no anchor to project from).
+    // confinement_out (so there's no anchor to project from). Same
+    // mature-weight cap as lotWeightProjection.
     export function lotConfinedProjection(lot) {
       if (!((lot.confinedHeadcount ?? 0) > 0)) return null;
       const { confined } = lotProjectionAnchors(lot);
       if (!confined || !Number.isFinite(confined.baseWeightKg) || confined.baseWeightKg <= 0) return null;
 
       const days = Math.max(0, Math.floor((Date.now() - confined.baseDate.getTime()) / 86_400_000));
-      const projectedWeightKg = confined.baseWeightKg + days * CONFINEMENT_GMD_KG_PER_DAY;
-      return { days, projectedWeightKg, confinementName: confined.confinementName };
+      const rawProjectedWeightKg = confined.baseWeightKg + days * CONFINEMENT_GMD_KG_PER_DAY;
+      const maxWeightKg = resolveLotMaxWeightKg(lot);
+      const isCapped = Number.isFinite(maxWeightKg) && rawProjectedWeightKg > maxWeightKg;
+      const projectedWeightKg = isCapped ? Math.max(maxWeightKg, confined.baseWeightKg) : rawProjectedWeightKg;
+      return { days, projectedWeightKg, confinementName: confined.confinementName, maxWeightKg, isCapped };
     }
 
     // Per-lot target @/head — lot override → Perfil default.
@@ -296,14 +325,24 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
     // Estimated ready-for-sale date from a weight projection: how many days
     // until the projected weight reaches the target @ at the given yield,
     // read-time only. Returns null when any input is missing/non-positive.
-    export function slaughterForecast({ projectedWeightKg, gmdKgPerDay, targetArrobas, yieldPct }) {
+    // When the target requires more live weight than the lot's mature-weight
+    // cap, the goal is unreachable — reported distinctly from "still growing".
+    export function slaughterForecast({ projectedWeightKg, gmdKgPerDay, targetArrobas, yieldPct, maxWeightKg }) {
       if (!Number.isFinite(projectedWeightKg) || !Number.isFinite(gmdKgPerDay) || gmdKgPerDay <= 0) return null;
       if (!Number.isFinite(targetArrobas) || targetArrobas <= 0) return null;
       if (!Number.isFinite(yieldPct) || yieldPct <= 0) return null;
 
       const targetLiveWeightKg = (targetArrobas * KG_PER_ARROBA) / yieldPct;
+      const isReady = projectedWeightKg >= targetLiveWeightKg;
+
+      if (!isReady && Number.isFinite(maxWeightKg) && targetLiveWeightKg > maxWeightKg) {
+        return {
+          daysRemaining: null, isReady: false, unreachable: true, date: null,
+          label: `Meta não alcançável: limite de ${formatKg(maxWeightKg)} kg`,
+        };
+      }
+
       const daysRemaining = Math.ceil((targetLiveWeightKg - projectedWeightKg) / gmdKgPerDay);
-      const isReady = daysRemaining <= 0;
       const date = isReady ? null : new Date(Date.now() + daysRemaining * 86_400_000);
 
       let label;
@@ -316,7 +355,7 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
         label = `Previsão: ${date.toLocaleDateString("pt-BR")} · em ~${months.toLocaleString("pt-BR")} meses`;
       }
 
-      return { daysRemaining, isReady, date, label };
+      return { daysRemaining, isReady, unreachable: false, date, label };
     }
 
     // Tinted single-line strip summarizing a lot's confined head — shared by
