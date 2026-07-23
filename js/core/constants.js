@@ -194,7 +194,7 @@ import { toDateSafe } from "./helpers.js";
     // lot.entryCategory-based lots (Phase 2+) derive their stage from
     // birthDateRef; lots predating that field simply have no entryCategory
     // and the caller should fall back to the legacy coarse category display.
-    export function displayCategoryKeyForLot(lot) {
+    export function displayCategoryKeyForLot(lot, now = new Date()) {
       if (!lot.entryCategory) return null;
       const floorKey = resolveCategoryKey(lot.entryCategory, lot.sex);
       if (!lot.birthDateRef) return floorKey;
@@ -205,6 +205,7 @@ import { toDateSafe } from "./helpers.js";
         firstCalvingDate: lot.firstCalvingDate,
         finishingStartDate: lot.finishingStartDate,
         calvingCount: lot.calvingCount,
+        now,
       });
       if (!derivedKey) return floorKey;
       return clampStageFloor(derivedKey, floorKey, lot.sex);
@@ -493,12 +494,12 @@ import { toDateSafe } from "./helpers.js";
     // Same idea for a lot card: derived stage when the lot has entryCategory
     // (Phase 2+) and enough data to compute one; legacy lots (no
     // entryCategory) fall back to the old coarse lots.category chip as before.
-    export function lotStageLabel(lot) {
-      const key = displayCategoryKeyForLot(lot);
+    export function lotStageLabel(lot, stageKey) {
+      const key = stageKey !== undefined ? stageKey : displayCategoryKeyForLot(lot);
       return key ? CATTLE_CATEGORIES[key].label : (lotCategoryLabel[lot.category] || lot.category || "—");
     }
-    export function lotStageChipClass(lot) {
-      const key = displayCategoryKeyForLot(lot);
+    export function lotStageChipClass(lot, stageKey) {
+      const key = stageKey !== undefined ? stageKey : displayCategoryKeyForLot(lot);
       return key ? (CATEGORY_CHIP_CLASS[key] || "chip-recria") : (LOT_CHIP_CLASS[lot.category] || "chip-recria");
     }
 

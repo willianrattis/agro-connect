@@ -3,13 +3,14 @@ import {
 } from "../../js/core/firebase.js";
 import {
   CATTLE_CATEGORIES, categoriesForSex, LOT_CATEGORY_BUCKET, MOVEMENT_TYPE_LABEL, ICONS, lotCategoryLabel,
-  displayCategoryKeyForLot, lifecycleActionsFor,
+  displayCategoryKeyForLot, lifecycleActionsFor, ageMonthsBetween, stageRank, resolveCategoryKey,
 } from "../../js/core/constants.js";
-import { lotListEl } from "../../js/core/dom.js";
+import { lotListEl, tabs } from "../../js/core/dom.js";
 import {
   escapeHtml, toDateSafe, toDateInputValue, formatKg, fractionToPercentDisplay, movementDeltas,
   getSlaughterConfig, resolveLotSex, confinementStripHTML, formatCurrencyInput, parseBRLToNumber, formatBRL,
   formatCPFInput, formatCNPJNumericInput, formatCNPJAlnumInput, formatUFInput, formatDayLabel,
+  formatMonthsDuration, lotClosure,
 } from "../../js/core/helpers.js";
 import {
   currentUid, lotsCache, animalsCache, transactionsCache, eventsCache, propertiesCache,
@@ -23,6 +24,9 @@ import {
 } from "./animals.js";
 import { openLotWeighingSheet, openLotWeighingHistorySheet } from "./weighing.js";
 import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
+import {
+  isMergeSelectionActive, getMergeSelectionIds, toggleMergeSelection, enterMergeSelection, exitMergeSelection,
+} from "./render.js";
 
      export function buildLotActionMenuHTML(lot) {
        const isAggregate = (lot.trackingMode || "individual") === "aggregate";
@@ -508,6 +512,11 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
      // instead — checked first since it's nested inside the card. Individual
      // (per-animal) lots have no data-lot-id, so their cards stay inert.
      export function handleLotCardActivate(e) {
+       if (isMergeSelectionActive()) {
+         const card = e.target.closest("li[data-merge-selectable]");
+         if (card) toggleMergeSelection(card.dataset.lotId);
+         return;
+       }
        const menuBtn = e.target.closest('[data-action="lot-menu"]');
        if (menuBtn) {
          const lot = lotsCache.find((l) => l.id === menuBtn.dataset.id);
@@ -523,7 +532,7 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
      lotListEl.addEventListener("keydown", (e) => {
        if (e.key !== "Enter" && e.key !== " ") return;
        if (e.target.closest('[data-action="lot-menu"]')) return; // native button handles its own activation
-       if (!e.target.closest("li[data-lot-id]")) return;
+       if (!e.target.closest("li[data-lot-id], li[data-merge-selectable]")) return;
        e.preventDefault();
        handleLotCardActivate(e);
      });
@@ -1574,45 +1583,91 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
        wireLotDetailSheet(lot);
      }
 
-     // Weighted by headcount (SPEC): avg cost/weight over the target + every
-     // checked source, as if all their heads had always belonged to one lot.
+     // Weighted by headcount (SPEC): avg cost/weight over every selected
+     // lot, as if all their heads had always belonged to one lot.
      export function computeMergePreview(lots) {
        const totalHeadcount = lots.reduce((s, l) => s + (l.headcount ?? 0), 0);
        const totalCost = lots.reduce((s, l) => s + (l.headcount ?? 0) * (l.avgPurchaseCostBRL ?? 0), 0);
        const totalWeight = lots.reduce((s, l) => s + (l.headcount ?? 0) * (l.avgWeightKg ?? 0), 0);
+
+       // Weighted birthDateRef: blend each lot's reference birth date by its
+       // headcount, over the lots where both are resolvable. A lot with no
+       // birthDateRef (or zero head) simply doesn't contribute. If nobody
+       // contributes, the destination's own field is left untouched by the
+       // caller (null here is the signal for that).
+       const birthContributors = lots
+         .map((l) => ({ lot: l, date: toDateSafe(l.birthDateRef), headcount: l.headcount ?? 0 }))
+         .filter((c) => c.date && c.headcount > 0);
+       const birthHeadcount = birthContributors.reduce((s, c) => s + c.headcount, 0);
+       let newBirthDateRef = null;
+       let newBirthDateRefIsEstimated = false;
+       if (birthHeadcount > 0) {
+         const weightedMs = birthContributors.reduce((s, c) => s + c.date.getTime() * c.headcount, 0) / birthHeadcount;
+         newBirthDateRef = new Date(Math.round(weightedMs));
+         const distinctDates = new Set(birthContributors.map((c) => c.date.getTime())).size;
+         newBirthDateRefIsEstimated = distinctDates > 1 || birthContributors.some((c) => c.lot.birthDateRefIsEstimated);
+       }
+
+       // Merged entryCategory = the lowest-ranked (earliest) stage among the
+       // merged lots — otherwise clampStageFloor() would floor the whole
+       // merged lot at the destination's own category and cancel out the
+       // weighted-younger birthDateRef above.
+       const catContributors = lots
+         .map((l) => {
+           const sex = resolveLotSex(l);
+           const key = resolveCategoryKey(l.entryCategory, sex);
+           return key ? { key, rank: stageRank(key, sex) } : null;
+         })
+         .filter((c) => c && c.rank !== -1);
+       const newEntryCategory = catContributors.length
+         ? catContributors.reduce((min, c) => (c.rank < min.rank ? c : min)).key
+         : null;
+
        return {
          totalHeadcount,
          newAvgCostBRL: totalHeadcount > 0 ? totalCost / totalHeadcount : 0,
          newAvgWeightKg: totalHeadcount > 0 ? Math.round(totalWeight / totalHeadcount) : 0,
          totalPurchaseCostBRL: totalCost,
+         newBirthDateRef,
+         newBirthDateRefIsEstimated,
+         newEntryCategory,
        };
      }
 
-     export function buildMergeFormHTML() {
-       const aggregateLots = lotsCache.filter((l) => (l.trackingMode || "individual") === "aggregate");
-       const targetOptions = aggregateLots
-         .map((l) => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)} (${l.headcount ?? 0} cabeças)</option>`)
+     function mergeSourceLineHTML(l) {
+       return `${l.headcount ?? 0} cabeças · ${l.avgWeightKg != null ? `${formatKg(l.avgWeightKg)} kg` : "—"} · ${l.avgPurchaseCostBRL != null ? formatBRL(l.avgPurchaseCostBRL) : "—"}/cab.`;
+     }
+
+     // Step 1 of the merge flow reached from the feed's selection bar
+     // (Prompt F): the selection alone doesn't say which lot survives, so
+     // the destination choice — and every guard that depends on it — lives
+     // here, before the irreversible-action confirm sheet.
+     export function buildMergeDestinationHTML(lots) {
+       const targetOptions = lots
+         .map(
+           (l) => `
+             <label class="merge-source-item">
+               <input type="radio" name="merge-target" value="${escapeHtml(l.id)}" />
+               <span class="merge-source-item-info">
+                 <span>${escapeHtml(l.name)}</span>
+                 <small>${mergeSourceLineHTML(l)}</small>
+               </span>
+             </label>
+           `
+         )
          .join("");
+
        return `
          <div class="form-grid">
            <div class="field">
-             <label class="field-label" for="merge-target">Lote de destino *</label>
-             <select class="select" id="merge-target">
-               <option value="" selected>Selecione</option>
+             <span class="field-label">Destino *</span>
+             <div class="merge-source-list" id="merge-target-list">
                ${targetOptions}
-             </select>
-             <p class="field-error" id="merge-target-error"></p>
-           </div>
-
-           <div class="field">
-             <span class="field-label">Lotes de origem *</span>
-             <div class="merge-source-list" id="merge-source-list">
-               <p class="field-hint">Selecione o lote de destino para ver as opções.</p>
              </div>
-             <p class="field-error" id="merge-sources-error"></p>
+             <p class="field-hint">O lote de destino mantém o nome, a propriedade e o histórico. Os demais serão excluídos.</p>
            </div>
 
-           <div class="live-calc" id="merge-preview" hidden>
+           <div class="live-calc" id="merge-preview">
              <div class="live-calc-item">
                <span class="live-calc-label">Total de cabeças</span>
                <span class="live-calc-value" id="merge-calc-headcount">—</span>
@@ -1629,6 +1684,15 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
                <span class="live-calc-label">Custo total</span>
                <span class="live-calc-value" id="merge-calc-total">—</span>
              </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Idade de referência</span>
+               <span class="live-calc-value" id="merge-calc-age">—</span>
+             </div>
+           </div>
+
+           <div class="field">
+             <span class="field-label">Lotes que serão excluídos</span>
+             <div class="merge-source-list" id="merge-excluded-list"></div>
            </div>
 
            <label class="field checkbox-field" for="merge-migrate-linked">
@@ -1637,117 +1701,110 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
            </label>
 
            <p class="field-error" id="merge-form-error" role="alert"></p>
-           <button type="button" class="btn-primary pressable" id="merge-submit">Mesclar lotes</button>
+           <button type="button" class="btn-primary pressable" id="merge-submit" disabled>Mesclar lotes</button>
          </div>
        `;
      }
 
-     export function buildMergeSourceListHTML(sourceCandidates) {
-       if (!sourceCandidates.length) {
-         return `<p class="field-hint">Nenhum outro lote por cabeça disponível para mesclar.</p>`;
-       }
-       return sourceCandidates
-         .map(
-           (l) => `
-             <label class="merge-source-item">
-               <input type="checkbox" value="${escapeHtml(l.id)}" data-merge-source />
-               <span class="merge-source-item-info">
-                 <span>${escapeHtml(l.name)}</span>
-                 <small>${l.headcount ?? 0} cabeças · ${l.avgWeightKg != null ? `${formatKg(l.avgWeightKg)} kg` : "—"} · ${l.avgPurchaseCostBRL != null ? formatBRL(l.avgPurchaseCostBRL) : "—"}/cab.</small>
-               </span>
-             </label>
-           `
-         )
-         .join("");
-     }
-
-     export function wireMergeForm() {
-       const targetSelect = document.getElementById("merge-target");
-       const sourceListEl = document.getElementById("merge-source-list");
-       const previewEl = document.getElementById("merge-preview");
+     export function wireMergeDestinationForm(lots) {
+       const listEl = document.getElementById("merge-target-list");
+       const excludedEl = document.getElementById("merge-excluded-list");
        const submitBtn = document.getElementById("merge-submit");
        const formError = document.getElementById("merge-form-error");
 
-       function checkedSourceLots() {
-         const ids = Array.from(sourceListEl.querySelectorAll("[data-merge-source]:checked")).map((c) => c.value);
-         return lotsCache.filter((l) => ids.includes(l.id));
-       }
+       // The preview totals are a sum/weighted-average over the whole
+       // selection — they don't depend on which lot ends up as destination,
+       // so they're computed once, up front.
+       const preview = computeMergePreview(lots);
+       document.getElementById("merge-calc-headcount").textContent = `${preview.totalHeadcount} cabeças`;
+       document.getElementById("merge-calc-weight").textContent = `${formatKg(preview.newAvgWeightKg)} kg`;
+       document.getElementById("merge-calc-cost").textContent = formatBRL(preview.newAvgCostBRL);
+       document.getElementById("merge-calc-total").textContent = formatBRL(preview.totalPurchaseCostBRL);
+       const ageMonths = preview.newBirthDateRef ? ageMonthsBetween(preview.newBirthDateRef, new Date()) : null;
+       const ageLabel = ageMonths != null ? formatMonthsDuration(ageMonths) : null;
+       document.getElementById("merge-calc-age").textContent = ageLabel
+         ? (preview.newBirthDateRefIsEstimated ? `${ageLabel} (est.)` : ageLabel)
+         : "—";
 
-       function updatePreview() {
-         const targetLot = lotsCache.find((l) => l.id === targetSelect.value);
-         const sources = targetLot ? checkedSourceLots() : [];
-         if (!targetLot || !sources.length) {
-           previewEl.hidden = true;
-           return;
-         }
-         const preview = computeMergePreview([targetLot, ...sources]);
-         document.getElementById("merge-calc-headcount").textContent = `${preview.totalHeadcount} cabeças`;
-         document.getElementById("merge-calc-weight").textContent = `${formatKg(preview.newAvgWeightKg)} kg`;
-         document.getElementById("merge-calc-cost").textContent = formatBRL(preview.newAvgCostBRL);
-         document.getElementById("merge-calc-total").textContent = formatBRL(preview.totalPurchaseCostBRL);
-         previewEl.hidden = false;
+       function renderExcluded(targetId) {
+         const excluded = lots.filter((l) => l.id !== targetId);
+         excludedEl.innerHTML = excluded.length
+           ? excluded
+               .map(
+                 (l) => `
+                   <div class="merge-source-item">
+                     <span class="merge-source-item-info">
+                       <span>${escapeHtml(l.name)}</span>
+                       <small>${mergeSourceLineHTML(l)}</small>
+                     </span>
+                   </div>
+                 `
+               )
+               .join("")
+           : `<p class="field-hint">Selecione o destino para ver os lotes excluídos.</p>`;
        }
+       renderExcluded(null);
 
-       function renderSourceOptions() {
-         const targetId = targetSelect.value;
-         if (!targetId) {
-           sourceListEl.innerHTML = `<p class="field-hint">Selecione o lote de destino para ver as opções.</p>`;
-           updatePreview();
-           return;
-         }
-         const candidates = lotsCache.filter(
-           (l) => l.id !== targetId && (l.trackingMode || "individual") === "aggregate"
-         );
-         sourceListEl.innerHTML = buildMergeSourceListHTML(candidates);
-         sourceListEl.querySelectorAll("[data-merge-source]").forEach((cb) => cb.addEventListener("change", updatePreview));
-         updatePreview();
-       }
-
-       targetSelect.addEventListener("change", renderSourceOptions);
+       listEl.addEventListener("change", () => {
+         const targetId = listEl.querySelector('input[name="merge-target"]:checked')?.value ?? null;
+         submitBtn.disabled = !targetId;
+         renderExcluded(targetId);
+         formError.textContent = "";
+       });
 
        submitBtn.addEventListener("click", () => {
          formError.textContent = "";
-         clearFieldError("merge-target");
-         clearFieldError("merge-sources");
 
-         let valid = true;
-         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
-
-         const targetLot = lotsCache.find((l) => l.id === targetSelect.value);
-         if (!targetLot) fail("merge-target", "Selecione o lote de destino.");
-
-         const sources = targetLot ? checkedSourceLots() : [];
-         if (targetLot && !sources.length) fail("merge-sources", "Selecione ao menos um lote de origem.");
-
-         if (!valid) return;
-
-         // Guards: no self-merge (target excluded from the source list above)
-         // and no mixing tracking modes (source list is aggregate-only above).
-         if (sources.some((l) => l.id === targetLot.id)) {
-           fail("merge-sources", "O lote de destino não pode ser também de origem.");
+         const targetId = listEl.querySelector('input[name="merge-target"]:checked')?.value;
+         const targetLot = lots.find((l) => l.id === targetId);
+         if (!targetLot) { formError.textContent = "Selecione o lote de destino."; return; }
+         if (lots.length < 2) { formError.textContent = "Selecione ao menos dois lotes para mesclar."; return; }
+         if (lots.some((l) => (l.trackingMode || "individual") !== "aggregate")) {
+           formError.textContent = "Só é possível mesclar lotes por cabeça (aggregate).";
            return;
          }
-         if (sources.some((l) => (l.trackingMode || "individual") !== "aggregate")) {
-           fail("merge-sources", "Só é possível mesclar lotes por cabeça (aggregate).");
+         if (lots.some((l) => lotClosure(l).isClosed)) {
+           formError.textContent = "Lotes encerrados não podem ser mesclados.";
+           return;
+         }
+         if (!lots.every((l) => l.propertyId === lots[0].propertyId)) {
+           formError.textContent = "Todos os lotes precisam ser da mesma propriedade.";
+           return;
+         }
+         if (!lots.every((l) => resolveLotSex(l) === resolveLotSex(lots[0]))) {
+           formError.textContent = "Todos os lotes precisam ser do mesmo sexo.";
            return;
          }
 
          const migrateLinked = document.getElementById("merge-migrate-linked").checked;
-         openMergeConfirmSheet(targetLot, sources, migrateLinked);
+         const sourceLots = lots.filter((l) => l.id !== targetLot.id);
+         openMergeConfirmSheet(targetLot, sourceLots, migrateLinked);
        });
      }
 
-     export function openMergeLotsSheet() {
-       const aggregateLots = lotsCache.filter((l) => (l.trackingMode || "individual") === "aggregate");
-       if (aggregateLots.length < 2) {
-         showToast("É preciso ao menos 2 lotes por cabeça para mesclar.");
-         return;
-       }
-       Sheet.open({ title: "Mesclar lotes", content: buildMergeFormHTML() });
-       wireMergeForm();
+     export function openMergeDestinationSheet(lots) {
+       Sheet.open({ title: "Mesclar lotes", content: buildMergeDestinationHTML(lots) });
+       wireMergeDestinationForm(lots);
      }
 
-     document.getElementById("lot-merge-btn").addEventListener("click", openMergeLotsSheet);
+     document.getElementById("lot-merge-btn").addEventListener("click", () => {
+       if (!enterMergeSelection()) {
+         showToast("É preciso ao menos 2 lotes por cabeça ativos para mesclar.");
+       }
+     });
+
+     document.getElementById("merge-selection-next").addEventListener("click", () => {
+       const lots = getMergeSelectionIds().map((id) => lotsCache.find((l) => l.id === id)).filter(Boolean);
+       openMergeDestinationSheet(lots);
+     });
+
+     // Switching tabs mid-selection would leave the FAB hidden and the
+     // action bar stuck over whatever view the user navigated to.
+     tabs.forEach((tab) => {
+       tab.addEventListener("click", () => {
+         if (isMergeSelectionActive()) exitMergeSelection();
+       });
+     });
 
      // --- Confirmação da mesclagem ---
      export function buildMergeConfirmHTML(targetLot, sourceLots, preview) {
@@ -1804,31 +1861,81 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
 
          try {
            const sourceIds = sourceLots.map((l) => l.id);
-           const batch = writeBatch(db);
 
-           batch.update(doc(db, "lots", targetLot.id), {
+           // acquisitionDate and propertyId are deliberately absent here —
+           // they stay the destination's own. acquisitionDate anchors
+           // lotProjectionAnchors()'s farm anchor, so moving it would shift
+           // every weight projection for the merged lot.
+           const targetUpdates = {
              headcount: preview.totalHeadcount,
              avgWeightKg: preview.newAvgWeightKg,
              avgPurchaseCostBRL: preview.newAvgCostBRL,
              totalPurchaseCostBRL: preview.totalPurchaseCostBRL,
              updatedAt: serverTimestamp(),
-           });
+           };
+           if (preview.newBirthDateRef) {
+             targetUpdates.birthDateRef = preview.newBirthDateRef;
+             targetUpdates.birthDateRefIsEstimated = preview.newBirthDateRefIsEstimated;
+           }
+           if (preview.newEntryCategory) {
+             targetUpdates.entryCategory = preview.newEntryCategory;
+           }
+
+           // The merges doc is the only record of what the source lots were
+           // — after the batch below commits they're gone. Queued before
+           // the deletes, per collection order.
+           const mergeDoc = {
+             ownerId: currentUid,
+             targetId: targetLot.id,
+             targetName: targetLot.name,
+             mergedAt: serverTimestamp(),
+             migrateLinked,
+             sources: sourceLots.map((l) => ({
+               id: l.id,
+               name: l.name,
+               headcount: l.headcount ?? 0,
+               avgWeightKg: l.avgWeightKg ?? null,
+               avgPurchaseCostBRL: l.avgPurchaseCostBRL ?? null,
+               totalPurchaseCostBRL: l.totalPurchaseCostBRL ?? null,
+               propertyId: l.propertyId ?? null,
+               birthDateRef: l.birthDateRef ?? null,
+               acquisitionDate: l.acquisitionDate ?? null,
+               entryCategory: l.entryCategory ?? null,
+               sex: l.sex ?? null,
+             })),
+           };
+
+           const ops = [
+             { type: "update", ref: doc(db, "lots", targetLot.id), data: targetUpdates },
+             { type: "set", ref: doc(collection(db, "merges")), data: mergeDoc },
+           ];
 
            movementsCache
              .filter((m) => sourceIds.includes(m.lotId))
-             .forEach((m) => batch.update(doc(db, "movements", m.id), { lotId: targetLot.id }));
+             .forEach((m) => ops.push({ type: "update", ref: doc(db, "movements", m.id), data: { lotId: targetLot.id } }));
 
            if (migrateLinked) {
              transactionsCache
                .filter((t) => sourceIds.includes(t.linkedLotId))
-               .forEach((t) => batch.update(doc(db, "transactions", t.id), { linkedLotId: targetLot.id }));
+               .forEach((t) => ops.push({ type: "update", ref: doc(db, "transactions", t.id), data: { linkedLotId: targetLot.id } }));
            }
 
-           sourceLots.forEach((l) => batch.delete(doc(db, "lots", l.id)));
+           sourceLots.forEach((l) => ops.push({ type: "delete", ref: doc(db, "lots", l.id) }));
 
-           await batch.commit();
+           const CHUNK_SIZE = 450;
+           for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+             const batch = writeBatch(db);
+             ops.slice(i, i + CHUNK_SIZE).forEach((op) => {
+               if (op.type === "update") batch.update(op.ref, op.data);
+               else if (op.type === "set") batch.set(op.ref, op.data);
+               else batch.delete(op.ref);
+             });
+             await batch.commit();
+           }
+
            showToast("Lotes mesclados.");
            Sheet.close();
+           exitMergeSelection();
          } catch (err) {
            console.warn("[Agro Connect] Falha ao mesclar lotes:", err?.code ?? err);
            showToast(

@@ -159,6 +159,34 @@
           </div>
         </div>
 
+        <div class="lot-filters" id="lot-filters" hidden>
+          <div class="segmented" role="radiogroup" aria-label="Situação dos lotes">
+            <input type="radio" id="lot-status-active" name="lot-status" value="active" checked />
+            <label for="lot-status-active">Ativos</label>
+            <input type="radio" id="lot-status-closed" name="lot-status" value="closed" />
+            <label for="lot-status-closed">Encerrados</label>
+            <input type="radio" id="lot-status-all" name="lot-status" value="all" />
+            <label for="lot-status-all">Todos</label>
+          </div>
+          <div class="lot-filters-selects">
+            <select class="input" id="lot-filter-property" aria-label="Propriedade">
+              <option value="">Todas as propriedades</option>
+            </select>
+            <select class="input" id="lot-filter-sex" aria-label="Sexo">
+              <option value="">Ambos os sexos</option>
+            </select>
+            <select class="input" id="lot-filter-year" aria-label="Ano de entrada">
+              <option value="">Todos os anos</option>
+            </select>
+          </div>
+          <div class="lot-filters-sort">
+            <button type="button" class="btn-inline pressable" id="lot-sort-btn"
+                    aria-label="Alternar ordenação por data de entrada">
+              <span id="lot-sort-label">Entrada: mais recente</span> <span aria-hidden="true">↓</span>
+            </button>
+          </div>
+        </div>
+
         <ul class="herd-list" id="lot-list" aria-live="polite">
           <!-- Lot cards, rendered by JS -->
         </ul>
@@ -419,6 +447,15 @@
       </button>
     </div>
   </nav>
+
+  <!-- ===== Merge selection action bar (Rebanho feed selection mode) ===== -->
+  <div class="selection-bar" id="merge-selection-bar" role="region" aria-label="Seleção para mesclagem" hidden>
+    <p class="selection-bar-count" id="merge-selection-count" aria-live="polite">0 selecionados</p>
+    <div class="selection-bar-actions">
+      <button type="button" class="btn-secondary pressable" id="merge-selection-cancel">Cancelar</button>
+      <button type="button" class="btn-primary pressable" id="merge-selection-next" disabled>Avançar</button>
+    </div>
+  </div>
 
    <!-- ===== Bottom sheet / modal (native <dialog>) ===== -->
    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">

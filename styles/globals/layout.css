@@ -128,6 +128,39 @@
   .fab:hover { background: var(--brand); }
 
   /* =====================================================
+     9b. Merge-selection action bar (Rebanho feed selection mode)
+     ===================================================== */
+  .selection-bar {
+    position: fixed;
+    inset-inline: 0;
+    bottom: calc(var(--tabbar-height) + var(--safe-bottom));
+    z-index: 46;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    padding-inline: max(var(--space-4), calc((100% - var(--container-max)) / 2 + var(--space-4)));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+  }
+  .selection-bar[hidden] { display: none; }
+
+  .selection-bar-count {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+  }
+
+  .selection-bar-actions {
+    display: flex;
+    gap: var(--space-3);
+    flex: none;
+  }
+
+  /* =====================================================
      10. Bottom tab bar (glass, safe-area aware)
      ===================================================== */
   .tabbar {
@@ -204,5 +237,7 @@
 
     .fab { bottom: var(--space-5); right: var(--space-5); }
     .app-main { padding-bottom: var(--space-7); }
+
+    .selection-bar { bottom: 0; inset-inline: 96px 0; }
   }
 

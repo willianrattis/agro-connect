@@ -4,11 +4,21 @@
     export const syncIndicatorEl = document.getElementById("sync-indicator");
     export const lotListEl = document.getElementById("lot-list");
     export const lotCountEl = document.getElementById("lot-count");
+    export const lotFiltersEl = document.getElementById("lot-filters");
+    export const lotFilterPropertyEl = document.getElementById("lot-filter-property");
+    export const lotFilterSexEl = document.getElementById("lot-filter-sex");
+    export const lotFilterYearEl = document.getElementById("lot-filter-year");
+    export const lotSortBtn = document.getElementById("lot-sort-btn");
+    export const lotSortLabelEl = document.getElementById("lot-sort-label");
     export const statHeadEl = document.getElementById("stat-head");
     export const statArrobasEl = document.getElementById("stat-arrobas");
     export const fabBtn = document.getElementById("fab-add");
     export const tabs = Array.from(document.querySelectorAll(".tab"));
     export const views = Array.from(document.querySelectorAll(".view"));
+    export const mergeSelectionBarEl = document.getElementById("merge-selection-bar");
+    export const mergeSelectionCountEl = document.getElementById("merge-selection-count");
+    export const mergeSelectionCancelBtn = document.getElementById("merge-selection-cancel");
+    export const mergeSelectionNextBtn = document.getElementById("merge-selection-next");
 
     export const yearPrevBtn = document.getElementById("year-prev");
     export const yearNextBtn = document.getElementById("year-next");

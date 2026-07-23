@@ -41,6 +41,43 @@
   }
 
 
+  /* Quick filters (status segmented control + property/sex/year selects)
+     above the cattle-card list. Selects sit in an equal-width grid so the
+     row's edges align with the full-width .segmented control above it —
+     at 360px propriedade takes its own row (its label is the longest),
+     sexo/ano share the second; from 768px all three share one row. */
+  .lot-filters {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  .lot-filters-selects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+  .lot-filters-selects .input {
+    width: 100%;
+    min-width: 0;
+  }
+  #lot-filter-property {
+    grid-column: 1 / -1;
+  }
+  @media (min-width: 768px) {
+    .lot-filters-selects {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    #lot-filter-property {
+      grid-column: auto;
+    }
+  }
+  .lot-filters-sort {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-2);
+  }
+
   /* =====================================================
      6. Cattle cards
      ===================================================== */
@@ -48,6 +85,21 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+  .herd-list.has-merge-bar {
+    padding-bottom: var(--space-7);
+  }
+
+  .card.is-selectable {
+    cursor: pointer;
+  }
+  .card.is-selected {
+    border-color: var(--brand);
+    box-shadow: var(--shadow-md), 0 0 0 2px var(--brand);
+  }
+  .card.is-ineligible {
+    opacity: 0.55;
+    pointer-events: none;
   }
 
 
@@ -114,6 +166,22 @@
   .chip-recria  { background: var(--chip-recria-bg);  color: var(--chip-recria-text); }
   .chip-engorda { background: var(--chip-engorda-bg); color: var(--chip-engorda-text); }
   .chip-matriz  { background: var(--chip-matriz-bg);  color: var(--chip-matriz-text); }
+
+  .card-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .card-meta-row .field-hint { margin: 0; }
+
+  .chip-meta {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+  }
 
   .card-stats {
     display: grid;
