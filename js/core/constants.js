@@ -408,6 +408,7 @@ import { toDateSafe } from "./helpers.js";
       { value: "entry", label: "Entrada", defaultSign: "+", defaultFinance: true },
       { value: "birth", label: "Nascimento", defaultSign: "+", defaultFinance: false },
       { value: "transfer", label: "Transferência", defaultSign: "+", defaultFinance: false },
+      { value: "lot_transfer", label: "Transferência entre lotes", defaultSign: "+", defaultFinance: false },
       { value: "adjustment", label: "Ajuste", defaultSign: "+", defaultFinance: false },
       { value: "death", label: "Morte", defaultSign: "-", defaultFinance: false },
       { value: "shipment", label: "Embarque", defaultSign: "-", defaultFinance: true },

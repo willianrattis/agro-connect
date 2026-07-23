@@ -86,6 +86,12 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
                <span class="action-icon" aria-hidden="true">${ICONS.transfer}</span>
                Transferir propriedade
              </button>
+             ${isAggregate && lotsCache.some((l) => l.id !== lot.id && (l.trackingMode || "individual") === "aggregate") ? `
+               <button type="button" class="action-item pressable" data-menu-action="transfer-animals">
+                 <span class="action-icon" aria-hidden="true">${ICONS.transfer}</span>
+                 Transferir animais
+               </button>
+             ` : ""}
            </div>
            <div class="action-group">
              <div class="action-group-title">Gestão</div>
@@ -117,6 +123,7 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
            else if (btn.dataset.menuAction === "calving") { openLotCalvingSheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "finishing") { openLotFinishingSheet(lot); Sheet.setBack(back); }
            else if (btn.dataset.menuAction === "transfer") { openTransferSheet(lot); Sheet.setBack(back); }
+           else if (btn.dataset.menuAction === "transfer-animals") { openTransferAnimalsSheet(lot); Sheet.setBack(back); }
            else Sheet.close();
          });
        });
@@ -213,6 +220,287 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
      export function openTransferSheet(lot) {
        Sheet.open({ title: `Transferir · ${escapeHtml(lot.name)}`, content: buildTransferFormHTML(lot) });
        wireTransferForm(lot);
+     }
+
+     // --- Transferir animais: splits N head off an aggregate lot's on-farm
+     //     headcount into another aggregate lot, recomputing the destination's
+     //     weighted-average cost/weight (unknown averages propagate as null
+     //     rather than diluting into a wrong number). Origin's per-head
+     //     averages are unchanged — only its headcount/total cost shrink. ---
+     export function computeTransferPreview(originLot, destLot, n) {
+       const originHeadcount = originLot.headcount ?? 0;
+       const destHeadcount = destLot.headcount ?? 0;
+       const newDestHeadcount = destHeadcount + n;
+       const newOriginHeadcount = originHeadcount - n;
+
+       const costKnown = originLot.avgPurchaseCostBRL != null && destLot.avgPurchaseCostBRL != null;
+       const newDestTotalCostBRL = costKnown
+         ? destHeadcount * destLot.avgPurchaseCostBRL + n * originLot.avgPurchaseCostBRL
+         : null;
+       const newDestAvgCostBRL = costKnown ? newDestTotalCostBRL / newDestHeadcount : null;
+
+       const weightKnown = originLot.avgWeightKg != null && destLot.avgWeightKg != null;
+       const newDestAvgWeightKg = weightKnown
+         ? Math.round((destHeadcount * destLot.avgWeightKg + n * originLot.avgWeightKg) / newDestHeadcount)
+         : null;
+
+       const originAvgCostBRL = originLot.avgPurchaseCostBRL ?? null;
+       const newOriginTotalCostBRL = originAvgCostBRL != null ? newOriginHeadcount * originAvgCostBRL : null;
+
+       return {
+         dest: {
+           headcount: newDestHeadcount,
+           avgWeightKg: newDestAvgWeightKg,
+           avgPurchaseCostBRL: newDestAvgCostBRL,
+           totalPurchaseCostBRL: newDestTotalCostBRL,
+         },
+         origin: {
+           headcount: newOriginHeadcount,
+           avgWeightKg: originLot.avgWeightKg ?? null,
+           avgPurchaseCostBRL: originAvgCostBRL,
+           totalPurchaseCostBRL: newOriginTotalCostBRL,
+         },
+       };
+     }
+
+     export function buildTransferAnimalsFormHTML(originLot) {
+       const destOptions = lotsCache
+         .filter((l) => l.id !== originLot.id && (l.trackingMode || "individual") === "aggregate")
+         .map((l) => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.name)} (${l.headcount ?? 0} cabeças)</option>`)
+         .join("");
+       return `
+         <form id="transfer-animals-form" class="form-grid" novalidate>
+           <div class="field">
+             <label class="field-label" for="transfer-animals-dest">Lote de destino *</label>
+             <select class="select" id="transfer-animals-dest">
+               <option value="" selected>Selecione</option>
+               ${destOptions}
+             </select>
+             <p class="field-hint" id="transfer-animals-dest-hint"></p>
+             <p class="field-error" id="transfer-animals-dest-error"></p>
+           </div>
+
+           <div class="field field--half">
+             <label class="field-label" for="transfer-animals-qty">Quantidade *</label>
+             <input class="input" id="transfer-animals-qty" type="number" min="1" step="1" placeholder="0" />
+             <p class="field-error" id="transfer-animals-qty-error"></p>
+           </div>
+           <div class="field field--half">
+             <label class="field-label" for="transfer-animals-date">Data *</label>
+             <input class="input" id="transfer-animals-date" type="date" value="${toDateInputValue(new Date())}" />
+             <p class="field-error" id="transfer-animals-date-error"></p>
+           </div>
+
+           <div class="live-calc" id="transfer-animals-preview" hidden>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Origem</span>
+               <span class="live-calc-value" id="transfer-animals-calc-origin">—</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Destino · cabeças</span>
+               <span class="live-calc-value" id="transfer-animals-calc-dest-headcount">—</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Destino · custo médio</span>
+               <span class="live-calc-value" id="transfer-animals-calc-dest-cost">—</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">Destino · peso médio</span>
+               <span class="live-calc-value" id="transfer-animals-calc-dest-weight">—</span>
+             </div>
+           </div>
+
+           <p class="field-error" id="transfer-animals-form-error" role="alert"></p>
+           <button type="submit" class="btn-primary pressable" id="transfer-animals-submit">Continuar</button>
+         </form>
+       `;
+     }
+
+     export function wireTransferAnimalsForm(originLot) {
+       const form = document.getElementById("transfer-animals-form");
+       const destSelect = document.getElementById("transfer-animals-dest");
+       const qtyInput = document.getElementById("transfer-animals-qty");
+       const destHint = document.getElementById("transfer-animals-dest-hint");
+       const previewEl = document.getElementById("transfer-animals-preview");
+       const formError = document.getElementById("transfer-animals-form-error");
+       const originHeadcount = originLot.headcount ?? 0;
+
+       function selectedDestLot() {
+         return lotsCache.find((l) => l.id === destSelect.value) || null;
+       }
+
+       function updateDestHint() {
+         const destLot = selectedDestLot();
+         destHint.textContent = destLot
+           ? `${destLot.name} · ${destLot.headcount ?? 0} cabeças · ${destLot.avgWeightKg != null ? `${formatKg(destLot.avgWeightKg)} kg` : "—"} · ${destLot.avgPurchaseCostBRL != null ? `${formatBRL(destLot.avgPurchaseCostBRL)}/cab.` : "—/cab."}`
+           : "";
+       }
+
+       function updatePreview() {
+         const destLot = selectedDestLot();
+         const n = Number(qtyInput.value);
+         if (!destLot || !qtyInput.value || !Number.isInteger(n) || n < 1 || n > originHeadcount) {
+           previewEl.hidden = true;
+           return;
+         }
+         const preview = computeTransferPreview(originLot, destLot, n);
+         document.getElementById("transfer-animals-calc-origin").textContent =
+           `${preview.origin.headcount} cabeça${preview.origin.headcount === 1 ? "" : "s"} (era ${originHeadcount})`;
+         document.getElementById("transfer-animals-calc-dest-headcount").textContent = `${preview.dest.headcount} cabeças`;
+         document.getElementById("transfer-animals-calc-dest-cost").textContent =
+           preview.dest.avgPurchaseCostBRL != null ? `${formatBRL(preview.dest.avgPurchaseCostBRL)}/cab.` : "—";
+         document.getElementById("transfer-animals-calc-dest-weight").textContent =
+           preview.dest.avgWeightKg != null ? `${formatKg(preview.dest.avgWeightKg)} kg` : "—";
+         previewEl.hidden = false;
+       }
+
+       destSelect.addEventListener("change", () => { updateDestHint(); updatePreview(); });
+       qtyInput.addEventListener("input", updatePreview);
+
+       form.addEventListener("submit", (e) => {
+         e.preventDefault();
+         formError.textContent = "";
+         ["transfer-animals-dest", "transfer-animals-qty", "transfer-animals-date"].forEach(clearFieldError);
+
+         let valid = true;
+         const fail = (id, msg) => { valid = false; setFieldError(id, msg); };
+
+         const destLot = selectedDestLot();
+         if (!destLot) fail("transfer-animals-dest", "Selecione o lote de destino.");
+         else if (destLot.id === originLot.id) fail("transfer-animals-dest", "O lote de destino não pode ser o mesmo de origem.");
+
+         const rawQty = qtyInput.value;
+         const n = Number(rawQty);
+         if (!rawQty || !Number.isInteger(n) || n < 1) {
+           fail("transfer-animals-qty", "Informe uma quantidade válida.");
+         } else if (n > originHeadcount) {
+           fail("transfer-animals-qty", `O lote de origem só tem ${originHeadcount} cabeça${originHeadcount === 1 ? "" : "s"} na fazenda.`);
+         }
+
+         const dateStr = document.getElementById("transfer-animals-date")?.value || "";
+         if (!dateStr) fail("transfer-animals-date", "Informe a data da transferência.");
+
+         if (!valid) return;
+
+         const date = new Date(`${dateStr}T00:00:00`);
+         openTransferAnimalsConfirmSheet(originLot, destLot, n, date);
+       });
+     }
+
+     export function openTransferAnimalsSheet(originLot) {
+       Sheet.open({ title: `Transferir animais · ${escapeHtml(originLot.name)}`, content: buildTransferAnimalsFormHTML(originLot) });
+       wireTransferAnimalsForm(originLot);
+     }
+
+     // --- Confirmação da transferência de animais ---
+     export function buildTransferAnimalsConfirmHTML(originLot, destLot, n, preview) {
+       return `
+         <div class="form-grid">
+           <div class="confirm-warning">
+             <span class="confirm-warning-icon" aria-hidden="true">${ICONS.warning}</span>
+             <p>
+               <strong>${n}</strong> cabeça${n === 1 ? "" : "s"} de <strong>${escapeHtml(originLot.name)}</strong> serão transferidas para <strong>${escapeHtml(destLot.name)}</strong>.
+             </p>
+           </div>
+
+           <div class="live-calc">
+             <div class="live-calc-item">
+               <span class="live-calc-label">${escapeHtml(originLot.name)} · cabeças</span>
+               <span class="live-calc-value">${preview.origin.headcount} (era ${originLot.headcount ?? 0})</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">${escapeHtml(destLot.name)} · cabeças</span>
+               <span class="live-calc-value">${preview.dest.headcount} (era ${destLot.headcount ?? 0})</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">${escapeHtml(destLot.name)} · custo médio</span>
+               <span class="live-calc-value">${preview.dest.avgPurchaseCostBRL != null ? `${formatBRL(preview.dest.avgPurchaseCostBRL)}/cab.` : "—"}</span>
+             </div>
+             <div class="live-calc-item">
+               <span class="live-calc-label">${escapeHtml(destLot.name)} · peso médio</span>
+               <span class="live-calc-value">${preview.dest.avgWeightKg != null ? `${formatKg(preview.dest.avgWeightKg)} kg` : "—"}</span>
+             </div>
+           </div>
+
+           <p class="field-error" id="transfer-animals-confirm-error" role="alert"></p>
+           <div class="confirm-actions">
+             <button type="button" class="btn-secondary pressable" id="transfer-animals-confirm-cancel">Cancelar</button>
+             <button type="button" class="btn-primary pressable" id="transfer-animals-confirm-submit">Confirmar transferência</button>
+           </div>
+         </div>
+       `;
+     }
+
+     export function wireTransferAnimalsConfirmForm(originLot, destLot, n, date, preview) {
+       const cancelBtn = document.getElementById("transfer-animals-confirm-cancel");
+       const confirmBtn = document.getElementById("transfer-animals-confirm-submit");
+       const errorEl = document.getElementById("transfer-animals-confirm-error");
+
+       cancelBtn.addEventListener("click", () => Sheet.close());
+
+       confirmBtn.addEventListener("click", async () => {
+         if (!currentUid) return;
+         confirmBtn.disabled = true;
+         cancelBtn.disabled = true;
+         confirmBtn.textContent = "Transferindo…";
+
+         try {
+           const batch = writeBatch(db);
+
+           batch.update(doc(db, "lots", destLot.id), {
+             headcount: preview.dest.headcount,
+             avgWeightKg: preview.dest.avgWeightKg,
+             avgPurchaseCostBRL: preview.dest.avgPurchaseCostBRL,
+             totalPurchaseCostBRL: preview.dest.totalPurchaseCostBRL,
+             updatedAt: serverTimestamp(),
+           });
+
+           batch.update(doc(db, "lots", originLot.id), {
+             headcount: preview.origin.headcount,
+             totalPurchaseCostBRL: preview.origin.totalPurchaseCostBRL,
+             updatedAt: serverTimestamp(),
+           });
+
+           batch.set(doc(collection(db, "movements")), {
+             ownerId: currentUid,
+             type: "lot_transfer",
+             lotId: originLot.id,
+             counterLotId: destLot.id,
+             qty: -n,
+             date,
+             description: `Transferência de ${n} cabeça${n === 1 ? "" : "s"} para ${destLot.name}`,
+             createdAt: serverTimestamp(),
+           });
+
+           batch.set(doc(collection(db, "movements")), {
+             ownerId: currentUid,
+             type: "lot_transfer",
+             lotId: destLot.id,
+             counterLotId: originLot.id,
+             qty: n,
+             date,
+             description: `Recebido de ${n} cabeça${n === 1 ? "" : "s"} de ${originLot.name}`,
+             createdAt: serverTimestamp(),
+           });
+
+           await batch.commit();
+           showToast("Animais transferidos.");
+           Sheet.close();
+         } catch (err) {
+           console.warn("[Agro Connect] Falha ao transferir animais:", err?.code ?? err);
+           errorEl.textContent =
+             err?.code === "permission-denied" ? "Sem permissão para gravar." : "Não foi possível transferir. Tente novamente.";
+           confirmBtn.disabled = false;
+           cancelBtn.disabled = false;
+           confirmBtn.textContent = "Confirmar transferência";
+         }
+       });
+     }
+
+     export function openTransferAnimalsConfirmSheet(originLot, destLot, n, date) {
+       const preview = computeTransferPreview(originLot, destLot, n);
+       Sheet.open({ title: "Confirmar transferência", content: buildTransferAnimalsConfirmHTML(originLot, destLot, n, preview) });
+       wireTransferAnimalsConfirmForm(originLot, destLot, n, date, preview);
      }
 
      // Tapping an aggregate lot's card opens its detail sheet (movement
@@ -1195,9 +1483,11 @@ import { openLotMovementSheet, openEditMovementSheet } from "./movements.js";
            </div>
            <div class="tx-row-end">
              <p class="tx-amount ${amountClass}">${sign}${Math.abs(qty)}${m.amountBRL != null ? ` (${formatBRL(m.amountBRL)})` : ""}</p>
-             <button type="button" class="card-menu-btn pressable" data-action="mv-edit" data-id="${escapeHtml(m.id)}" aria-label="Editar movimentação">
-               ${ICONS.edit}
-             </button>
+             ${m.type !== "lot_transfer" ? `
+               <button type="button" class="card-menu-btn pressable" data-action="mv-edit" data-id="${escapeHtml(m.id)}" aria-label="Editar movimentação">
+                 ${ICONS.edit}
+               </button>
+             ` : ""}
            </div>
          </li>
        `;
