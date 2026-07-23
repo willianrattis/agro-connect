@@ -189,6 +189,19 @@ service cloud.firestore {
       allow delete: if owns(resource);
     }
 
+    // Merge audit trail — write-only for now (no listener/cache/UI reads
+    // it yet; a later history/split view will). It's the only record of
+    // what the source lots were once a merge's batch deletes them, so
+    // there's no update or delete: a merge record is immutable history.
+    match /merges/{id} {
+      allow read:   if owns(resource);
+      allow create: if ownsNew()
+                    && request.resource.data.targetId is string
+                    && request.resource.data.targetId.size() > 0
+                    && request.resource.data.sources is list;
+      allow update, delete: if false;
+    }
+
     // Everything else is denied by default (Firestore has no implicit
     // grants), stated explicitly here for auditability.
     match /{document=**} {
