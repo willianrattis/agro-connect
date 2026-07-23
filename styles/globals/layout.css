@@ -238,9 +238,6 @@
     .fab { bottom: var(--space-5); right: var(--space-5); }
     .app-main { padding-bottom: var(--space-7); }
 
-    .selection-bar {
-      inset-inline-start: 96px;
-      bottom: var(--space-5);
-    }
+    .selection-bar { bottom: 0; inset-inline: 96px 0; }
   }
 
