@@ -8,6 +8,8 @@
     export const lotFilterPropertyEl = document.getElementById("lot-filter-property");
     export const lotFilterSexEl = document.getElementById("lot-filter-sex");
     export const lotFilterYearEl = document.getElementById("lot-filter-year");
+    export const lotSortBtn = document.getElementById("lot-sort-btn");
+    export const lotSortLabelEl = document.getElementById("lot-sort-label");
     export const statHeadEl = document.getElementById("stat-head");
     export const statArrobasEl = document.getElementById("stat-arrobas");
     export const fabBtn = document.getElementById("fab-add");

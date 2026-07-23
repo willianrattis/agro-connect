@@ -72,6 +72,11 @@
       grid-column: auto;
     }
   }
+  .lot-filters-sort {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-2);
+  }
 
   /* =====================================================
      6. Cattle cards

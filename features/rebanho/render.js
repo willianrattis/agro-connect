@@ -4,6 +4,7 @@ import {
 import {
   lotListEl, lotCountEl, statHeadEl, statArrobasEl,
   lotFiltersEl, lotFilterPropertyEl, lotFilterSexEl, lotFilterYearEl,
+  lotSortBtn, lotSortLabelEl,
 } from "../../js/core/dom.js";
 import {
   escapeHtml, formatKg, formatArrobas, formatPercentTrim,
@@ -18,6 +19,10 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
     // localStorage/URL/Firestore), reset on reload. "" means "no filter" for
     // every field except status, whose neutral value is "all".
     let lotFilters = { status: "active", propertyId: "", sex: "", year: "" };
+
+    // Sort toggle state — in-memory only, reset on reload. "desc" = most
+    // recent acquisitionDate first.
+    let lotSort = "desc";
 
     // Rebuilds the property/sex/year <select> option lists from the current
     // caches, preserving the active selection where it still exists — a
@@ -73,6 +78,34 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
         return true;
       });
     }
+
+    // Sorts a COPY of the given lots by acquisitionDate — "desc" (default)
+    // puts the most recently acquired lot first, "asc" the oldest first.
+    // Lots with no resolvable acquisitionDate always sort last, regardless
+    // of direction. Never mutates lotsCache.
+    function applyLotSort(lots) {
+      const sign = lotSort === "asc" ? 1 : -1;
+      return [...lots].sort((a, b) => {
+        const da = toDateSafe(a.acquisitionDate);
+        const db = toDateSafe(b.acquisitionDate);
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return (da - db) * sign;
+      });
+    }
+
+    function updateLotSortButtonUI() {
+      lotSortLabelEl.textContent = lotSort === "desc" ? "Entrada: mais recente" : "Entrada: mais antiga";
+      const arrowEl = lotSortBtn.querySelector('span[aria-hidden="true"]');
+      if (arrowEl) arrowEl.textContent = lotSort === "desc" ? "↓" : "↑";
+    }
+
+    lotSortBtn.addEventListener("click", () => {
+      lotSort = lotSort === "desc" ? "asc" : "desc";
+      updateLotSortButtonUI();
+      renderLots();
+    });
 
     function resetLotFilters() {
       lotFilters = { status: "active", propertyId: "", sex: "", year: "" };
@@ -196,7 +229,7 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
       lotFiltersEl.hidden = false;
       populateLotFilterOptions();
 
-      const filteredLots = applyLotFilters(lotsCache);
+      const filteredLots = applyLotSort(applyLotFilters(lotsCache));
       if (filteredLots.length === 0) {
         lotListEl.innerHTML = `
           <li>
