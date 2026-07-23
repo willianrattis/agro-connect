@@ -4,8 +4,9 @@ import {
   CATTLE_CATEGORIES, FEMALE_GMD_FACTOR, CONFINEMENT_GMD_KG_PER_DAY, ICONS,
   MONTH_ABBR, WEEKDAY_ABBR, TX_CATEGORY_LABEL, resolveCategoryKey, ageMonthsBetween,
   FUNRURAL_DEFAULTS, DEFAULT_MAX_WEIGHT_MALE_KG, DEFAULT_MAX_WEIGHT_FEMALE_KG,
+  displayCategoryKeyForLot,
 } from "./constants.js";
-import { propertiesCache, movementsCache, settingsCache, transactionsCache } from "./state.js";
+import { propertiesCache, movementsCache, settingsCache, transactionsCache, animalsCache } from "./state.js";
 
     // =====================================================
     // 3. Helpers
@@ -91,10 +92,48 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
       return rem === 0 ? yearsLabel : `${yearsLabel} e ${rem} ${rem === 1 ? "mês" : "meses"}`;
     }
 
+    // A lot is "closed" once every head it owned is gone — no head left to
+    // keep ageing/accruing tenure forever. Derived at read time from the
+    // current headcount/animal roster; never written back to Firestore.
+    export function lotClosure(lot) {
+      if (!lot) return { isClosed: false, closedAt: null };
+      const isAggregate = (lot.trackingMode || "individual") !== "individual";
+
+      if (isAggregate) {
+        const owned = (lot.headcount ?? 0) + (lot.confinedHeadcount ?? 0);
+        if (owned > 0) return { isClosed: false, closedAt: null };
+        // Owned balance is zero, so the most recent movement is by
+        // definition the one that zeroed it out — a later movement would
+        // have raised the balance back above zero.
+        let closedAt = null;
+        for (const m of movementsCache) {
+          if (m.lotId !== lot.id) continue;
+          const d = toDateSafe(m.date);
+          if (d && (!closedAt || d > closedAt)) closedAt = d;
+        }
+        return { isClosed: true, closedAt };
+      }
+
+      const animals = animalsCache.filter((a) => a.lotId === lot.id);
+      const isClosed = animals.length > 0 && animals.every((a) => (a.status || "active") !== "active");
+      if (!isClosed) return { isClosed: false, closedAt: null };
+      let closedAt = null;
+      for (const a of animals) {
+        for (const raw of [a.saleDate, a.deathDate]) {
+          const d = toDateSafe(raw);
+          if (d && (!closedAt || d > closedAt)) closedAt = d;
+        }
+      }
+      return { isClosed: true, closedAt };
+    }
+
     // Lot card meta: reference age from birthDateRef, flagged "(est.)" when
-    // the stamped date is an estimate rather than a known birth date.
-    export function lotAgeMetaLabel(lot) {
-      const months = ageMonthsBetween(lot.birthDateRef, new Date());
+    // the stamped date is an estimate rather than a known birth date. Frozen
+    // at the lot's closedAt once every head is gone, so a fully sold-out lot
+    // stops ageing instead of drifting further from its actual exit age.
+    export function lotAgeMetaLabel(lot, closure = lotClosure(lot)) {
+      const refDate = closure.closedAt ?? new Date();
+      const months = ageMonthsBetween(lot.birthDateRef, refDate);
       const duration = formatMonthsDuration(months);
       if (!duration) return "—";
       return lot.birthDateRefIsEstimated ? `${duration} (est.)` : duration;
@@ -102,12 +141,20 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
 
     // Lot card meta: time on the property since acquisitionDate, with the
     // absolute date alongside since "1 ano e 4 meses" alone is hard to anchor.
-    export function lotTenureMetaLabel(lot) {
-      const months = ageMonthsBetween(lot.acquisitionDate, new Date());
+    // Once closed (and a closedAt could be resolved), the range is pinned to
+    // acquisition → exit instead of acquisition → today.
+    export function lotTenureMetaLabel(lot, closure = lotClosure(lot)) {
+      const refDate = closure.closedAt ?? new Date();
+      const months = ageMonthsBetween(lot.acquisitionDate, refDate);
       const duration = formatMonthsDuration(months);
       if (!duration) return "—";
-      const d = toDateSafe(lot.acquisitionDate);
-      return d ? `${duration} (desde ${d.toLocaleDateString("pt-BR")})` : duration;
+      const acq = toDateSafe(lot.acquisitionDate);
+      if (!acq) return duration;
+      const acqBR = acq.toLocaleDateString("pt-BR");
+      if (closure.isClosed && closure.closedAt) {
+        return `${duration} (${acqBR} → ${closure.closedAt.toLocaleDateString("pt-BR")})`;
+      }
+      return `${duration} (desde ${acqBR})`;
     }
 
     // Resolves a lot's pasture quality key, falling back to the default
@@ -320,6 +367,56 @@ import { propertiesCache, movementsCache, settingsCache, transactionsCache } fro
     // Per-lot target @/head — lot override → Perfil default.
     export function resolveLotTargetArrobas(lot) {
       return Number.isFinite(lot.targetArrobas) ? lot.targetArrobas : getSlaughterConfig().targetArrobasPerHead;
+    }
+
+    // Arrobas/head the lot carried out the door at closure — from the
+    // closing movement's recorded weight (aggregate) or the sold animals'
+    // recorded saleArrobas (individual). Used only to decide whether a
+    // closed male lot should display as "boi gordo"; null when unresolvable.
+    function exitArrobasPerHead(lot) {
+      const isAggregate = (lot.trackingMode || "individual") !== "individual";
+      if (isAggregate) {
+        let closingMovement = null;
+        let closingDate = null;
+        for (const m of movementsCache) {
+          if (m.lotId !== lot.id) continue;
+          const d = toDateSafe(m.date);
+          if (d && (!closingDate || d > closingDate)) { closingDate = d; closingMovement = m; }
+        }
+        if (!closingMovement) return null;
+        if (closingMovement.type !== "sale" && closingMovement.type !== "shipment") return null;
+        if (!Number.isFinite(closingMovement.avgWeightKg)) return null;
+        const yieldFraction = Number.isFinite(closingMovement.carcassYieldPct)
+          ? closingMovement.carcassYieldPct / 100
+          : resolveFarmYieldPct(lot);
+        return (closingMovement.avgWeightKg * yieldFraction) / KG_PER_ARROBA;
+      }
+
+      const arrobas = animalsCache
+        .filter((a) => a.lotId === lot.id)
+        .map((a) => a.saleArrobas)
+        .filter((n) => Number.isFinite(n));
+      if (arrobas.length === 0) return null;
+      return arrobas.reduce((sum, n) => sum + n, 0) / arrobas.length;
+    }
+
+    // Chronologically-derived stage for a lot card, promoted to "boi gordo"
+    // at closure when the age/weight it exited at already qualifies — a lot
+    // sold at 23 months shouldn't freeze on "boi magro" forever just because
+    // it closed a month short of the age threshold. Age is evaluated as of
+    // closedAt (not today), matching the frozen labels above.
+    export function lotDisplayStageKey(lot, closure = lotClosure(lot)) {
+      const refDate = closure.closedAt ?? new Date();
+      const baseKey = displayCategoryKeyForLot(lot, refDate);
+      if (!closure.isClosed || lot.sex !== "M" || !baseKey || baseKey === "boi_gordo") return baseKey;
+
+      const ageMonths = ageMonthsBetween(lot.birthDateRef, closure.closedAt);
+      if (Number.isFinite(ageMonths) && ageMonths >= 24) return "boi_gordo";
+
+      const arrobasPerHead = exitArrobasPerHead(lot);
+      if (Number.isFinite(arrobasPerHead) && arrobasPerHead >= resolveLotTargetArrobas(lot)) return "boi_gordo";
+
+      return baseKey;
     }
 
     // Estimated ready-for-sale date from a weight projection: how many days

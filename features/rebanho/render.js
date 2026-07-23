@@ -8,7 +8,7 @@ import {
   escapeHtml, formatKg, formatArrobas, formatPercentTrim,
   lotAgeMetaLabel, lotTenureMetaLabel, resolveFarmYieldPct, resolveConfinementYieldPct,
   lotWeightProjection, lotConfinedProjection, confinementStripHTML, formatBRL,
-  resolveLotTargetArrobas, slaughterForecast,
+  resolveLotTargetArrobas, slaughterForecast, lotClosure, lotDisplayStageKey,
 } from "../../js/core/helpers.js";
 import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js";
 
@@ -104,8 +104,10 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
 
       lotListEl.innerHTML = lotsCache
         .map((l, i) => {
-          const chipClass = lotStageChipClass(l);
-          const categoryChip = `<span class="chip ${chipClass}">${escapeHtml(lotStageLabel(l))}</span>`;
+          const closure = lotClosure(l);
+          const stageKey = lotDisplayStageKey(l, closure);
+          const chipClass = lotStageChipClass(l, stageKey);
+          const categoryChip = `<span class="chip ${chipClass}">${escapeHtml(lotStageLabel(l, stageKey))}</span>`;
           const menuBtn = `
             <button type="button" class="card-menu-btn pressable" data-action="lot-menu" data-id="${escapeHtml(l.id)}" aria-label="Ações do lote ${escapeHtml(l.name)}">
               ${ICONS.menu}
@@ -203,11 +205,11 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
                 })()}
                 <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                   <div class="mini-stat">
-                    <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l))}</p>
+                    <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l, closure))}</p>
                     <p class="mini-label">Idade (ref.)</p>
                   </div>
                   <div class="mini-stat">
-                    <p class="mini-value is-meta">${escapeHtml(lotTenureMetaLabel(l))}</p>
+                    <p class="mini-value is-meta">${escapeHtml(lotTenureMetaLabel(l, closure))}</p>
                     <p class="mini-label">Na fazenda</p>
                   </div>
                 </div>
@@ -237,11 +239,11 @@ import { lotsCache, animalsCache, propertiesCache } from "../../js/core/state.js
               </div>
               <div class="card-stats" style="grid-template-columns: repeat(2, 1fr);">
                 <div class="mini-stat">
-                  <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l))}</p>
+                  <p class="mini-value is-meta">${escapeHtml(lotAgeMetaLabel(l, closure))}</p>
                   <p class="mini-label">Idade (ref.)</p>
                 </div>
                 <div class="mini-stat">
-                  <p class="mini-value is-meta">${escapeHtml(lotTenureMetaLabel(l))}</p>
+                  <p class="mini-value is-meta">${escapeHtml(lotTenureMetaLabel(l, closure))}</p>
                   <p class="mini-label">Na fazenda</p>
                 </div>
               </div>
