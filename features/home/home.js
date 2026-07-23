@@ -31,8 +31,10 @@ import { openAnimalDetailSheet } from "../rebanho/animals.js";
         return acc;
       }, 0);
       homeStatSaldoEl.textContent = formatBRL(saldo);
-      homeStatSaldoEl.classList.toggle("fin-positive", saldo > 0);
-      homeStatSaldoEl.classList.toggle("fin-negative", saldo < 0);
+      // Home-local sign classes — not Financeiro's fin-positive/fin-negative,
+      // whose --success/--danger colours read poorly on the --brand hero.
+      homeStatSaldoEl.classList.toggle("is-positive", saldo > 0);
+      homeStatSaldoEl.classList.toggle("is-negative", saldo < 0);
     }
 
     // --- B. Alertas ---

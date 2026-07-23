@@ -9,6 +9,10 @@
     --accent-tint: #E2F1DC;
     --danger: #B3261E;
     --success: #2E7D32;
+    /* Sign colours for text on --brand surfaces (--danger/--success read
+       poorly on the dark hero background; both ≥ 6:1 against #1E4620). */
+    --on-brand-danger: #FFB4A8;
+    --on-brand-success: #A6E7A8;
 
     /* Surfaces & text (warm sand neutrals, not gray) */
     --bg: #F5F1E8;
